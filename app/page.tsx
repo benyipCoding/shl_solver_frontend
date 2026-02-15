@@ -30,47 +30,13 @@ import {
   KeyRound,
   CheckCircle2,
 } from "lucide-react";
-
-interface FormData {
-  email?: string;
-  password?: string;
-  captcha?: string;
-  username?: string;
-  confirmPassword?: string;
-  [key: string]: string | undefined;
-}
-
-interface ValidationErrors {
-  [key: string]: string;
-}
-
-interface ImageData {
-  mimeType: string;
-  data: string;
-}
-
-interface Solution {
-  [language: string]: string;
-}
-
-interface Complexity {
-  time?: string;
-  space?: string;
-}
-
-interface AnalysisResult {
-  summary: string;
-  key_concepts: string[] | string;
-  constraints: string[] | string;
-  solutions: Solution;
-  complexity: string | Complexity;
-  code?: string;
-}
-
-interface Model {
-  id: string;
-  name: string;
-}
+import { FormData, ValidationErrors } from "@/interfaces/auth";
+import {
+  AnalysisResult,
+  Complexity,
+  ImageData,
+  Model,
+} from "@/interfaces/home";
 
 const Home = () => {
   // Navigation State
@@ -937,7 +903,7 @@ const Home = () => {
 
   // --- Main Home View ---
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 pb-10 relative">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 pb-10 relative flex flex-col">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
@@ -1103,10 +1069,10 @@ const Home = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 md:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+      <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 w-full flex-1 flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1">
           {/* Left Column: Upload & Preview */}
-          <div className="space-y-4 md:space-y-6">
+          <div className="space-y-4 md:space-y-6 h-full flex flex-col">
             {/* Hidden Input for Multiple Files */}
             <input
               type="file"
@@ -1120,7 +1086,7 @@ const Home = () => {
             {/* Initial Upload State */}
             {images.length === 0 ? (
               <div
-                className="border-2 border-dashed border-slate-300 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer bg-white shadow-sm touch-manipulation"
+                className="border-2 border-dashed border-slate-300 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer bg-white shadow-sm touch-manipulation flex-1"
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
@@ -1141,7 +1107,7 @@ const Home = () => {
               </div>
             ) : (
               // Multiple Images Preview State
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fadeIn">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fadeIn flex-1 flex flex-col">
                 <div className="p-3 md:p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                   <h3 className="font-semibold text-slate-700 flex items-center text-sm md:text-base">
                     <ImageIcon className="w-4 h-4 mr-2" /> 已上传{" "}
@@ -1156,16 +1122,16 @@ const Home = () => {
                 </div>
 
                 {/* Image List */}
-                <div className="p-3 md:p-4 bg-slate-100 flex flex-col space-y-3 md:space-y-4 max-h-[40vh] md:max-h-[50vh] overflow-y-auto">
+                <div className="p-3 md:p-4 bg-slate-100 flex flex-col space-y-3 md:space-y-4 max-h-[40vh] md:max-h-[50vh] overflow-y-auto flex-1">
                   {images.map((imgSrc, index) => (
                     <div
                       key={index}
-                      className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 bg-white"
+                      className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 bg-white h-full"
                     >
                       <img
                         src={imgSrc}
                         alt={`Problem part ${index + 1}`}
-                        className="w-full object-contain max-h-48 md:max-h-64"
+                        className="w-full object-contain max-h-48 md:max-h-64 lg:max-h-full"
                       />
                       <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button
@@ -1252,7 +1218,7 @@ const Home = () => {
           </div>
 
           {/* Right Column: Result */}
-          <div className="flex flex-col h-full min-h-100">
+          <div className="flex flex-col h-full">
             {result ? (
               <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-full animate-fadeIn">
                 {/* Tabs */}
