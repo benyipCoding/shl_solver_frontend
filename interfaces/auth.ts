@@ -19,3 +19,8 @@ export interface ValidatedInputProps {
   required?: boolean;
   maxLength?: number;
 }
+
+export interface LocalAuthPayload {
+  email: string;
+  password: string;
+}

@@ -29,7 +29,6 @@ const AuthPage = () => {
     email: "",
     password: "",
     captcha: "",
-    username: "",
     confirmPassword: "",
   });
 
@@ -118,7 +117,6 @@ const AuthPage = () => {
       email: "",
       password: "",
       captcha: "",
-      username: "",
       confirmPassword: "",
     });
     setErrors({});
@@ -315,7 +313,7 @@ const AuthPage = () => {
 
             <button
               type="submit"
-              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-4"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-8"
             >
               登 录
             </button>
@@ -342,13 +340,7 @@ const AuthPage = () => {
             onSubmit={handleAuthSubmit}
             noValidate
           >
-            <ValidatedInput
-              type="text"
-              name="username"
-              placeholder="John Doe"
-              icon={User}
-              required
-            />
+            {/* username field removed per request */}
             <ValidatedInput
               type="email"
               name="email"
@@ -372,7 +364,7 @@ const AuthPage = () => {
             />
             <button
               type="submit"
-              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-4"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-8"
             >
               注 册
             </button>
