@@ -12,11 +12,17 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { FormData, ValidationErrors } from "@/interfaces/auth";
+import {
+  FormData,
+  ValidatedInputProps,
+  ValidationErrors,
+} from "@/interfaces/auth";
 
 const AuthPage = () => {
   const router = useRouter();
-  const [authMode, setAuthMode] = useState<string>("login"); // 'login', 'register', 'forgot'
+  const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
+    "login"
+  ); // 'login', 'register', 'forgot'
 
   // Form State
   const [formData, setFormData] = useState<FormData>({
@@ -73,7 +79,7 @@ const AuthPage = () => {
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: ValidationErrors = {};
     let hasError = false;
@@ -121,15 +127,6 @@ const AuthPage = () => {
   useEffect(() => {
     resetForm();
   }, [authMode]);
-
-  interface ValidatedInputProps {
-    type: string;
-    name: string;
-    placeholder: string;
-    icon?: React.ElementType;
-    required?: boolean;
-    maxLength?: number;
-  }
 
   const ValidatedInput: React.FC<ValidatedInputProps> = ({
     type,
@@ -199,7 +196,7 @@ const AuthPage = () => {
       `}</style>
 
       {/* Decorative elements */}
-      <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-blue-50 to-transparent pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-blue-50 to-transparent pointer-events-none"></div>
       <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
       <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-indigo-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
 
@@ -318,7 +315,7 @@ const AuthPage = () => {
 
             <button
               type="submit"
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-4"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-4"
             >
               登 录
             </button>
@@ -375,7 +372,7 @@ const AuthPage = () => {
             />
             <button
               type="submit"
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-4"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-4"
             >
               注 册
             </button>
@@ -413,7 +410,7 @@ const AuthPage = () => {
             />
             <button
               type="submit"
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-4"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-4"
             >
               发送重置邮件
             </button>

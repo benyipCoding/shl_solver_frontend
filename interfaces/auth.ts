@@ -10,3 +10,12 @@ export interface FormData {
 export interface ValidationErrors {
   [key: string]: string;
 }
+
+export interface ValidatedInputProps {
+  type: string;
+  name: string;
+  placeholder: string;
+  icon?: React.ElementType;
+  required?: boolean;
+  maxLength?: number;
+}
