@@ -18,6 +18,56 @@ import {
   ValidationErrors,
 } from "@/interfaces/auth";
 
+interface ValidatedInputComponentProps extends ValidatedInputProps {
+  value: string | undefined;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+}
+
+const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
+  type,
+  name,
+  value,
+  onChange,
+  error,
+  placeholder,
+  icon: Icon,
+  required = false,
+  maxLength,
+}) => (
+  <div className="space-y-1 relative">
+    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
+      {name === "email" && "Email"}
+      {name === "password" && "密码"}
+      {name === "confirmPassword" && "确认密码"}
+      {name === "username" && "用户名"}
+      {name === "captcha" && "验证码"}
+    </label>
+    <div className="relative">
+      {Icon && (
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Icon className="h-5 w-5 text-slate-400" />
+        </div>
+      )}
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        className={`block w-full ${Icon ? "pl-10" : "px-3"} pr-3 py-2 md:py-2.5 bg-slate-50 border ${error ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm ${name === "captcha" ? "text-center tracking-widest uppercase" : ""}`}
+        placeholder={placeholder}
+        required={required}
+        maxLength={maxLength}
+      />
+      {error && (
+        <div className="absolute -bottom-5 left-1 text-[10px] text-red-500 font-medium animate-fadeIn flex items-center bg-white/80 px-1 rounded z-10">
+          <AlertCircle className="w-2.5 h-2.5 mr-1" /> {error}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 const AuthPage = () => {
   const router = useRouter();
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
@@ -126,47 +176,6 @@ const AuthPage = () => {
     resetForm();
   }, [authMode]);
 
-  const ValidatedInput: React.FC<ValidatedInputProps> = ({
-    type,
-    name,
-    placeholder,
-    icon: Icon,
-    required = false,
-    maxLength,
-  }) => (
-    <div className="space-y-1 relative">
-      <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
-        {name === "email" && "Email"}
-        {name === "password" && "密码"}
-        {name === "confirmPassword" && "确认密码"}
-        {name === "username" && "用户名"}
-        {name === "captcha" && "验证码"}
-      </label>
-      <div className="relative">
-        {Icon && (
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Icon className="h-5 w-5 text-slate-400" />
-          </div>
-        )}
-        <input
-          type={type}
-          name={name}
-          value={formData[name as keyof FormData]}
-          onChange={handleInputChange}
-          className={`block w-full ${Icon ? "pl-10" : "px-3"} pr-3 py-2 md:py-2.5 bg-slate-50 border ${errors[name] ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm ${name === "captcha" ? "text-center tracking-widest uppercase" : ""}`}
-          placeholder={placeholder}
-          required={required}
-          maxLength={maxLength}
-        />
-        {errors[name] && (
-          <div className="absolute -bottom-5 left-1 text-[10px] text-red-500 font-medium animate-fadeIn flex items-center bg-white/80 px-1 rounded z-10">
-            <AlertCircle className="w-2.5 h-2.5 mr-1" /> {errors[name]}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div className="h-dvh w-full bg-slate-50 flex items-center justify-center p-4 font-sans selection:bg-blue-100 relative overflow-hidden">
       <style>{`
@@ -234,6 +243,9 @@ const AuthPage = () => {
             <ValidatedInput
               type="email"
               name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              error={errors.email}
               placeholder="your@email.com"
               icon={Mail}
               required
@@ -344,6 +356,9 @@ const AuthPage = () => {
             <ValidatedInput
               type="email"
               name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              error={errors.email}
               placeholder="your@email.com"
               icon={Mail}
               required
@@ -351,6 +366,9 @@ const AuthPage = () => {
             <ValidatedInput
               type="password"
               name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              error={errors.password}
               placeholder="设置密码"
               icon={Lock}
               required
@@ -358,6 +376,9 @@ const AuthPage = () => {
             <ValidatedInput
               type="password"
               name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+              error={errors.confirmPassword}
               placeholder="重复密码"
               icon={CheckCircle2}
               required
@@ -396,6 +417,9 @@ const AuthPage = () => {
             <ValidatedInput
               type="email"
               name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              error={errors.email}
               placeholder="your@email.com"
               icon={Mail}
               required

@@ -23,4 +23,5 @@ export interface ValidatedInputProps {
 export interface LocalAuthPayload {
   email: string;
   password: string;
+  captcha?: string;
 }
