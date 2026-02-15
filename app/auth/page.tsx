@@ -37,7 +37,7 @@ const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
 }) => (
   <div className="space-y-1 relative">
     <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
-      {name === "email" && "Email"}
+      {name === "email" && "邮箱"}
       {name === "password" && "密码"}
       {name === "confirmPassword" && "确认密码"}
       {name === "username" && "用户名"}
@@ -297,7 +297,7 @@ const AuthPage = () => {
                     value={formData.captcha}
                     onChange={handleInputChange}
                     className={`block w-full px-3 py-2 md:py-2.5 bg-slate-50 border ${errors.captcha ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm text-center tracking-widest uppercase`}
-                    placeholder="ABCD"
+                    placeholder="请输入验证码"
                     maxLength={4}
                     required
                   />
