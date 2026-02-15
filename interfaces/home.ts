@@ -25,3 +25,7 @@ export interface Model {
   id: string;
   name: string;
 }
+
+export interface ResultDisplayProps {
+  result: AnalysisResult | null;
+}

@@ -15,11 +15,11 @@ import {
   ArrowRight,
   Eye,
 } from "lucide-react";
-import { AnalysisResult, Complexity } from "@/interfaces/home";
-
-interface ResultDisplayProps {
-  result: AnalysisResult | null;
-}
+import {
+  AnalysisResult,
+  Complexity,
+  ResultDisplayProps,
+} from "@/interfaces/home";
 
 const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   const [activeTab, setActiveTab] = useState<string>("solution"); // 'solution' or 'analysis'
@@ -186,7 +186,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                 disabled={
                   currentLineIndex === getCodeContent().split("\n").length - 1
                 }
-                className="flex-[3] bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:opacity-30 rounded-xl flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-900/50 transition-all active:scale-95"
+                className="flex-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:opacity-30 rounded-xl flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-900/50 transition-all active:scale-95"
               >
                 下一行 <ArrowRight className="w-5 h-5 ml-2" />
               </button>

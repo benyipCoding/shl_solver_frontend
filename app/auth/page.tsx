@@ -12,61 +12,8 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import {
-  FormData,
-  ValidatedInputProps,
-  ValidationErrors,
-} from "@/interfaces/auth";
-
-interface ValidatedInputComponentProps extends ValidatedInputProps {
-  value: string | undefined;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  error?: string;
-}
-
-const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
-  type,
-  name,
-  value,
-  onChange,
-  error,
-  placeholder,
-  icon: Icon,
-  required = false,
-  maxLength,
-}) => (
-  <div className="space-y-1 relative">
-    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
-      {name === "email" && "邮箱"}
-      {name === "password" && "密码"}
-      {name === "confirmPassword" && "确认密码"}
-      {name === "username" && "用户名"}
-      {name === "captcha" && "验证码"}
-    </label>
-    <div className="relative">
-      {Icon && (
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Icon className="h-5 w-5 text-slate-400" />
-        </div>
-      )}
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        className={`block w-full ${Icon ? "pl-10" : "px-3"} pr-3 py-2 md:py-2.5 bg-slate-50 border ${error ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm ${name === "captcha" ? "text-center tracking-widest uppercase" : ""}`}
-        placeholder={placeholder}
-        required={required}
-        maxLength={maxLength}
-      />
-      {error && (
-        <div className="absolute -bottom-5 left-1 text-[10px] text-red-500 font-medium animate-fadeIn flex items-center bg-white/80 px-1 rounded z-10">
-          <AlertCircle className="w-2.5 h-2.5 mr-1" /> {error}
-        </div>
-      )}
-    </div>
-  </div>
-);
+import { FormData, ValidationErrors } from "@/interfaces/auth";
+import ValidatedInput from "@/components/ValidatedInput";
 
 const AuthPage = () => {
   const router = useRouter();
@@ -137,7 +84,7 @@ const AuthPage = () => {
     if (authMode === "login")
       fieldsToCheck.push("email", "password", "captcha");
     if (authMode === "register")
-      fieldsToCheck.push("username", "email", "password", "confirmPassword");
+      fieldsToCheck.push("email", "password", "confirmPassword");
     if (authMode === "forgot") fieldsToCheck.push("email");
 
     fieldsToCheck.forEach((field) => {
@@ -228,7 +175,7 @@ const AuthPage = () => {
           </h2>
           <p className="text-slate-500 text-xs md:text-sm mt-1.5">
             {authMode === "login" && "登录 SHL 场景解题助手"}
-            {authMode === "register" && "注册以保存您的解题历史"}
+            {authMode === "register" && "注册以解锁更多功能"}
             {authMode === "forgot" && "输入邮箱以获取重置链接"}
           </p>
         </div>
@@ -251,7 +198,7 @@ const AuthPage = () => {
               required
             />
             <div className="space-y-1 relative">
-              <div className="flex justify-between items-center">
+              {/* <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
                   密码
                 </label>
@@ -262,17 +209,17 @@ const AuthPage = () => {
                 >
                   忘记密码?
                 </button>
-              </div>
+              </div> */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-slate-400" />
                 </div>
-                <input
+                <ValidatedInput
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-2 md:py-2.5 bg-slate-50 border ${errors.password ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm`}
+                  error={errors.password}
                   placeholder="••••••••"
                   required
                 />
@@ -455,9 +402,9 @@ const AuthPage = () => {
         </div>
       </div>
 
-      <div className="absolute bottom-4 text-xs text-slate-400 hidden md:block">
+      {/* <div className="absolute bottom-4 text-xs text-slate-400 hidden md:block">
         © 2024 SHL Solver. All rights reserved.
-      </div>
+      </div> */}
     </div>
   );
 };
