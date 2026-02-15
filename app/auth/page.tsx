@@ -97,16 +97,16 @@ const AuthPage = () => {
 
     setErrors(newErrors);
 
-    if (!hasError) {
-      if (authMode === "forgot") {
-        alert("重置链接已发送到您的邮箱（模拟）");
-        setAuthMode("login");
-      } else {
-        // Successful login/register
-        // In a real app, you'd handle API call and state here.
-        router.push("/");
-      }
-    }
+    // if (!hasError) {
+    //   if (authMode === "forgot") {
+    //     alert("重置链接已发送到您的邮箱（模拟）");
+    //     setAuthMode("login");
+    //   } else {
+    //     // Successful login/register
+    //     // In a real app, you'd handle API call and state here.
+    //     router.push("/");
+    //   }
+    // }
   };
 
   const resetForm = () => {
