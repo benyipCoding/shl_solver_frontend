@@ -29,7 +29,30 @@ const AuthPage = () => {
     confirmPassword: "",
   });
 
+  const [captchaImage, setCaptchaImage] = useState<string>("");
+  const [captchaId, setCaptchaId] = useState<string>("");
+
   const [errors, setErrors] = useState<ValidationErrors>({});
+
+  // --- Fetch Captcha ---
+  const fetchCaptcha = async () => {
+    try {
+      const res = await fetch("/api/captcha");
+      const data = await res.json();
+      if (data.image && data.captchaId) {
+        setCaptchaImage(data.image);
+        setCaptchaId(data.captchaId);
+      }
+    } catch (error) {
+      console.error("Failed to fetch captcha", error);
+    }
+  };
+
+  useEffect(() => {
+    if (authMode === "login") {
+      fetchCaptcha();
+    }
+  }, [authMode]);
 
   // --- Form Validation Logic ---
   const validateField = (name: string, value: string | undefined): string => {
@@ -258,11 +281,19 @@ const AuthPage = () => {
                 <div
                   className="w-24 md:w-28 h-9.5 md:h-10.5 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-center relative overflow-hidden select-none cursor-pointer group hover:border-slate-300 transition-colors"
                   title="点击刷新"
+                  onClick={fetchCaptcha}
                 >
-                  <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/diagmonds-light.png')]"></div>
-                  <span className="font-mono text-lg font-bold text-slate-500 italic tracking-widest decoration-wavy line-through decoration-slate-300">
-                    8k2A
-                  </span>
+                  {captchaImage ? (
+                    <img
+                      src={captchaImage}
+                      alt="验证码"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full">
+                      <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />
+                    </div>
+                  )}
                   <div className="absolute right-1 top-1 p-0.5 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                     <RefreshCw className="w-3 h-3 text-blue-500" />
                   </div>
