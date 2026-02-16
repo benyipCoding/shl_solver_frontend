@@ -4,9 +4,7 @@ import apiClient from "@/utils/request";
 // 获取验证码接口
 export async function GET(req: Request) {
   try {
-    // const payload = await req.json();
     const { searchParams } = new URL(req.url);
-    // 例如获取名为 "foo" 的参数
     const oldCaptchaId = searchParams.get("captchaId");
 
     // 请求后端验证码接口，注意设置 responseType 为 arraybuffer 以正确接收图片二进制数据
