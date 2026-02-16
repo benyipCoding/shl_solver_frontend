@@ -37,7 +37,9 @@ const AuthPage = () => {
   // --- Fetch Captcha ---
   const fetchCaptcha = async () => {
     try {
-      const res = await fetch("/api/captcha");
+      const res = await fetch(`/api/captcha?captchaId=${captchaId}`, {
+        method: "GET",
+      });
       const data = await res.json();
       if (data.image && data.captchaId) {
         setCaptchaImage(data.image);
@@ -71,8 +73,8 @@ const AuthPage = () => {
         }
         break;
       case "password":
-        if (val.length < 8) {
-          errorMsg = "密码长度至少需要8位";
+        if (val.length < 6) {
+          errorMsg = "密码长度至少需要6位";
         }
         break;
       case "confirmPassword":
@@ -80,11 +82,11 @@ const AuthPage = () => {
           errorMsg = "两次输入的密码不一致";
         }
         break;
-      case "captcha":
-        if (val.length !== 4) {
-          errorMsg = "验证码为4位字符";
-        }
-        break;
+      // case "captcha":
+      //   if (val.length !== 4) {
+      //     errorMsg = "验证码为4位字符";
+      //   }
+      //   break;
       default:
         break;
     }
@@ -98,7 +100,34 @@ const AuthPage = () => {
     setErrors((prev) => ({ ...prev, [name]: error }));
   };
 
-  const handleAuthSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+  const validateCaptcha = async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/captcha", {
+        method: "POST",
+        body: JSON.stringify({
+          captchaId,
+          userInput: formData.captcha,
+        }),
+      });
+      const data = await res.json();
+      return data.success;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  };
+
+  const handleLoginSubmit = async () => {
+    const isCaptchaValid = await validateCaptcha();
+    if (!isCaptchaValid) {
+      setErrors((prev) => ({ ...prev, captcha: "验证码错误" }));
+      fetchCaptcha();
+      return;
+    }
+    console.log("继续下面的流程");
+  };
+
+  const handleAuthSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: ValidationErrors = {};
     let hasError = false;
@@ -117,19 +146,9 @@ const AuthPage = () => {
         hasError = true;
       }
     });
-
     setErrors(newErrors);
-
-    // if (!hasError) {
-    //   if (authMode === "forgot") {
-    //     alert("重置链接已发送到您的邮箱（模拟）");
-    //     setAuthMode("login");
-    //   } else {
-    //     // Successful login/register
-    //     // In a real app, you'd handle API call and state here.
-    //     router.push("/");
-    //   }
-    // }
+    if (hasError) return;
+    if (authMode === "login") handleLoginSubmit();
   };
 
   const resetForm = () => {
@@ -268,7 +287,7 @@ const AuthPage = () => {
                     onChange={handleInputChange}
                     className={`block w-full px-3 py-2 md:py-2.5 bg-slate-50 border ${errors.captcha ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm text-center tracking-widest uppercase`}
                     placeholder="请输入验证码"
-                    maxLength={4}
+                    // maxLength={4}
                     required
                   />
                   {errors.captcha && (
