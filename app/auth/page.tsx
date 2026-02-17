@@ -126,7 +126,23 @@ const AuthPage = () => {
       fetchCaptcha();
       return;
     }
-    console.log("继续下面的流程");
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: formData.email,
+        password: formData.password,
+      }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      toast.error(data.message || "登录失败，请稍后重试");
+      fetchCaptcha();
+      return;
+    }
+
+    console.log({ data });
+
     toast.success("登录成功！");
     router.push("/");
   };
@@ -414,7 +430,7 @@ const AuthPage = () => {
             />
             <button
               type="submit"
-              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-3 md:mt-8"
+              className="w-full py-3 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center mt-6 md:mt-8"
             >
               注 册
             </button>
