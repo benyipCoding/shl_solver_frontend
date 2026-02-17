@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/ValidatedInput";
+import toast from "react-hot-toast";
 
 const AuthPage = () => {
   const router = useRouter();
@@ -117,14 +118,44 @@ const AuthPage = () => {
     }
   };
 
-  const handleLoginSubmit = async () => {
+  const handleLogin = async () => {
     const isCaptchaValid = await validateCaptcha();
     if (!isCaptchaValid) {
       setErrors((prev) => ({ ...prev, captcha: "验证码错误" }));
+      toast.error("验证码错误，请重试");
       fetchCaptcha();
       return;
     }
     console.log("继续下面的流程");
+    toast.success("登录成功！");
+    router.push("/");
+  };
+
+  const handleRegister = async () => {
+    try {
+      // 这里的密码一般不需要在前端加密，传输层依赖HTTPS保证安全
+      // 服务端收到后会进行哈希存储
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "注册失败，请稍后重试");
+        return;
+      }
+
+      toast.success("注册成功，请使用新账号登录");
+      setAuthMode("login");
+      resetForm();
+    } catch (error) {
+      toast.error("网络请求失败，请检查网络");
+    }
   };
 
   const handleAuthSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
@@ -148,7 +179,8 @@ const AuthPage = () => {
     });
     setErrors(newErrors);
     if (hasError) return;
-    if (authMode === "login") handleLoginSubmit();
+    if (authMode === "login") handleLogin();
+    if (authMode === "register") handleRegister();
   };
 
   const resetForm = () => {
