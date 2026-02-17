@@ -175,29 +175,6 @@ const Home = () => {
   // --- Main Home View ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 pb-10 relative flex flex-col">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
-
-        body, .font-sans {
-          font-family: 'Noto Sans SC', sans-serif !important;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.4s ease-out forwards;
-        }
-        .dashed-border {
-          background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-dasharray='6%2c 10' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e");
-        }
-        /* Safe area padding for mobile notches */
-        .safe-top {
-          padding-top: env(safe-area-inset-top);
-        }
-      `}</style>
-
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 safe-top shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
