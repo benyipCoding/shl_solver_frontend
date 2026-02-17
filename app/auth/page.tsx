@@ -15,9 +15,11 @@ import {
 import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/ValidatedInput";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 
 const AuthPage = () => {
   const router = useRouter();
+  const { login } = useAuth();
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
     "login"
   ); // 'login', 'register', 'forgot'
@@ -133,15 +135,15 @@ const AuthPage = () => {
         password: formData.password,
       }),
     });
-    const data = await res.json();
+    const data = await res.json().then((res) => res.data);
 
     if (!res.ok) {
       toast.error(data.message || "登录失败，请稍后重试");
       fetchCaptcha();
       return;
     }
-
-    console.log({ data });
+    login(data);
+    console.log(data);
 
     toast.success("登录成功！");
     router.push("/");

@@ -24,3 +24,10 @@ export interface LocalAuthPayload {
   email: string;
   password: string;
 }
+
+export interface User {
+  email: string;
+  username: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
