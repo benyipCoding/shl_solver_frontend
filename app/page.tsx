@@ -27,10 +27,9 @@ const Home = () => {
       name: "Gemini 3 Flash (速度快)",
     },
     {
-      id: "gemini-2.0-flash-thinking-exp-01-21",
-      name: "Gemini 2.0 Thinking (强推理)",
+      id: "gemini-3-pro-preview",
+      name: "Gemini 3 Pro (强推理)",
     },
-    { id: "gemini-2.0-pro-exp-02-05", name: "Gemini 2.0 Pro (综合强)" },
   ];
 
   const [loading, setLoading] = useState<boolean>(false);
