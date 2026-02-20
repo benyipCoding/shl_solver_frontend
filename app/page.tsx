@@ -1,6 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   Cpu,
   AlertCircle,
@@ -21,8 +20,6 @@ import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
 
 const Home = () => {
-  const router = useRouter();
-
   // Model Definitions
   const MODELS: Model[] = [
     {
@@ -40,9 +37,6 @@ const Home = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id); // Default to Flash
-
-  // API Configuration
-  const apiKey = ""; // Environment handles the key
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
@@ -66,80 +60,12 @@ const Home = () => {
         setError(`SHL分析失败: ${data.error || res.statusText}`);
         return;
       }
-      console.log({ data });
       setResult(data);
     } catch (error) {
       setError(`SHL分析失败: ${error || "未知错误"}`);
     } finally {
       setLoading(false);
     }
-
-    // try {
-    //   // Retry logic with exponential backoff
-    //   const maxRetries = 5;
-    //   let responseData = null;
-
-    //   for (let i = 0; i < maxRetries; i++) {
-    //     try {
-    //       const response = await fetch(API_URL, {
-    //         method: "POST",
-    //         headers: {
-    //           "Content-Type": "application/json",
-    //         },
-    //         body: JSON.stringify(payload),
-    //       });
-
-    //       if (!response.ok) {
-    //         const errorText = await response.text();
-    //         if (
-    //           response.status >= 400 &&
-    //           response.status < 500 &&
-    //           response.status !== 429
-    //         ) {
-    //           throw new Error(
-    //             `API Error (${response.status}): ${errorText || response.statusText}`
-    //           );
-    //         }
-    //         throw new Error(
-    //           `Server Error (${response.status}): ${errorText || response.statusText}`
-    //         );
-    //       }
-
-    //       responseData = await response.json();
-    //       break; // Success, exit loop
-    //     } catch (err) {
-    //       if (i === maxRetries - 1) throw err;
-    //       const delay = Math.pow(2, i) * 1000;
-    //       await new Promise((resolve) => setTimeout(resolve, delay));
-    //     }
-    //   }
-
-    //   if (
-    //     responseData &&
-    //     responseData.candidates &&
-    //     responseData.candidates[0] &&
-    //     responseData.candidates[0].content
-    //   ) {
-    //     const responseText = responseData.candidates[0].content.parts[0].text;
-    //     try {
-    //       const parsedResult = JSON.parse(responseText);
-    //       setResult(parsedResult);
-    //     } catch (e) {
-    //       console.error("JSON Parse Error:", e);
-    //       const cleanedText = responseText
-    //         .replace(/```json/g, "")
-    //         .replace(/```/g, "");
-    //       setResult(JSON.parse(cleanedText));
-    //     }
-    //   } else {
-    //     throw new Error("API returned no content.");
-    //   }
-    // } catch (err: any) {
-    //   console.error(err);
-    //   setError(`分析失败: ${err.message || "未知错误"}`);
-    // } finally {
-    //   setLoading(false);
-    // }
   };
 
   // --- Main Home View ---

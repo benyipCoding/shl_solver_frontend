@@ -20,6 +20,7 @@ import {
   Complexity,
   ResultDisplayProps,
 } from "@/interfaces/home";
+import toast from "react-hot-toast";
 
 const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   const [activeTab, setActiveTab] = useState<string>("solution"); // 'solution' or 'analysis'
@@ -34,6 +35,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     document.body.appendChild(textArea);
     textArea.select();
     document.execCommand("copy");
+    toast.success("已复制到剪贴板");
     document.body.removeChild(textArea);
   };
 
