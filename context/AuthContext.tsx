@@ -43,10 +43,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem("user_info", JSON.stringify(userData));
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     localStorage.removeItem("user_info");
-    router.push("/auth"); // 登出后跳转到登录页
+    // router.push("/auth"); // 登出后跳转到登录页
   };
 
   return (

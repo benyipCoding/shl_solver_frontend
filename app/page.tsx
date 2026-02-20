@@ -10,7 +10,12 @@ import {
   ChevronDown,
   Sparkles,
 } from "lucide-react";
-import { AnalysisResult, ImageData, Model } from "@/interfaces/home";
+import {
+  AnalysisResult,
+  ImageData,
+  Model,
+  SHLAnalysisPayload,
+} from "@/interfaces/home";
 import ImageUploader from "@/components/ImageUploader";
 import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
@@ -21,8 +26,8 @@ const Home = () => {
   // Model Definitions
   const MODELS: Model[] = [
     {
-      id: "gemini-2.5-flash-preview-09-2025",
-      name: "Gemini 2.5 Flash (速度快)",
+      id: "gemini-3-flash-preview",
+      name: "Gemini 3 Flash (速度快)",
     },
     {
       id: "gemini-2.0-flash-thinking-exp-01-21",
@@ -41,135 +46,100 @@ const Home = () => {
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
-
-    setLoading(true);
-    setError(null);
-
-    // Dynamic API URL based on selected model
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
-
-    const systemPrompt = `You are an expert algorithmist and software engineer specializing in SHL/HackerRank/Automata Pro style coding assessments. 
-    Your task is to analyze one or more images that sequentially describe a business scenario programming problem. Read the images in order to understand the complete context.
-    
-    CRITICAL: Input/Output Format Instructions for SHL Assessments:
-    The user is taking an SHL Automata Pro test. The code MUST use the specific input reading methods preferred by this platform:
-    
-    1. **Python 3**: 
-       - ALWAYS use \`input()\` to read stdin. 
-       - DO NOT use \`sys.stdin.readline()\`. 
-       - Example: \`name = input()\` instead of \`name = sys.stdin.readline()\`.
-    
-    2. **Java**: 
-       - Use \`java.util.Scanner(System.in)\` for standard input reading unless the problem explicitly requires \`BufferedReader\` for performance.
-       - Structure: \`public class Main { public static void main(String[] args) { Scanner sc = new Scanner(System.in); ... } }\`
-    
-    3. **JavaScript (Node.js)**:
-       - If the problem implies a simplified environment, use \`readline()\`.
-       - Otherwise, use the standard Node.js \`process.stdin\` boilerplate to handle input streams.
-       - DO NOT simply write a function (e.g., \`function solution(A, B)\`) unless the prompt explicitly asks for a function signature. Assume a full script is needed.
-
-    Please structure your response in a JSON format with the following keys:
-    1. "summary": A concise summary of the business logic in Chinese.
-    2. "key_concepts": A list of specific programming concepts (e.g., Dynamic Programming, HashMap, Sliding Window) and potential pitfalls/difficulties tested by this problem (in Chinese).
-    3. "constraints": A list of technical constraints, input formats, and output requirements (in Chinese).
-    4. "solutions": A dictionary object containing complete, executable solutions in 3 languages. The keys must be exact: "python", "java", and "javascript".
-       - Ensure the code follows the Input/Output instructions above strictly.
-       - The code must be highly optimized, handle edge cases, and include comments explaining the logic.
-    5. "complexity": Time and Space complexity analysis (in Chinese). Can be a string or an object with "time" and "space" keys.
-    
-    IMPORTANT: Ensure the JSON is valid and strictly follows the structure. Do not wrap the JSON in markdown code blocks like \`\`\`json. Just return the raw JSON string.`;
-
-    const userPrompt =
-      "Analyze these images containing a coding problem description. Provide solutions in Python, Java, and JavaScript based on the complete context.";
-
-    // Prepare payload with multiple images using stored mimeType
-    const imageParts = imagesData.map((img) => ({
-      inlineData: {
-        mimeType: img.mimeType || "image/jpeg",
-        data: img.data,
-      },
-    }));
-
-    const payload = {
-      contents: [
-        {
-          parts: [{ text: userPrompt }, ...imageParts],
-        },
-      ],
-      systemInstruction: {
-        parts: [{ text: systemPrompt }],
-      },
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
-    };
-
     try {
-      // Retry logic with exponential backoff
-      const maxRetries = 5;
-      let responseData = null;
+      setLoading(true);
+      setError(null);
 
-      for (let i = 0; i < maxRetries; i++) {
-        try {
-          const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
+      const payload: SHLAnalysisPayload = {
+        images_data: imagesData,
+        llmKey: selectedModel,
+      };
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            if (
-              response.status >= 400 &&
-              response.status < 500 &&
-              response.status !== 429
-            ) {
-              throw new Error(
-                `API Error (${response.status}): ${errorText || response.statusText}`
-              );
-            }
-            throw new Error(
-              `Server Error (${response.status}): ${errorText || response.statusText}`
-            );
-          }
+      const res = await fetch("/api/shl_analyze", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
-          responseData = await response.json();
-          break; // Success, exit loop
-        } catch (err) {
-          if (i === maxRetries - 1) throw err;
-          const delay = Math.pow(2, i) * 1000;
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(`SHL分析失败: ${data.error || res.statusText}`);
+        return;
       }
-
-      if (
-        responseData &&
-        responseData.candidates &&
-        responseData.candidates[0] &&
-        responseData.candidates[0].content
-      ) {
-        const responseText = responseData.candidates[0].content.parts[0].text;
-        try {
-          const parsedResult = JSON.parse(responseText);
-          setResult(parsedResult);
-        } catch (e) {
-          console.error("JSON Parse Error:", e);
-          const cleanedText = responseText
-            .replace(/```json/g, "")
-            .replace(/```/g, "");
-          setResult(JSON.parse(cleanedText));
-        }
-      } else {
-        throw new Error("API returned no content.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setError(`分析失败: ${err.message || "未知错误"}`);
+      console.log({ data });
+      setResult(data);
+    } catch (error) {
+      setError(`SHL分析失败: ${error || "未知错误"}`);
     } finally {
       setLoading(false);
     }
+
+    // try {
+    //   // Retry logic with exponential backoff
+    //   const maxRetries = 5;
+    //   let responseData = null;
+
+    //   for (let i = 0; i < maxRetries; i++) {
+    //     try {
+    //       const response = await fetch(API_URL, {
+    //         method: "POST",
+    //         headers: {
+    //           "Content-Type": "application/json",
+    //         },
+    //         body: JSON.stringify(payload),
+    //       });
+
+    //       if (!response.ok) {
+    //         const errorText = await response.text();
+    //         if (
+    //           response.status >= 400 &&
+    //           response.status < 500 &&
+    //           response.status !== 429
+    //         ) {
+    //           throw new Error(
+    //             `API Error (${response.status}): ${errorText || response.statusText}`
+    //           );
+    //         }
+    //         throw new Error(
+    //           `Server Error (${response.status}): ${errorText || response.statusText}`
+    //         );
+    //       }
+
+    //       responseData = await response.json();
+    //       break; // Success, exit loop
+    //     } catch (err) {
+    //       if (i === maxRetries - 1) throw err;
+    //       const delay = Math.pow(2, i) * 1000;
+    //       await new Promise((resolve) => setTimeout(resolve, delay));
+    //     }
+    //   }
+
+    //   if (
+    //     responseData &&
+    //     responseData.candidates &&
+    //     responseData.candidates[0] &&
+    //     responseData.candidates[0].content
+    //   ) {
+    //     const responseText = responseData.candidates[0].content.parts[0].text;
+    //     try {
+    //       const parsedResult = JSON.parse(responseText);
+    //       setResult(parsedResult);
+    //     } catch (e) {
+    //       console.error("JSON Parse Error:", e);
+    //       const cleanedText = responseText
+    //         .replace(/```json/g, "")
+    //         .replace(/```/g, "");
+    //       setResult(JSON.parse(cleanedText));
+    //     }
+    //   } else {
+    //     throw new Error("API returned no content.");
+    //   }
+    // } catch (err: any) {
+    //   console.error(err);
+    //   setError(`分析失败: ${err.message || "未知错误"}`);
+    // } finally {
+    //   setLoading(false);
+    // }
   };
 
   // --- Main Home View ---
@@ -225,7 +195,7 @@ const Home = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 w-full flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1 lg:max-h-[calc(100vh-10.7rem)] lg:overflow-y-auto">
           {/* Left Column: Image Uploader */}
           <ImageUploader
             onAnalyze={analyzeProblem}

@@ -29,3 +29,8 @@ export interface Model {
 export interface ResultDisplayProps {
   result: AnalysisResult | null;
 }
+
+export interface SHLAnalysisPayload {
+  images_data: ImageData[];
+  llmKey: string;
+}
