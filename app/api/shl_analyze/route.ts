@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     const payload = await request.json();
     // 请求后端 SHL 分析接口
     const res = await apiClient
-      .post("/shl_analyze/", payload, { timeout: 0 })
+      .post("/shl_analyze", payload, { timeout: 0 })
       .then((res) => res.data);
     if (res.code !== 200) {
       //   后端返回错误

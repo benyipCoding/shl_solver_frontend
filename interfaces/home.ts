@@ -24,6 +24,9 @@ export interface AnalysisResult {
 export interface Model {
   id: string;
   name: string;
+  desc?: string;
+  tag?: string;
+  key?: string;
 }
 
 export interface ResultDisplayProps {

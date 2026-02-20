@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const oldCaptchaId = searchParams.get("captchaId");
 
     // 请求后端验证码接口，注意设置 responseType 为 arraybuffer 以正确接收图片二进制数据
-    const res = await apiClient.get("/captcha/", {
+    const res = await apiClient.get("/captcha", {
       responseType: "arraybuffer",
       params: {
         oldCaptchaId, // 将旧的 captchaId 作为查询参数发送给后端
