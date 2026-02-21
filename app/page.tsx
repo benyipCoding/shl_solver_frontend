@@ -21,18 +21,6 @@ import UserHeaderActions from "@/components/UserHeaderActions";
 import toast from "react-hot-toast";
 
 const Home = () => {
-  // Model Definitions
-  // const MODELS: Model[] = [
-  //   {
-  //     id: "gemini-3-flash-preview",
-  //     name: "Gemini 3 Flash (速度快)",
-  //   },
-  //   {
-  //     id: "gemini-3-pro-preview",
-  //     name: "Gemini 3 Pro (强推理)",
-  //   },
-  // ];
-
   const [models, setModels] = useState<Model[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -145,7 +133,7 @@ const Home = () => {
             </div>
 
             {/* Login & Multi-image indicator */}
-            <UserHeaderActions />
+            {/* <UserHeaderActions /> */}
           </div>
         </div>
       </header>
