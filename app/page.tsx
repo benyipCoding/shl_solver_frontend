@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Cpu,
   AlertCircle,
@@ -18,24 +18,27 @@ import {
 import ImageUploader from "@/components/ImageUploader";
 import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
+import toast from "react-hot-toast";
 
 const Home = () => {
   // Model Definitions
-  const MODELS: Model[] = [
-    {
-      id: "gemini-3-flash-preview",
-      name: "Gemini 3 Flash (速度快)",
-    },
-    {
-      id: "gemini-3-pro-preview",
-      name: "Gemini 3 Pro (强推理)",
-    },
-  ];
+  // const MODELS: Model[] = [
+  //   {
+  //     id: "gemini-3-flash-preview",
+  //     name: "Gemini 3 Flash (速度快)",
+  //   },
+  //   {
+  //     id: "gemini-3-pro-preview",
+  //     name: "Gemini 3 Pro (强推理)",
+  //   },
+  // ];
+
+  const [models, setModels] = useState<Model[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id); // Default to Flash
+  const [selectedModel, setSelectedModel] = useState<number | null>(null); // Default to null
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
@@ -45,7 +48,7 @@ const Home = () => {
 
       const payload: SHLAnalysisPayload = {
         images_data: imagesData,
-        llmKey: selectedModel,
+        llmId: Number(selectedModel),
       };
 
       const res = await fetch("/api/shl_analyze", {
@@ -66,6 +69,34 @@ const Home = () => {
       setLoading(false);
     }
   };
+
+  // 获取llms列表
+  const fetchLLMs = async () => {
+    try {
+      const res = await fetch("/api/llms");
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("获取LLMs失败:", data.error || res.statusText);
+        toast.error("获取LLMs失败: " + (data.error || res.statusText));
+        return;
+      }
+
+      setModels(data.filter((m: Model) => m.enabled));
+    } catch (error) {
+      console.error("获取LLMs失败:", error);
+      toast.error("获取LLMs失败: " + (error || "未知错误"));
+    }
+  };
+
+  useEffect(() => {
+    fetchLLMs();
+  }, []);
+
+  useEffect(() => {
+    if (models.length > 0) {
+      setSelectedModel(models[0].id); // 默认选择第一个模型
+    }
+  }, [models]);
 
   // --- Main Home View ---
   return (
@@ -98,11 +129,11 @@ const Home = () => {
                 <Sparkles className="h-4 w-4 text-indigo-500" />
               </div>
               <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                value={String(selectedModel)}
+                onChange={(e) => setSelectedModel(Number(e.target.value))}
                 className="w-full md:w-60 appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer"
               >
-                {MODELS.map((model) => (
+                {models.map((model) => (
                   <option key={model.id} value={model.id}>
                     {model.name}
                   </option>
@@ -127,7 +158,7 @@ const Home = () => {
             onClearResult={() => setResult(null)}
             loading={loading}
             selectedModelName={
-              MODELS.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
+              models.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
               "AI"
             }
           />

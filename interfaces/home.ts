@@ -22,11 +22,12 @@ export interface AnalysisResult {
 }
 
 export interface Model {
-  id: string;
+  id: number;
   name: string;
-  desc?: string;
-  tag?: string;
-  key?: string;
+  desc: string;
+  tag: string;
+  key: string;
+  enabled: boolean;
 }
 
 export interface ResultDisplayProps {
@@ -35,5 +36,5 @@ export interface ResultDisplayProps {
 
 export interface SHLAnalysisPayload {
   images_data: ImageData[];
-  llmKey: string;
+  llmId: number;
 }

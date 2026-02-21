@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import apiClient from "@/utils/request";
+import { SHLAnalysisPayload } from "@/interfaces/home";
 
 // SHL分析接口
 export async function POST(request: Request) {
   try {
-    const payload = await request.json();
+    const payload: SHLAnalysisPayload = await request.json();
     // 请求后端 SHL 分析接口
     const res = await apiClient
       .post("/shl_analyze", payload, { timeout: 0 })
