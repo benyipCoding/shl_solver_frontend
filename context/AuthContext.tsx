@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { User } from "@/interfaces/auth";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
 interface AuthContextType {
   user: User | null;
@@ -44,9 +45,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    setUser(null);
-    localStorage.removeItem("user_info");
-    // router.push("/auth"); // 登出后跳转到登录页
+    // 调用后端登出接口
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+      });
+      if (!response.ok) {
+        console.error("登出失败:", response.statusText);
+        toast.error("登出失败");
+        return;
+      }
+      setUser(null);
+      localStorage.removeItem("user_info");
+      router.push("/auth"); // 登出后跳转到登录页
+    } catch (error) {
+      console.error("登出错误:", error);
+      toast.error("登出错误");
+    }
   };
 
   return (

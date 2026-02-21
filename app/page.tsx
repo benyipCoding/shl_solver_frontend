@@ -133,7 +133,7 @@ const Home = () => {
             </div>
 
             {/* Login & Multi-image indicator */}
-            {/* <UserHeaderActions /> */}
+            <UserHeaderActions />
           </div>
         </div>
       </header>
