@@ -12,7 +12,7 @@ import {
   AnalyzeResponse,
   AnalyzeResponseData,
 } from "@/interfaces/ai_doctor";
-import { features, HomeFeature } from "../constants/ai_doctor";
+import { features, HomeFeature } from "@/constants/ai_doctor";
 
 // const apiKey = "";
 

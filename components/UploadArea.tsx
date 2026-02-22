@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Upload, Camera } from "lucide-react";
-import { HomeFeature } from "@/app/constants/ai_doctor";
+import { HomeFeature } from "@/constants/ai_doctor";
 
 type Props = {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
