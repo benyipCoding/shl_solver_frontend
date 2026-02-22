@@ -500,10 +500,6 @@ const AuthContent = () => {
           </button>
         </div>
       </div>
-
-      {/* <div className="absolute bottom-4 text-xs text-slate-400 hidden md:block">
-        © 2024 SHL Solver. All rights reserved.
-      </div> */}
     </div>
   );
 };

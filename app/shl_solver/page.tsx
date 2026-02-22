@@ -14,6 +14,7 @@ import UserHeaderActions from "@/components/UserHeaderActions";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
+import { fetchLLMs } from "@/utils/helpers";
 
 const SHLSolverPage = () => {
   const { login } = useAuth();
@@ -60,25 +61,29 @@ const SHLSolverPage = () => {
   };
 
   // 获取llms列表
-  const fetchLLMs = async () => {
-    try {
-      const res = await fetch("/api/llms");
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("获取LLMs失败:", data.message || res.statusText);
-        toast.error("获取LLMs失败: " + (data.message || res.statusText));
-        return;
-      }
+  //   const fetchLLMs = async () => {
+  //     try {
+  //       const res = await fetch("/api/llms");
+  //       const data = await res.json();
+  //       if (!res.ok) {
+  //         console.error("获取LLMs失败:", data.message || res.statusText);
+  //         toast.error("获取LLMs失败: " + (data.message || res.statusText));
+  //         return;
+  //       }
 
-      setModels(data.filter((m: Model) => m.enabled));
-    } catch (error) {
-      console.error("获取LLMs失败:", error);
-      toast.error("获取LLMs失败: " + (error || "未知错误"));
-    }
-  };
+  //       setModels(data.filter((m: Model) => m.enabled));
+  //     } catch (error) {
+  //       console.error("获取LLMs失败:", error);
+  //       toast.error("获取LLMs失败: " + (error || "未知错误"));
+  //     }
+  //   };
 
   useEffect(() => {
-    fetchLLMs();
+    fetchLLMs().then((data) => {
+      if (data) {
+        setModels(data);
+      }
+    });
   }, []);
 
   useEffect(() => {

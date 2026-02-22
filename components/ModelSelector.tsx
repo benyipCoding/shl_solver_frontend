@@ -21,10 +21,10 @@ export default function ModelSelector({
   );
 
   return (
-    <div className="relative">
+    <div className="relative flex-1 flex">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full transition-all group max-w-40 sm:max-w-none"
+        className="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full transition-all group flex-1 justify-between sm:max-w-52"
       >
         <div className="p-1 bg-blue-100 rounded-full shrink-0">
           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
