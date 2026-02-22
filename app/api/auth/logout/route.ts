@@ -1,25 +1,14 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import apiClient from "@/utils/request";
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies();
-    const cookieHeader = cookieStore
-      .getAll()
-      .map((c) => `${c.name}=${c.value}`)
-      .join("; ");
-
     let apiResponse;
     try {
       apiResponse = await apiClient.post(
         "/auth/logout",
         {},
         {
-          headers: {
-            Cookie: cookieHeader,
-            "Content-Type": "application/json",
-          },
           validateStatus: (status) => status < 500,
         }
       );

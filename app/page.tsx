@@ -19,8 +19,10 @@ import ImageUploader from "@/components/ImageUploader";
 import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 
 const Home = () => {
+  const { login } = useAuth();
   const [models, setModels] = useState<Model[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -76,7 +78,23 @@ const Home = () => {
     }
   };
 
+  const getMe = async () => {
+    try {
+      const res = await fetch("/api/user/me");
+      if (!res.ok) {
+        toast.error("获取用户信息失败");
+        return;
+      }
+      const data = await res.json();
+      login(data);
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      toast.error("获取用户信息失败");
+    }
+  };
+
   useEffect(() => {
+    getMe();
     fetchLLMs();
   }, []);
 

@@ -26,6 +26,7 @@ export interface LocalAuthPayload {
 }
 
 export interface User {
+  id: number;
   email: string;
   username: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

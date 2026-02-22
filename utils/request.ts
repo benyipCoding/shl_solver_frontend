@@ -9,21 +9,19 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// export const postRequest = async <T>(
-//   url: string,
-//   data: AnalyzePayload,
-//   config?: AxiosRequestConfig
-// ): Promise<T> => {
-//   const response = await apiClient.post<T>(url, data, config);
-//   return response.data;
-// };
-
-// export const getRequest = async <T>(
-//   url: string,
-//   config?: AxiosRequestConfig
-// ): Promise<T> => {
-//   const response = await apiClient.get<T>(url, config);
-//   return response.data;
-// };
+apiClient.interceptors.request.use(async (config) => {
+  if (typeof window === "undefined") {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const cookieHeader = cookieStore
+      .getAll()
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+    if (cookieHeader) {
+      config.headers.Cookie = cookieHeader;
+    }
+  }
+  return config;
+});
 
 export default apiClient;

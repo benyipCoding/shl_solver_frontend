@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Image as ImageIcon, LogIn, LogOut } from "lucide-react";
@@ -22,6 +21,7 @@ const UserHeaderActions = () => {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };

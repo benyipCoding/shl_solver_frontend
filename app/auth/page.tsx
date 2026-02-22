@@ -15,11 +15,9 @@ import {
 import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/ValidatedInput";
 import toast from "react-hot-toast";
-import { useAuth } from "@/context/AuthContext";
 
 const AuthPage = () => {
   const router = useRouter();
-  const { login } = useAuth();
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
     "login"
   ); // 'login', 'register', 'forgot'
@@ -142,9 +140,6 @@ const AuthPage = () => {
       fetchCaptcha();
       return;
     }
-    login(data);
-    console.log(data);
-
     toast.success("登录成功！");
     router.push("/");
   };
