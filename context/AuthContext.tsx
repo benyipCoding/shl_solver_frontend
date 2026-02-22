@@ -39,33 +39,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
-  useEffect(() => {
-    const originalFetch = window.fetch;
-
-    window.fetch = async (...args) => {
-      try {
-        console.log("!!!!!!");
-        const response = await originalFetch(...args);
-
-        if (response.status === 401) {
-          // Token 失效，自动登出
-          setUser(null);
-          localStorage.removeItem("user_info");
-        }
-        return response;
-      } catch (error) {
-        console.log("####", error);
-        throw error;
-      } finally {
-        console.log("Fetch completed");
-      }
-    };
-
-    return () => {
-      window.fetch = originalFetch;
-    };
-  }, []);
-
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem("user_info", JSON.stringify(userData));

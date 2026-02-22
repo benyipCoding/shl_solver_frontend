@@ -82,7 +82,7 @@ const Home = () => {
     try {
       const res = await fetch("/api/user/me");
       if (!res.ok) {
-        return;
+        throw new Error(`获取用户信息失败: ${res.statusText}`);
       }
       const data = await res.json();
       login(data);
