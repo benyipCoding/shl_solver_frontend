@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       setUser(null);
       localStorage.removeItem("user_info");
-      router.push("/auth"); // 登出后跳转到登录页
+      // router.push("/auth"); // 登出后跳转到登录页
     } catch (error) {
       console.error("登出错误:", error);
       toast.error("登出错误");

@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   LogIn,
   Mail,
@@ -16,8 +16,11 @@ import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/ValidatedInput";
 import toast from "react-hot-toast";
 
-const AuthPage = () => {
+const AuthContent = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/";
+
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
     "login"
   ); // 'login', 'register', 'forgot'
@@ -142,7 +145,7 @@ const AuthPage = () => {
     }
 
     toast.success("登录成功！");
-    router.push("/");
+    router.push(callbackUrl);
   };
 
   const handleRegister = async () => {
@@ -505,4 +508,10 @@ const AuthPage = () => {
   );
 };
 
-export default AuthPage;
+export default function AuthPage() {
+  return (
+    <Suspense>
+      <AuthContent />
+    </Suspense>
+  );
+}

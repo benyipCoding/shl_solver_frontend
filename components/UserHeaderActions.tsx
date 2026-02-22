@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Image as ImageIcon, LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
@@ -11,6 +11,7 @@ const UserHeaderActions = ({
   simpleMode?: boolean;
 }) => {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout, login } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -85,7 +86,13 @@ const UserHeaderActions = ({
 
       {!user && (
         <button
-          onClick={() => router.push("/auth")}
+          onClick={() => {
+            const params = new URLSearchParams();
+            if (pathname) {
+              params.set("callbackUrl", pathname);
+            }
+            router.push(`/auth?${params.toString()}`);
+          }}
           className="flex items-center justify-center px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs md:text-sm font-medium rounded-lg transition-colors ml-2 w-full md:w-auto"
         >
           <LogIn className="w-3.5 h-3.5 mr-1.5" /> 登 录
