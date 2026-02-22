@@ -168,11 +168,6 @@ export default function Home() {
       className="min-h-screen bg-slate-50 font-sans text-slate-800"
       style={{ fontFamily: '"Noto Sans SC", sans-serif' }}
     >
-      {/* 引入 Google Fonts: Noto Sans SC (思源黑体) - 免费可商用 */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
-      `}</style>
-
       {/* 顶部导航 - 适配移动端宽度 */}
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
