@@ -82,14 +82,14 @@ const Home = () => {
     try {
       const res = await fetch("/api/user/me");
       if (!res.ok) {
-        toast.error("获取用户信息失败");
+        // toast.error("获取用户信息失败");
         return;
       }
       const data = await res.json();
       login(data);
     } catch (error) {
       console.error("Error fetching user info:", error);
-      toast.error("获取用户信息失败");
+      // toast.error("获取用户信息失败");
     }
   };
 
