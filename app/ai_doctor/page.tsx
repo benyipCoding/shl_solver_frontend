@@ -14,40 +14,40 @@ import {
 } from "@/interfaces/ai_doctor";
 import { features, HomeFeature } from "../constants/ai_doctor";
 
-const apiKey = "";
+// const apiKey = "";
 
 // --- Helper: Exponential Backoff for API Calls ---
-const callGeminiWithBackoff = async (
-  payload: AnalyzePayload,
-  retryCount = 0
-) => {
-  const maxRetries = 3;
-  const delays = [1000, 2000, 4000];
+// const callGeminiWithBackoff = async (
+//   payload: AnalyzePayload,
+//   retryCount = 0
+// ) => {
+//   const maxRetries = 3;
+//   const delays = [1000, 2000, 4000];
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+//   try {
+//     const response = await fetch(
+//       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+//       {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify(payload),
+//       }
+//     );
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
+//     if (!response.ok) {
+//       throw new Error(`API Error: ${response.status}`);
+//     }
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    if (retryCount < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, delays[retryCount]));
-      return callGeminiWithBackoff(payload, retryCount + 1);
-    }
-    throw error;
-  }
-};
+//     const data = await response.json();
+//     return data;
+//   } catch (error) {
+//     if (retryCount < maxRetries) {
+//       await new Promise((resolve) => setTimeout(resolve, delays[retryCount]));
+//       return callGeminiWithBackoff(payload, retryCount + 1);
+//     }
+//     throw error;
+//   }
+// };
 
 export default function Home() {
   const [image, setImage] = useState<string | ArrayBuffer | null>(null);
@@ -69,7 +69,7 @@ export default function Home() {
   // --- 首页特性弹窗状态 (新增) ---
   const [activeFeature, setActiveFeature] = useState<HomeFeature | null>(null);
 
-  const currentModelName = models.find((m) => m.id === selectedModel)?.name;
+  const currentModelName = models.find((m) => m.key === selectedModel)?.name;
 
   // 处理图片上传
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,8 +142,8 @@ export default function Home() {
   const getLLMs = async () => {
     const res = await fetch("/api/llms");
     const data = await res.json();
-    setModels(data);
-    setSelectedModel(data[0]?.id);
+    setModels(data.filter((m: any) => m.enabled));
+    setSelectedModel(data[0]?.key);
   };
 
   const resetAnalysis = () => {
@@ -155,6 +155,12 @@ export default function Home() {
   useEffect(() => {
     getLLMs();
   }, []);
+
+  useEffect(() => {
+    if (models.length > 0) {
+      setSelectedModel(models[0].key); // 默认选择第一个模型
+    }
+  }, [models]);
 
   return (
     <div
