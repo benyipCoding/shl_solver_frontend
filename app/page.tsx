@@ -20,9 +20,11 @@ import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
+import { useFetch } from "@/context/FetchContext";
 
 const Home = () => {
   const { login } = useAuth();
+  const { customFetch } = useFetch();
   const [models, setModels] = useState<Model[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -41,10 +43,14 @@ const Home = () => {
         llmId: Number(selectedModel),
       };
 
-      const res = await fetch("/api/shl_analyze", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      const res = await customFetch(
+        "/api/shl_analyze",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        true
+      );
 
       const data = await res.json();
 
@@ -80,7 +86,7 @@ const Home = () => {
 
   const getMe = async () => {
     try {
-      const res = await fetch("/api/user/me");
+      const res = await customFetch("/api/user/me");
       if (!res.ok) {
         throw new Error(`获取用户信息失败: ${res.statusText}`);
       }
