@@ -1,14 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Cpu,
-  AlertCircle,
-  ChevronDown,
-  Sparkles,
-  ArrowLeft,
-  Home,
-} from "lucide-react";
+import { Cpu, AlertCircle, ChevronDown, Sparkles } from "lucide-react";
 import {
   AnalysisResult,
   ImageData,

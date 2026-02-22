@@ -13,6 +13,7 @@ import {
   AnalyzeResponseData,
 } from "@/interfaces/ai_doctor";
 import { features, HomeFeature } from "@/constants/ai_doctor";
+import UserHeaderActions from "@/components/UserHeaderActions";
 
 // const apiKey = "";
 
@@ -189,11 +190,14 @@ export default function Home() {
           </div>
 
           {/* 模型选择器 */}
-          <ModelSelector
-            selectedModel={selectedModel}
-            onSelectModel={setSelectedModel}
-            models={models}
-          />
+          <div className="flex gap-2">
+            <ModelSelector
+              selectedModel={selectedModel}
+              onSelectModel={setSelectedModel}
+              models={models}
+            />
+            <UserHeaderActions simpleMode={true} />
+          </div>
         </div>
       </header>
 
