@@ -125,6 +125,7 @@ const AuthContent = () => {
     const isCaptchaValid = await validateCaptcha();
     if (!isCaptchaValid) {
       setErrors((prev) => ({ ...prev, captcha: "验证码错误" }));
+      setFormData((prev) => ({ ...prev, captcha: "" }));
       toast.error("验证码错误，请重试");
       fetchCaptcha();
       return;
