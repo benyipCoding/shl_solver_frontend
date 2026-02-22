@@ -3,12 +3,18 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Image as ImageIcon, LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useFetch } from "@/context/FetchContext";
 
-const UserHeaderActions = () => {
+const UserHeaderActions = ({
+  simpleMode = false,
+}: {
+  simpleMode?: boolean;
+}) => {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, login } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { customFetch } = useFetch();
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -21,7 +27,7 @@ const UserHeaderActions = () => {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-
+    getMe();
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
@@ -53,13 +59,29 @@ const UserHeaderActions = () => {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const getMe = async () => {
+    try {
+      const res = await customFetch("/api/user/me");
+      if (!res.ok) {
+        throw new Error(`获取用户信息失败: ${res.statusText}`);
+      }
+      const data = await res.json();
+      login(data.data);
+      return;
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+    }
+  };
+
   return (
-    <div className="flex items-center w-14 lg:w-full md:w-auto justify-between md:justify-end space-x-2">
-      <div className="hidden md:flex items-center space-x-2 text-sm text-slate-600 border-l border-slate-200 pl-3">
-        <span className="flex items-center text-xs text-slate-500">
-          <ImageIcon className="w-3 h-3 mr-1" /> 多图支持
-        </span>
-      </div>
+    <div className="flex items-center w-auto justify-end space-x-2">
+      {!simpleMode && (
+        <div className="hidden md:flex items-center space-x-2 text-sm text-slate-600 border-l border-slate-200 pl-3">
+          <span className="flex items-center text-xs text-slate-500">
+            <ImageIcon className="w-3 h-3 mr-1" /> 多图支持
+          </span>
+        </div>
+      )}
 
       {!user && (
         <button

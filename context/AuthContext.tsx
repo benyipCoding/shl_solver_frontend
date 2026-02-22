@@ -60,7 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // 即使请求错误，也清除本地状态
       setUser(null);
       localStorage.removeItem("user_info");
-      router.push("/auth");
+      // router.push("/auth");
     }
   };
 

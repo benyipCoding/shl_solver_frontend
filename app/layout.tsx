@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SHL Solver",
-  description: "SHL 场景解题助手",
+  title: "AI Hub - 你的智能助手集合",
+  description: "集成SHL解题辅助、简历优化、面试模拟等多种AI功能的综合平台",
 };
 
 export default function RootLayout({

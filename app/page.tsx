@@ -1,193 +1,188 @@
-"use client";
-import { useEffect, useState } from "react";
-import {
-  Cpu,
-  AlertCircle,
-  Loader2,
-  Image as ImageIcon,
-  X,
-  ChevronDown,
-  Sparkles,
-} from "lucide-react";
-import {
-  AnalysisResult,
-  ImageData,
-  Model,
-  SHLAnalysisPayload,
-} from "@/interfaces/home";
-import ImageUploader from "@/components/ImageUploader";
-import ResultDisplay from "@/components/ResultDisplay";
+import React from "react";
+import Link from "next/link";
+import { Sparkles, Zap, ArrowRight, Bot, Layers, Cpu } from "lucide-react";
 import UserHeaderActions from "@/components/UserHeaderActions";
-import toast from "react-hot-toast";
-import { useAuth } from "@/context/AuthContext";
-import { useFetch } from "@/context/FetchContext";
 
-const Home = () => {
-  const { login } = useAuth();
-  const { customFetch } = useFetch();
-  const [models, setModels] = useState<Model[]>([]);
-
-  const [loading, setLoading] = useState<boolean>(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<number | null>(null); // Default to null
-
-  const analyzeProblem = async (imagesData: ImageData[]) => {
-    if (imagesData.length === 0) return;
-    try {
-      setLoading(true);
-      setError(null);
-
-      const payload: SHLAnalysisPayload = {
-        images_data: imagesData,
-        llmId: Number(selectedModel),
-      };
-
-      const res = await customFetch(
-        "/api/shl_analyze",
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-        true
-      );
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(`SHL分析失败: ${data.error || res.statusText}`);
-        return;
-      }
-      setResult(data);
-    } catch (error) {
-      setError(`SHL分析失败: ${error || "未知错误"}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 获取llms列表
-  const fetchLLMs = async () => {
-    try {
-      const res = await fetch("/api/llms");
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("获取LLMs失败:", data.message || res.statusText);
-        toast.error("获取LLMs失败: " + (data.message || res.statusText));
-        return;
-      }
-
-      setModels(data.filter((m: Model) => m.enabled));
-    } catch (error) {
-      console.error("获取LLMs失败:", error);
-      toast.error("获取LLMs失败: " + (error || "未知错误"));
-    }
-  };
-
-  const getMe = async () => {
-    try {
-      const res = await customFetch("/api/user/me");
-      if (!res.ok) {
-        throw new Error(`获取用户信息失败: ${res.statusText}`);
-      }
-      const data = await res.json();
-      login(data.data);
-      return;
-    } catch (error) {
-      console.error("Error fetching user info:", error);
-    }
-  };
-
-  useEffect(() => {
-    getMe();
-    fetchLLMs();
-  }, []);
-
-  useEffect(() => {
-    if (models.length > 0) {
-      setSelectedModel(models[0].id); // 默认选择第一个模型
-    }
-  }, [models]);
-
-  // --- Main Home View ---
+export default function Home() {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 pb-10 relative flex flex-col">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 safe-top shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
-          {/* Logo Title */}
-          <div className="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-start">
-            <div className="flex items-center space-x-3">
-              <div className="bg-blue-600 p-2 rounded-lg shadow-sm">
-                <Cpu className="w-5 h-5 md:w-6 md:h-6 text-white" />
+    <div className="min-h-screen bg-gray-50 text-gray-900 selection:bg-indigo-100 selection:text-indigo-900">
+      {/* 导航栏 */}
+      <nav className="sticky top-0 z-50 backdrop-blur-md bg-white/70 border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            <Link href="/" className="flex items-center gap-2 group">
+              <div className="p-2 bg-indigo-600 rounded-lg group-hover:bg-indigo-700 transition-colors">
+                <Bot className="h-6 w-6 text-white" />
               </div>
-              <div>
-                <h1 className="text-lg md:text-xl font-bold text-slate-800 leading-tight">
-                  SHL Scenario Solver
-                </h1>
-                <p className="text-[10px] md:text-xs text-slate-500 hidden sm:block">
-                  业务场景算法题辅助工具
-                </p>
-              </div>
+              <span className="font-bold text-xl tracking-tight text-gray-900">
+                AI <span className="text-indigo-600">Hub</span>
+              </span>
+            </Link>
+            <div className="flex items-center gap-4">
+              <UserHeaderActions simpleMode={true} />
             </div>
           </div>
+        </div>
+      </nav>
 
-          {/* Right Side: Model Selector & Features */}
-          <div className="flex items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto">
-            {/* Model Selector */}
-            <div className="relative w-full md:w-auto flex-1 md:flex-none mb-0">
-              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                <Sparkles className="h-4 w-4 text-indigo-500" />
-              </div>
-              <select
-                value={String(selectedModel)}
-                onChange={(e) => setSelectedModel(Number(e.target.value))}
-                className="w-full md:w-60 appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer"
+      <main>
+        {/* Hero 区域 */}
+        <section className="relative overflow-hidden pt-20 pb-20 lg:pt-32 lg:pb-32">
+          {/* 背景装饰 */}
+          <div className="absolute top-0 left-1/2 -ml-[50%] w-[200%] h-[200%] opacity-20 bg-[radial-gradient(closest-side,rgba(79,70,229,0.15)_0%,rgba(255,255,255,0)_100%)] pointer-events-none -z-10"></div>
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-sm font-medium mb-8 border border-indigo-100 shadow-sm animate-fade-in-up">
+              <Sparkles className="h-4 w-4" />
+              <span>不仅是解题，更是你的智能助手</span>
+            </div>
+
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-gray-900 mb-6 leading-tight">
+              探索{" "}
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-indigo-600 to-violet-600">
+                AI
+              </span>{" "}
+              的无限可能
+            </h1>
+
+            <p className="max-w-2xl mx-auto text-lg md:text-xl text-gray-600 mb-10 leading-relaxed font-light">
+              这里汇集了多种强大的 AI 工具。从 SHL
+              逻辑推理辅助到未来的更多智能服务，我们致力于为您提供更高效的解决方案。
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link
+                href="/shl_solver"
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all duration-200 overflow-hidden"
               >
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                <ChevronDown className="h-4 w-4 text-slate-400" />
-              </div>
+                <span className="relative z-10">立即体验 SHL 解题</span>
+                <ArrowRight className="h-5 w-5 relative z-10 group-hover:translate-x-1 transition-transform" />
+                <div className="absolute inset-0 h-full w-full bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer"></div>
+              </Link>
+              <a
+                href="#features"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 shadow-sm"
+              >
+                了解更多功能
+              </a>
+            </div>
+          </div>
+        </section>
+
+        {/* 功能展示网格 */}
+        <section
+          id="features"
+          className="py-24 bg-linear-to-b from-white to-gray-50 border-t border-gray-100"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4 tracking-tight">
+                核心功能库
+              </h2>
+              <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+                我们正在持续构建更多 AI 驱动的工具，目前已上线以下功能
+              </p>
             </div>
 
-            {/* Login & Multi-image indicator */}
-            <UserHeaderActions />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {/* Card 1: SHL 解题 (已上线) */}
+              <Link
+                href="/shl_solver"
+                className="group relative bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+              >
+                {/* 装饰背景图标 */}
+                <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-500 rotate-12">
+                  <Cpu className="w-48 h-48 text-indigo-600" />
+                </div>
+
+                <div className="w-14 h-14 bg-indigo-50 rounded-xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:scale-110 transition-all duration-300 shadow-sm">
+                  <Cpu className="h-7 w-7 text-indigo-600 group-hover:text-white transition-colors" />
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors">
+                  SHL 逻辑解题
+                </h3>
+                <p className="text-gray-600 leading-relaxed mb-6 font-medium">
+                  专为逻辑测试设计的 AI
+                  助手。支持多种题型分析，提供解题思路，助您轻松应对测评挑战。
+                </p>
+
+                <div className="flex items-center text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 transition-colors">
+                  <span>立即使用</span>
+                  <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </Link>
+
+              {/* Card 2: 占位符 - 简历优化 */}
+              <div className="relative bg-white p-8 rounded-2xl border border-dashed border-gray-300 flex flex-col hover:bg-gray-50 transition-colors">
+                <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mb-6">
+                  <Layers className="h-7 w-7 text-gray-400" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-500 mb-3">
+                  简历智能优化
+                </h3>
+                <p className="text-gray-500 leading-relaxed mb-6">
+                  上传简历，AI
+                  为您分析关键词匹配度，提供修改建议，让您的简历在筛选中脱颖而出。
+                </p>
+                <div className="mt-auto">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                    开发中
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 3: 占位符 - 面试模拟 */}
+              <div className="relative bg-white p-8 rounded-2xl border border-dashed border-gray-300 flex flex-col hover:bg-gray-50 transition-colors">
+                <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center mb-6">
+                  <Zap className="h-7 w-7 text-gray-400" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-500 mb-3">
+                  AI 面试模拟
+                </h3>
+                <p className="text-gray-500 leading-relaxed mb-6">
+                  针对不同岗位的模拟面试训练，实时语音交互，为您提供回答反馈和改进建议。
+                </p>
+                <div className="mt-auto">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                    规划中
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 w-full flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1 lg:max-h-[calc(100vh-10.7rem)] lg:overflow-y-auto">
-          {/* Left Column: Image Uploader */}
-          <ImageUploader
-            onAnalyze={analyzeProblem}
-            onClearResult={() => setResult(null)}
-            loading={loading}
-            selectedModelName={
-              models.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
-              "AI"
-            }
-          />
+        {/* 底部 Footer */}
+        <footer className="bg-white border-t border-gray-200 py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-50 rounded-lg">
+                <Bot className="h-6 w-6 text-indigo-600" />
+              </div>
+              <span className="font-bold text-gray-900 tracking-tight">
+                AI Hub
+              </span>
+            </div>
 
-          {/* Right Column: Result Display */}
-          <ResultDisplay result={result} />
-        </div>
+            <div className="flex items-center gap-8 text-sm font-medium text-gray-500">
+              <a href="#" className="hover:text-indigo-600 transition-colors">
+                隐私政策
+              </a>
+              <a href="#" className="hover:text-indigo-600 transition-colors">
+                服务条款
+              </a>
+              <a href="#" className="hover:text-indigo-600 transition-colors">
+                联系我们
+              </a>
+            </div>
 
-        {/* Global API Error Message */}
-        {error && (
-          <div className="mt-4 bg-red-50 text-red-700 p-4 rounded-xl flex items-start border border-red-100 animate-fadeIn text-sm md:text-base">
-            <AlertCircle className="w-5 h-5 mr-3 mt-0.5 shrink-0" />
-            <p>{error}</p>
+            <div className="text-sm text-gray-400">
+              &copy; {new Date().getFullYear()} AI Hub. All rights reserved.
+            </div>
           </div>
-        )}
+        </footer>
       </main>
     </div>
   );
-};
-
-export default Home;
+}
