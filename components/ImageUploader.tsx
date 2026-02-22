@@ -11,7 +11,7 @@ import {
   Cpu,
   BookOpen,
 } from "lucide-react";
-import { ImageData } from "@/interfaces/home";
+import { ImageData } from "@/interfaces/shl_solver";
 
 interface ImageUploaderProps {
   onAnalyze: (imagesData: ImageData[]) => void;

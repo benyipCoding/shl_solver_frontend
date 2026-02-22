@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import apiClient from "@/utils/request";
-import { SHLAnalysisPayload } from "@/interfaces/home";
+import { SHLAnalysisPayload } from "@/interfaces/shl_solver";
 
 // SHL分析接口
 export async function POST(request: Request) {

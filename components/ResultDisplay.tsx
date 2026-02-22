@@ -19,7 +19,7 @@ import {
   AnalysisResult,
   Complexity,
   ResultDisplayProps,
-} from "@/interfaces/home";
+} from "@/interfaces/shl_solver";
 import toast from "react-hot-toast";
 
 const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {

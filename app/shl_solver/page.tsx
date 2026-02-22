@@ -14,7 +14,7 @@ import {
   ImageData,
   Model,
   SHLAnalysisPayload,
-} from "@/interfaces/home";
+} from "@/interfaces/shl_solver";
 import ImageUploader from "@/components/ImageUploader";
 import ResultDisplay from "@/components/ResultDisplay";
 import UserHeaderActions from "@/components/UserHeaderActions";
