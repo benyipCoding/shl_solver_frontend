@@ -61,18 +61,21 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Link
                 href="/shl_solver"
-                className="group relative inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all duration-200 overflow-hidden"
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all duration-200 overflow-hidden w-full sm:w-auto"
               >
-                <span className="relative z-10">立即体验 SHL 解题</span>
-                <ArrowRight className="h-5 w-5 relative z-10 group-hover:translate-x-1 transition-transform" />
+                <Cpu className="h-5 w-5 relative z-10" />
+                <span className="relative z-10">SHL 逻辑解题</span>
                 <div className="absolute inset-0 h-full w-full bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer"></div>
               </Link>
-              <a
-                href="#features"
-                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 shadow-sm"
+
+              <Link
+                href="/ai_doctor"
+                className="group relative inline-flex items-center justify-center gap-2 px-8 py-3.5 text-base font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all duration-200 overflow-hidden w-full sm:w-auto"
               >
-                了解更多功能
-              </a>
+                <Activity className="h-5 w-5 relative z-10" />
+                <span className="relative z-10">智能验单助手</span>
+                <div className="absolute inset-0 h-full w-full bg-linear-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer"></div>
+              </Link>
             </div>
           </div>
         </section>
@@ -96,7 +99,7 @@ export default function Home() {
               {/* Card 1: SHL 解题 (已上线) */}
               <Link
                 href="/shl_solver"
-                className="group relative bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                className="group relative bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
               >
                 {/* 装饰背景图标 */}
                 <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-500 rotate-12">
@@ -110,12 +113,12 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors">
                   SHL 逻辑解题
                 </h3>
-                <p className="text-gray-600 leading-relaxed mb-6 font-medium">
+                <p className="text-gray-600 leading-relaxed mb-6 font-medium bg-red grow">
                   专为逻辑测试设计的 AI
                   助手。支持多种题型分析，提供解题思路，助您轻松应对测评挑战。
                 </p>
 
-                <div className="flex items-center text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 transition-colors">
+                <div className="mt-auto pt-4 flex items-center text-sm font-semibold text-indigo-600 group-hover:text-indigo-700 transition-colors">
                   <span>立即使用</span>
                   <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
                 </div>
@@ -124,7 +127,7 @@ export default function Home() {
               {/* Card 2: 智能验单助手 (已上线) */}
               <Link
                 href="/ai_doctor"
-                className="group relative bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                className="group relative bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
               >
                 {/* 装饰背景图标 */}
                 <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-500 rotate-12">
@@ -138,12 +141,12 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">
                   智能验单助手
                 </h3>
-                <p className="text-gray-600 leading-relaxed mb-6 font-medium">
+                <p className="text-gray-600 leading-relaxed mb-6 font-medium grow">
                   专业的 AI
                   医疗验单解读。上传化验单，快速获取简单易懂的健康报告分析。
                 </p>
 
-                <div className="flex items-center text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors">
+                <div className="mt-auto pt-4 flex items-center text-sm font-semibold text-blue-600 group-hover:text-blue-700 transition-colors">
                   <span>立即使用</span>
                   <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
                 </div>
@@ -157,11 +160,11 @@ export default function Home() {
                 <h3 className="text-xl font-bold text-gray-500 mb-3">
                   简历智能优化
                 </h3>
-                <p className="text-gray-500 leading-relaxed mb-6">
+                <p className="text-gray-500 leading-relaxed mb-6 grow">
                   上传简历，AI
                   为您分析关键词匹配度，提供修改建议，让您的简历在筛选中脱颖而出。
                 </p>
-                <div className="mt-auto">
+                <div className="mt-auto pt-4">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
                     开发中
                   </span>
