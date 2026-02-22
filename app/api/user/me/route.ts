@@ -10,7 +10,7 @@ export async function GET() {
     console.error("获取用户信息失败:", error);
     return NextResponse.json(
       { error: "获取用户信息失败" },
-      { status: error.response?.status || 500 }
+      { status: error.response?.status || error.status || 500 }
     );
   } finally {
     // 无论成功还是失败，都不返回用户信息

@@ -39,6 +39,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(false);
   }, []);
 
+  useEffect(() => {
+    const originalFetch = window.fetch;
+
+    window.fetch = async (...args) => {
+      try {
+        console.log("!!!!!!");
+        const response = await originalFetch(...args);
+
+        if (response.status === 401) {
+          // Token 失效，自动登出
+          setUser(null);
+          localStorage.removeItem("user_info");
+        }
+        return response;
+      } catch (error) {
+        console.log("####", error);
+        throw error;
+      } finally {
+        console.log("Fetch completed");
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem("user_info", JSON.stringify(userData));
@@ -50,17 +77,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
       });
-      if (!response.ok) {
-        console.error("登出失败:", response.statusText);
-        toast.error("登出失败");
-        return;
-      }
       setUser(null);
       localStorage.removeItem("user_info");
       router.push("/auth"); // 登出后跳转到登录页
     } catch (error) {
       console.error("登出错误:", error);
       toast.error("登出错误");
+      // 即使请求错误，也清除本地状态
+      setUser(null);
+      localStorage.removeItem("user_info");
+      router.push("/auth");
     }
   };
 
