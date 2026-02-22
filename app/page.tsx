@@ -91,7 +91,7 @@ const Home = () => {
         throw new Error(`获取用户信息失败: ${res.statusText}`);
       }
       const data = await res.json();
-      login(data);
+      login(data.data);
       return;
     } catch (error) {
       console.error("Error fetching user info:", error);
