@@ -17,6 +17,7 @@ import UserHeaderActions from "@/components/UserHeaderActions";
 import { fetchLLMs } from "@/utils/helpers";
 import { useFetch } from "@/context/FetchContext";
 import Link from "next/link";
+import DisclaimerCard from "@/components/DisclaimerCard";
 
 export default function Home() {
   const [image, setImage] = useState<string | ArrayBuffer | null>(null);
@@ -194,6 +195,9 @@ export default function Home() {
             resetAnalysis={resetAnalysis}
           />
         )}
+
+        {/* 底部醒目免责声明 */}
+        <DisclaimerCard />
       </main>
 
       {/* 特性详情弹窗 Modal */}

@@ -19,7 +19,7 @@ export default function UploadArea({
   onFeatureClick,
 }: Props) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border-2 border-dashed border-blue-200 p-6 sm:p-10 text-center transition-all hover:border-blue-400">
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-dashed border-blue-200 p-6 sm:p-10 text-center transition-all hover:border-blue-400 mb-4">
       <input
         type="file"
         accept="image/*"
