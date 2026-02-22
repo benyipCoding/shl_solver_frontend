@@ -15,41 +15,8 @@ import {
 import { features, HomeFeature } from "@/constants/ai_doctor";
 import UserHeaderActions from "@/components/UserHeaderActions";
 import { fetchLLMs } from "@/utils/helpers";
-
-// const apiKey = "";
-
-// --- Helper: Exponential Backoff for API Calls ---
-// const callGeminiWithBackoff = async (
-//   payload: AnalyzePayload,
-//   retryCount = 0
-// ) => {
-//   const maxRetries = 3;
-//   const delays = [1000, 2000, 4000];
-
-//   try {
-//     const response = await fetch(
-//       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-//       {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify(payload),
-//       }
-//     );
-
-//     if (!response.ok) {
-//       throw new Error(`API Error: ${response.status}`);
-//     }
-
-//     const data = await response.json();
-//     return data;
-//   } catch (error) {
-//     if (retryCount < maxRetries) {
-//       await new Promise((resolve) => setTimeout(resolve, delays[retryCount]));
-//       return callGeminiWithBackoff(payload, retryCount + 1);
-//     }
-//     throw error;
-//   }
-// };
+import { useFetch } from "@/context/FetchContext";
+import Link from "next/link";
 
 export default function Home() {
   const [image, setImage] = useState<string | ArrayBuffer | null>(null);
@@ -58,6 +25,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [models, setModels] = useState<any[]>([]); // 可用模型列表
+  const { customFetch } = useFetch();
 
   const router = useRouter();
   // --- 模型选择状态 ---
@@ -107,38 +75,34 @@ export default function Home() {
       llmKey: selectedModel,
     };
 
-    // try {
-    //   const res = await fetch("/api/ai_power", {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify(payload),
-    //   });
+    try {
+      const res = await customFetch(
+        "/api/ai_doctor",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        true
+      );
 
-    //   if (res.status === 401) {
-    //     // setError("未授权访问，请先登录。");
-    //     setLoading(false);
-    //     router.push("/auth");
-    //     return;
-    //   }
+      const response: AnalyzeResponse = await res.json();
+      if (response.error) {
+        setError(response.error);
+        return;
+      }
 
-    //   const response: AnalyzeResponse = await res.json();
-    //   if (response.error) {
-    //     setError(response.error);
-    //     return;
-    //   }
-
-    //   const data = response.data;
-    //   if (!data) {
-    //     setError(response.message || "无法从 AI 获取响应");
-    //     return;
-    //   }
-    //   setResult(data);
-    // } catch (error) {
-    //   console.log(error);
-    //   setError("分析过程中发生错误，请稍后重试或检查网络。");
-    // } finally {
-    //   setLoading(false);
-    // }
+      const data = response.data;
+      if (!data) {
+        setError(response.message || "无法从 AI 获取响应");
+        return;
+      }
+      setResult(data);
+    } catch (error) {
+      console.log(error);
+      setError("分析过程中发生错误，请稍后重试或检查网络。");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetAnalysis = () => {
@@ -170,9 +134,9 @@ export default function Home() {
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
           <div className="flex items-center space-x-2 w-full sm:w-auto">
-            <div className="bg-blue-600 p-2 rounded-lg shrink-0">
+            <Link href="/" className="bg-blue-600 p-2 rounded-lg shrink-0">
               <Activity className="w-5 h-5 text-white" />
-            </div>
+            </Link>
             {/* 小屏显示简短标题，大屏显示完整标题 */}
             <h1 className="text-lg font-bold text-slate-900 hidden sm:block">
               智能验单助手

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 interface FetchContextType {
   customFetch: (
@@ -23,6 +24,7 @@ const FetchContext = createContext<FetchContextType | undefined>(undefined);
 export const FetchProvider = ({ children }: { children: ReactNode }) => {
   const { setUser } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const customFetch = async (
     input: RequestInfo | URL,
@@ -37,7 +39,14 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         setUser(null); // 清除用户信息，触发前端重新获取用户状态
         // 注意：这里不直接调用刷新接口，而是依赖前端的用户状态变化来触发重新获取用户信息
         localStorage.removeItem("user_info");
-        needNavigate && router.push("/auth"); // 可选：如果需要立即导航到登录页，可以启用这一行
+
+        if (needNavigate) {
+          const params = new URLSearchParams();
+          if (pathname) {
+            params.set("callbackUrl", pathname);
+          }
+          router.push(`/auth?${params.toString()}`);
+        }
       }
 
       return response;
