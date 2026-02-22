@@ -26,6 +26,10 @@ export async function POST(request: Request) {
         { status: 429 }
       );
     }
-    return NextResponse.json({ error: "SHL分析失败" }, { status: 500 });
+
+    return NextResponse.json(
+      { error: error.detail || "SHL分析失败" },
+      { status: error.status || 500 }
+    );
   }
 }
