@@ -30,7 +30,7 @@ export default function PreviewArea({
   currentModelName,
 }: Props) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in mb-4">
       <div className="relative">
         <img
           src={image}
