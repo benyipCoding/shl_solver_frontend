@@ -54,7 +54,7 @@ const UserHeaderActions = () => {
   };
 
   return (
-    <div className="flex items-center w-full md:w-auto justify-between md:justify-end space-x-2">
+    <div className="flex items-center w-14 lg:w-full md:w-auto justify-between md:justify-end space-x-2">
       <div className="hidden md:flex items-center space-x-2 text-sm text-slate-600 border-l border-slate-200 pl-3">
         <span className="flex items-center text-xs text-slate-500">
           <ImageIcon className="w-3 h-3 mr-1" /> 多图支持

@@ -133,9 +133,9 @@ const Home = () => {
           </div>
 
           {/* Right Side: Model Selector & Features */}
-          <div className="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto">
+          <div className="flex items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto">
             {/* Model Selector */}
-            <div className="relative w-full md:w-auto flex-1 md:flex-none">
+            <div className="relative w-full md:w-auto flex-1 md:flex-none mb-0">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                 <Sparkles className="h-4 w-4 text-indigo-500" />
               </div>
