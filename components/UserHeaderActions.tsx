@@ -100,7 +100,7 @@ const UserHeaderActions = ({
       )}
       {user && (
         <div
-          className="relative ml-2 w-full md:w-auto flex justify-end"
+          className="relative ml-4 w-full md:w-auto flex justify-end"
           ref={profileRef}
         >
           <button
