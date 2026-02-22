@@ -133,13 +133,14 @@ const AuthPage = () => {
         password: formData.password,
       }),
     });
-    const data = await res.json().then((res) => res.data);
+    const data = await res.json();
 
     if (!res.ok) {
       toast.error(data.message || "登录失败，请稍后重试");
       fetchCaptcha();
       return;
     }
+
     toast.success("登录成功！");
     router.push("/");
   };

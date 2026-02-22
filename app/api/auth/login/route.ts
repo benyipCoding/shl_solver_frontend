@@ -39,7 +39,10 @@ export async function POST(request: Request) {
       } else {
         // 设置请求时发生错误
         console.error("Request setup error:", error.message);
-        return NextResponse.json({ message: "请求配置错误" }, { status: 500 });
+        return NextResponse.json(
+          { message: error.detail || "请求配置错误" },
+          { status: error.status || 500 }
+        );
       }
     }
 
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("登录路由内部错误:", error);
     return NextResponse.json({ message: "服务器内部错误" }, { status: 500 });
   }

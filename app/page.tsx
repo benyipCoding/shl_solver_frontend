@@ -72,8 +72,8 @@ const Home = () => {
       const res = await fetch("/api/llms");
       const data = await res.json();
       if (!res.ok) {
-        console.error("获取LLMs失败:", data.error || res.statusText);
-        toast.error("获取LLMs失败: " + (data.error || res.statusText));
+        console.error("获取LLMs失败:", data.message || res.statusText);
+        toast.error("获取LLMs失败: " + (data.message || res.statusText));
         return;
       }
 
