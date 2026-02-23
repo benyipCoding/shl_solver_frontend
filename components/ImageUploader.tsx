@@ -30,6 +30,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [images, setImages] = useState<string[]>([]); // Array of preview URLs
   const [imagesData, setImagesData] = useState<ImageData[]>([]); // Array of { mimeType, data } objects
   const [error, setError] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,6 +83,8 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
       setError(null);
     }
 
+    setIsCompressing(true);
+
     const readPromises = validFiles.map((file) => {
       return new Promise<{ preview: string; data: string; mimeType: string }>(
         async (resolve, reject) => {
@@ -120,6 +123,8 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     } catch (e: any) {
       setError("读取文件时出错，请重试。");
       console.error("File reading error:", e);
+    } finally {
+      setIsCompressing(false);
     }
   };
 
@@ -157,11 +162,17 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
       {images.length === 0 ? (
         <div
-          className="border-2 border-dashed border-slate-300 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer bg-white shadow-sm touch-manipulation flex-1"
+          className="border-2 border-dashed border-slate-300 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer bg-white shadow-sm touch-manipulation flex-1 relative overflow-hidden"
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
+          {isCompressing && (
+            <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+              <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+              <p className="text-slate-600 font-medium">正在优化图片...</p>
+            </div>
+          )}
           <div className="bg-blue-100 p-4 rounded-full mb-4">
             <Upload className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
           </div>
@@ -178,6 +189,12 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fadeIn flex-1 flex flex-col">
+          {isCompressing && (
+            <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
+              <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+              <p className="text-slate-600 font-medium">正在优化图片...</p>
+            </div>
+          )}
           <div className="p-3 md:p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
             <h3 className="font-semibold text-slate-700 flex items-center text-sm md:text-base">
               <ImageIcon className="w-4 h-4 mr-2" /> 已上传 {images.length}{" "}

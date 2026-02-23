@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Upload, Camera } from "lucide-react";
+import { Upload, Camera, Loader2 } from "lucide-react";
 import { HomeFeature } from "@/constants/ai_doctor";
 
 type Props = {
@@ -9,6 +9,7 @@ type Props = {
   onTriggerFile: () => void;
   features: HomeFeature[];
   onFeatureClick: (f: HomeFeature) => void;
+  loading?: boolean;
 };
 
 export default function UploadArea({
@@ -17,9 +18,16 @@ export default function UploadArea({
   onTriggerFile,
   features,
   onFeatureClick,
+  loading = false,
 }: Props) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border-2 border-dashed border-blue-200 p-6 sm:p-10 text-center transition-all hover:border-blue-400 mb-4">
+    <div className="bg-white rounded-2xl shadow-sm border-2 border-dashed border-blue-200 p-6 sm:p-10 text-center transition-all hover:border-blue-400 mb-4 relative overflow-hidden">
+      {loading && (
+        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+          <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
+          <p className="text-slate-600 font-medium">正在优化图片...</p>
+        </div>
+      )}
       <input
         type="file"
         accept="image/*"

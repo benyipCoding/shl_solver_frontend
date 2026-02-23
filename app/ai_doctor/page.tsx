@@ -106,9 +106,9 @@ export default function Home() {
         return;
       }
       setResult(data);
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      setError("分析过程中发生错误，请稍后重试或检查网络。");
+      setError(error.message || "分析过程中发生错误，请稍后重试或检查网络。");
     } finally {
       setLoading(false);
     }
@@ -177,6 +177,7 @@ export default function Home() {
             onTriggerFile={triggerFileInput}
             features={features}
             onFeatureClick={setActiveFeature}
+            loading={loading}
           />
         )}
 
