@@ -14,7 +14,7 @@ import {
 } from "@/interfaces/ai_doctor";
 import { features, HomeFeature } from "@/constants/ai_doctor";
 import UserHeaderActions from "@/components/UserHeaderActions";
-import { fetchLLMs } from "@/utils/helpers";
+import { fetchLLMs, compressImage, fileToBase64 } from "@/utils/helpers";
 import { useFetch } from "@/context/FetchContext";
 import Link from "next/link";
 import DisclaimerCard from "@/components/DisclaimerCard";
@@ -43,19 +43,27 @@ export default function Home() {
   const currentModelName = models.find((m) => m.key === selectedModel)?.name;
 
   // 处理图片上传
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // 重置状态
     setResult(null);
     setError(null);
+    setLoading(true);
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImage(reader.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedFile = await compressImage(file);
+      const base64 = await fileToBase64(compressedFile);
+      setImage(base64);
+    } catch (e) {
+      console.error("Image processing failed:", e);
+      setError("图片处理失败，请重试");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 触发文件选择

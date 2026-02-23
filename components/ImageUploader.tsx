@@ -12,6 +12,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { ImageData } from "@/interfaces/shl_solver";
+import { compressImage } from "@/utils/helpers";
 
 interface ImageUploaderProps {
   onAnalyze: (imagesData: ImageData[]) => void;
@@ -83,21 +84,26 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
     const readPromises = validFiles.map((file) => {
       return new Promise<{ preview: string; data: string; mimeType: string }>(
-        (resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (reader.result && typeof reader.result === "string") {
-              resolve({
-                preview: reader.result,
-                data: reader.result.split(",")[1],
-                mimeType: file.type,
-              });
-            } else {
-              reject(new Error("File reading failed"));
-            }
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
+        async (resolve, reject) => {
+          try {
+            const compressedFile = await compressImage(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (reader.result && typeof reader.result === "string") {
+                resolve({
+                  preview: reader.result,
+                  data: reader.result.split(",")[1],
+                  mimeType: compressedFile.type,
+                });
+              } else {
+                reject(new Error("File reading failed"));
+              }
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(compressedFile);
+          } catch (error) {
+            reject(error);
+          }
         }
       );
     });
