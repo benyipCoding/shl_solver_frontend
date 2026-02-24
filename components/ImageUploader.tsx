@@ -162,41 +162,48 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
       {images.length === 0 ? (
         <div
-          className="border-2 border-dashed border-slate-300 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer bg-white shadow-sm touch-manipulation flex-1 relative overflow-hidden"
+          className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center text-center hover:border-blue-500 hover:bg-blue-50 dark:hover:border-blue-500 dark:hover:bg-blue-900/10 transition-all cursor-pointer bg-white dark:bg-slate-900 shadow-sm touch-manipulation flex-1 relative overflow-hidden"
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
           {isCompressing && (
-            <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+            <div className="absolute inset-0 bg-white/90 dark:bg-slate-900/90 z-10 flex flex-col items-center justify-center">
               <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
-              <p className="text-slate-600 font-medium">正在优化图片...</p>
+              <p className="text-slate-600 dark:text-slate-300 font-medium">
+                正在优化图片...
+              </p>
             </div>
           )}
-          <div className="bg-blue-100 p-4 rounded-full mb-4">
-            <Upload className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
+          <div className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-full mb-4">
+            <Upload className="w-6 h-6 md:w-8 md:h-8 text-blue-600 dark:text-blue-400" />
           </div>
-          <h3 className="text-base md:text-lg font-semibold text-slate-700 mb-2">
+          <h3 className="text-base md:text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">
             上传题目图片
           </h3>
-          <p className="text-sm text-slate-500 mb-6 max-w-xs leading-relaxed">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-xs leading-relaxed">
             点击上传，或直接{" "}
-            <span className="font-bold text-slate-700">Ctrl+V</span> 粘贴
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              Ctrl+V
+            </span>{" "}
+            粘贴
           </p>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors text-sm md:text-base w-full md:w-auto">
+          <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors text-sm md:text-base w-full md:w-auto shadow-md">
             选择多张图片
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative animate-fadeIn flex-1 flex flex-col">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative animate-fadeIn flex-1 flex flex-col transition-colors">
           {isCompressing && (
-            <div className="absolute inset-0 bg-white/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
+            <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 z-20 flex flex-col items-center justify-center backdrop-blur-sm">
               <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-3" />
-              <p className="text-slate-600 font-medium">正在优化图片...</p>
+              <p className="text-slate-600 dark:text-slate-300 font-medium">
+                正在优化图片...
+              </p>
             </div>
           )}
-          <div className="p-3 md:p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-            <h3 className="font-semibold text-slate-700 flex items-center text-sm md:text-base">
+          <div className="p-3 md:p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-200 flex items-center text-sm md:text-base">
               <ImageIcon className="w-4 h-4 mr-2" /> 已上传 {images.length}{" "}
               张图片
             </h3>
@@ -208,21 +215,21 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             </button>
           </div>
 
-          <div className="p-3 md:p-4 bg-slate-100 flex flex-col space-y-3 md:space-y-4 max-h-[40vh] md:max-h-[50vh] overflow-y-auto flex-1">
+          <div className="p-3 md:p-4 bg-slate-100 dark:bg-slate-950 flex flex-col space-y-3 md:space-y-4 max-h-[40vh] md:max-h-[50vh] overflow-y-auto flex-1">
             {images.map((imgSrc, index) => (
               <div
                 key={index}
-                className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 bg-white h-full"
+                className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 h-full transition-colors"
               >
                 <img
                   src={imgSrc}
                   alt={`Problem part ${index + 1}`}
-                  className="w-full object-contain max-h-48 md:max-h-64 lg:max-h-full"
+                  className="w-full object-contain max-h-48 md:max-h-64 lg:max-h-full bg-slate-50 dark:bg-slate-950"
                 />
                 <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => removeImage(index)}
-                    className="bg-white/90 text-slate-500 hover:text-red-500 p-2 rounded-full shadow-sm hover:shadow-md transition-all backdrop-blur-sm"
+                    className="bg-white/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-2 rounded-full shadow-sm hover:shadow-md transition-all backdrop-blur-sm"
                     title="移除此图片"
                   >
                     <X className="w-4 h-4" />
@@ -235,10 +242,10 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             ))}
           </div>
 
-          <div className="p-3 md:p-4 bg-white border-t border-slate-100 space-y-3">
+          <div className="p-3 md:p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 space-y-3 transition-colors">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-200 dashed-border text-sm md:text-base"
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-200 dark:border-slate-700 dashed-border text-sm md:text-base"
             >
               <Plus className="w-4 h-4 mr-2" /> 继续添加 / 粘贴
             </button>
@@ -247,7 +254,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
               disabled={loading}
               className={`w-full py-3 rounded-xl font-bold text-base md:text-lg flex items-center justify-center shadow-md transition-all ${
                 loading
-                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"
                   : "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white hover:shadow-lg"
               }`}
             >
@@ -268,18 +275,18 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
       )}
 
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-xl flex items-start border border-red-100 animate-fadeIn text-sm md:text-base">
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl flex items-start border border-red-100 animate-fadeIn text-sm md:text-base dark:bg-red-900/10 dark:border-red-900/30 dark:text-red-400">
           <AlertCircle className="w-5 h-5 mr-3 mt-0.5 shrink-0" />
           <p>{error}</p>
         </div>
       )}
 
       {!loading && images.length === 0 && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 md:p-5">
-          <h4 className="font-semibold text-indigo-900 mb-3 flex items-center text-sm md:text-base">
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 md:p-5 dark:bg-indigo-900/10 dark:border-indigo-900/30">
+          <h4 className="font-semibold text-indigo-900 mb-3 flex items-center text-sm md:text-base dark:text-indigo-300">
             <BookOpen className="w-4 h-4 mr-2" /> 使用技巧
           </h4>
-          <ul className="space-y-2 text-xs md:text-sm text-indigo-800">
+          <ul className="space-y-2 text-xs md:text-sm text-indigo-800 dark:text-indigo-300/80">
             <li className="flex items-start">
               <span className="mr-2">•</span>{" "}
               <span className="font-semibold">多页题目：</span>

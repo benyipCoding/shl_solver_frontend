@@ -30,12 +30,12 @@ export default function PreviewArea({
   currentModelName,
 }: Props) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in mb-4">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm overflow-hidden animate-fade-in mb-4 border border-slate-200 dark:border-slate-800 transition-colors">
       <div className="relative">
         <img
           src={image}
           alt="Preview"
-          className="w-full max-h-80 sm:max-h-96 object-contain bg-slate-900"
+          className="w-full max-h-80 sm:max-h-96 object-contain bg-slate-100 dark:bg-slate-950"
         />
         <button
           onClick={onReset}
@@ -47,7 +47,7 @@ export default function PreviewArea({
 
       <div className="p-6">
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start text-sm">
+          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg flex items-start text-sm">
             <AlertCircle className="w-5 h-5 mr-2 mt-0.5 shrink-0" />
             <p>{error}</p>
           </div>
@@ -55,22 +55,24 @@ export default function PreviewArea({
 
         <div className="flex flex-col items-center space-y-4">
           <div className="text-center">
-            <h3 className="text-lg font-medium text-slate-800">准备就绪</h3>
-            <p className="text-slate-500 text-sm mt-1">
+            <h3 className="text-lg font-medium text-slate-800 dark:text-slate-100">
+              准备就绪
+            </h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
               正在使用{" "}
-              <span className="font-semibold text-blue-600">
+              <span className="font-semibold text-blue-600 dark:text-blue-400">
                 {currentModelName}
               </span>
             </p>
           </div>
 
-          <div className="bg-slate-100 p-1 rounded-xl flex w-full max-w-sm">
+          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex w-full max-w-sm transition-colors">
             <button
               onClick={() => setExplanationStyle("simple")}
               className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 explanationStyle === "simple"
-                  ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
-                  : "text-slate-500 hover:bg-slate-200/50"
+                  ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
               }`}
             >
               <MessageCircle className="w-4 h-4" />
@@ -80,8 +82,8 @@ export default function PreviewArea({
               onClick={() => setExplanationStyle("professional")}
               className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 explanationStyle === "professional"
-                  ? "bg-white text-blue-600 shadow-sm ring-1 ring-black/5"
-                  : "text-slate-500 hover:bg-slate-200/50"
+                  ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
               }`}
             >
               <BookOpen className="w-4 h-4" />
@@ -94,8 +96,8 @@ export default function PreviewArea({
             disabled={loading}
             className={`w-full max-w-sm mx-auto px-6 py-3 rounded-xl font-semibold text-white shadow-md transition-all flex items-center justify-center ${
               loading
-                ? "bg-slate-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg hover:-translate-y-0.5"
+                ? "bg-slate-400 dark:bg-slate-600 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 hover:shadow-lg hover:-translate-y-0.5"
             }`}
           >
             {loading ? (

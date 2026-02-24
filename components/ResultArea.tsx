@@ -20,45 +20,49 @@ const ResultArea: React.FC<ResultAreaProps> = ({
   const getScoreColor = (score: number) => {
     if (!score && score !== 0)
       return {
-        text: "text-slate-400",
-        border: "border-slate-200",
-        bg: "bg-slate-50",
+        text: "text-slate-400 dark:text-slate-500",
+        border: "border-slate-200 dark:border-slate-700",
+        bg: "bg-slate-50 dark:bg-slate-800",
       };
     if (score >= 90)
       return {
-        text: "text-green-600",
-        border: "border-green-500",
-        bg: "bg-green-50",
+        text: "text-green-600 dark:text-green-400",
+        border: "border-green-500 dark:border-green-500",
+        bg: "bg-green-50 dark:bg-green-900/20",
       };
     if (score >= 80)
       return {
-        text: "text-blue-600",
-        border: "border-blue-500",
-        bg: "bg-blue-50",
+        text: "text-blue-600 dark:text-blue-400",
+        border: "border-blue-500 dark:border-blue-500",
+        bg: "bg-blue-50 dark:bg-blue-900/20",
       };
     if (score >= 60)
       return {
-        text: "text-orange-500",
-        border: "border-orange-400",
-        bg: "bg-orange-50",
+        text: "text-orange-500 dark:text-orange-400",
+        border: "border-orange-400 dark:border-orange-500",
+        bg: "bg-orange-50 dark:bg-orange-900/20",
       };
-    return { text: "text-red-600", border: "border-red-500", bg: "bg-red-50" };
+    return {
+      text: "text-red-600 dark:text-red-400",
+      border: "border-red-500 dark:border-red-600",
+      bg: "bg-red-50 dark:bg-red-900/20",
+    };
   };
 
   return (
     <div className="space-y-6 animate-fade-in-up pb-10">
       {/* 头部：报告概览与评分 */}
-      <div className="bg-white rounded-2xl shadow-sm p-5 sm:p-6 border-l-4 border-blue-500">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm p-5 sm:p-6 border-l-4 border-blue-500 dark:border-blue-600 transition-colors">
         <div className="flex justify-between items-start mb-6">
           <div>
-            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+            <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors">
               {result.reportType || "化验报告"}
             </span>
             <div className="flex flex-col sm:flex-row sm:items-baseline sm:space-x-2 mt-2">
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
                 解读报告
               </h2>
-              <span className="text-xs text-slate-400 font-mono mt-1 sm:mt-0 flex items-center">
+              <span className="text-xs text-slate-400 dark:text-slate-500 font-mono mt-1 sm:mt-0 flex items-center">
                 by {currentModelName}
                 <span className="mx-1">•</span>
                 {explanationStyle === "simple" ? "通俗模式" : "专业模式"}
@@ -67,7 +71,7 @@ const ResultArea: React.FC<ResultAreaProps> = ({
           </div>
           <button
             onClick={resetAnalysis}
-            className="text-slate-400 hover:text-blue-600 text-sm underline shrink-0 ml-2"
+            className="text-slate-400 hover:text-blue-600 dark:text-slate-500 dark:hover:text-blue-400 text-sm underline shrink-0 ml-2"
           >
             重新上传
           </button>
@@ -77,14 +81,18 @@ const ResultArea: React.FC<ResultAreaProps> = ({
           {/* 评分展示环 */}
           <div className="shrink-0">
             <div
-              className={`w-28 h-28 rounded-full flex flex-col items-center justify-center border-[6px] shadow-sm ${getScoreColor(result.healthScore!).border} ${getScoreColor(result.healthScore!).bg}`}
+              className={`w-28 h-28 rounded-full flex flex-col items-center justify-center border-[6px] shadow-sm transition-colors ${
+                getScoreColor(result.healthScore!).border
+              } ${getScoreColor(result.healthScore!).bg}`}
             >
               <span
-                className={`text-4xl font-extrabold ${getScoreColor(result.healthScore!).text}`}
+                className={`text-4xl font-extrabold ${
+                  getScoreColor(result.healthScore!).text
+                }`}
               >
                 {result.healthScore ?? "-"}
               </span>
-              <span className="text-xs text-slate-500 font-medium mt-1">
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
                 健康评分
               </span>
             </div>
@@ -92,13 +100,15 @@ const ResultArea: React.FC<ResultAreaProps> = ({
 
           {/* 概览文字 */}
           <div className="flex-1 w-full">
-            <p className="text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-lg text-sm sm:text-base">
-              <span className="font-semibold text-slate-800">总体评价：</span>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg text-sm sm:text-base border border-transparent dark:border-slate-800">
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                总体评价：
+              </span>
               {result.summary}
             </p>
 
             {/* 正常指标计数 */}
-            <div className="mt-3 flex items-center text-sm text-green-600 px-1">
+            <div className="mt-3 flex items-center text-sm text-green-600 dark:text-green-400 px-1">
               <ShieldCheck className="w-4 h-4 mr-1 shrink-0" />
               <span>检测到 {result.normalCount || 0} 项指标处于正常范围</span>
             </div>
@@ -108,13 +118,13 @@ const ResultArea: React.FC<ResultAreaProps> = ({
 
       {/* 异常项列表 (核心功能) */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center px-1">
-          <AlertCircle className="w-5 h-5 text-orange-500 mr-2 shrink-0" />
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center px-1">
+          <AlertCircle className="w-5 h-5 text-orange-500 dark:text-orange-400 mr-2 shrink-0" />
           需关注的指标 ({result.abnormalities?.length || 0})
         </h3>
 
         {!result.abnormalities || result.abnormalities.length === 0 ? (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center text-green-700">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6 text-center text-green-700 dark:text-green-300">
             <HeartPulse className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p className="font-semibold">未发现明显异常指标</p>
             <p className="text-sm opacity-80 mt-1">

@@ -97,23 +97,27 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     if (!complexity) return null;
     if (typeof complexity === "string") {
       return (
-        <p className="text-slate-600 text-xs md:text-sm leading-relaxed whitespace-pre-wrap">
+        <p className="text-slate-600 text-xs md:text-sm leading-relaxed whitespace-pre-wrap dark:text-slate-400">
           {complexity}
         </p>
       );
     }
     if (typeof complexity === "object") {
       return (
-        <div className="text-slate-600 text-xs md:text-sm leading-relaxed space-y-1">
+        <div className="text-slate-600 text-xs md:text-sm leading-relaxed space-y-1 dark:text-slate-400">
           {complexity.time && (
             <div>
-              <span className="font-semibold text-slate-700">时间复杂度:</span>{" "}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                时间复杂度:
+              </span>{" "}
               {complexity.time}
             </div>
           )}
           {complexity.space && (
             <div>
-              <span className="font-semibold text-slate-700">空间复杂度:</span>{" "}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                空间复杂度:
+              </span>{" "}
               {complexity.space}
             </div>
           )}
@@ -200,15 +204,15 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
       {/* --- Main Result Content --- */}
       <div className="flex flex-col h-full">
         {result ? (
-          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-full animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col h-full animate-fadeIn dark:bg-slate-900 dark:border-slate-800 transition-colors">
             {/* Tabs */}
-            <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10">
+            <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10 dark:bg-slate-900 dark:border-slate-800">
               <button
                 onClick={() => setActiveTab("solution")}
                 className={`flex-1 py-3 md:py-4 font-medium text-sm flex items-center justify-center transition-colors ${
                   activeTab === "solution"
-                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:text-blue-400 dark:border-blue-400 dark:bg-blue-900/20"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800"
                 }`}
               >
                 <Code className="w-4 h-4 mr-2" /> 代码方案
@@ -217,8 +221,8 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                 onClick={() => setActiveTab("analysis")}
                 className={`flex-1 py-3 md:py-4 font-medium text-sm flex items-center justify-center transition-colors ${
                   activeTab === "analysis"
-                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:text-blue-400 dark:border-blue-400 dark:bg-blue-900/20"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800"
                 }`}
               >
                 <BookOpen className="w-4 h-4 mr-2" /> 场景与考点
@@ -226,7 +230,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-slate-950/50">
               {activeTab === "solution" && (
                 <div className="space-y-4 md:space-y-6">
                   <div className="flex justify-between items-center mb-2">
@@ -235,7 +239,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                       <select
                         value={selectedLanguage}
                         onChange={(e) => setSelectedLanguage(e.target.value)}
-                        className="appearance-none bg-slate-100 border border-slate-200 text-slate-700 py-1.5 pl-3 pr-8 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm hover:bg-slate-200 transition-colors"
+                        className="appearance-none bg-slate-100 border border-slate-200 text-slate-700 py-1.5 pl-3 pr-8 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm hover:bg-slate-200 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
                       >
                         <option value="python">Python 3</option>
                         <option value="java">Java</option>
@@ -256,7 +260,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
 
                       <button
                         onClick={() => copyToClipboard(getCodeContent())}
-                        className="text-xs flex items-center text-blue-600 hover:text-blue-700 font-medium bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-full transition-colors"
+                        className="text-xs flex items-center text-blue-600 hover:text-blue-700 font-medium bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-full transition-colors dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
                       >
                         <Copy className="w-3 h-3 mr-1" />
                         <span className="hidden sm:inline">复制</span>
@@ -272,9 +276,9 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                     </pre>
                   </div>
 
-                  <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm">
-                    <h4 className="font-semibold text-slate-800 mb-3 flex items-center text-sm md:text-base">
-                      <Cpu className="w-4 h-4 mr-2 text-indigo-600" />{" "}
+                  <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm dark:bg-slate-900 dark:border-slate-800 transition-colors">
+                    <h4 className="font-semibold text-slate-800 mb-3 flex items-center text-sm md:text-base dark:text-slate-100">
+                      <Cpu className="w-4 h-4 mr-2 text-indigo-600 dark:text-indigo-400" />{" "}
                       复杂度分析
                     </h4>
                     {renderComplexity(result.complexity)}
@@ -285,19 +289,19 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
               {activeTab === "analysis" && (
                 <div className="space-y-4 md:space-y-6">
                   {/* Scenario Summary */}
-                  <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm">
-                    <h4 className="font-semibold text-slate-800 mb-2 md:mb-3 text-base md:text-lg">
+                  <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm dark:bg-slate-900 dark:border-slate-800 transition-colors">
+                    <h4 className="font-semibold text-slate-800 mb-2 md:mb-3 text-base md:text-lg dark:text-slate-100">
                       场景摘要
                     </h4>
-                    <p className="text-slate-600 leading-relaxed text-sm">
+                    <p className="text-slate-600 leading-relaxed text-sm dark:text-slate-400">
                       {result.summary}
                     </p>
                   </div>
 
                   {/* Exam Points / Key Concepts */}
-                  <div className="bg-violet-50 p-4 md:p-5 rounded-xl border border-violet-100 shadow-sm">
-                    <h4 className="font-semibold text-violet-900 mb-2 md:mb-3 flex items-center text-sm md:text-base">
-                      <Lightbulb className="w-4 h-4 mr-2 text-violet-600" />{" "}
+                  <div className="bg-violet-50 p-4 md:p-5 rounded-xl border border-violet-100 shadow-sm dark:bg-violet-900/10 dark:border-violet-900/30 transition-colors">
+                    <h4 className="font-semibold text-violet-900 mb-2 md:mb-3 flex items-center text-sm md:text-base dark:text-violet-300">
+                      <Lightbulb className="w-4 h-4 mr-2 text-violet-600 dark:text-violet-400" />{" "}
                       题目考点 & 难点
                     </h4>
                     {result.key_concepts &&
@@ -306,7 +310,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                         {result.key_concepts.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex items-start text-sm text-violet-800"
+                            className="flex items-start text-sm text-violet-800 dark:text-violet-300/80"
                           >
                             <span className="mr-2 mt-1.5 w-1.5 h-1.5 bg-violet-400 rounded-full shrink-0"></span>
                             <span className="leading-relaxed">{item}</span>
@@ -314,15 +318,15 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-sm text-violet-800 leading-relaxed">
+                      <p className="text-sm text-violet-800 leading-relaxed dark:text-violet-300/80">
                         {result.key_concepts || "正在分析考点..."}
                       </p>
                     )}
                   </div>
 
                   {/* Constraints Module */}
-                  <div className="bg-yellow-50 p-4 md:p-5 rounded-xl border border-yellow-100 shadow-sm">
-                    <h4 className="font-semibold text-yellow-900 mb-2 md:mb-3 flex items-center text-sm md:text-base">
+                  <div className="bg-yellow-50 p-4 md:p-5 rounded-xl border border-yellow-100 shadow-sm dark:bg-yellow-900/10 dark:border-yellow-900/30 transition-colors">
+                    <h4 className="font-semibold text-yellow-900 mb-2 md:mb-3 flex items-center text-sm md:text-base dark:text-yellow-300">
                       <Check className="w-4 h-4 mr-2" /> 关键约束 & 输入输出
                     </h4>
                     {Array.isArray(result.constraints) ? (
@@ -330,7 +334,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                         {result.constraints.map((item, idx) => (
                           <li
                             key={idx}
-                            className="flex items-start text-sm text-yellow-800"
+                            className="flex items-start text-sm text-yellow-800 dark:text-yellow-300/80"
                           >
                             <span className="mr-2 mt-1.5 w-1.5 h-1.5 bg-yellow-400 rounded-full shrink-0"></span>
                             <span className="leading-relaxed">{item}</span>
@@ -338,7 +342,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-yellow-800 whitespace-pre-wrap">
+                      <p className="text-sm text-yellow-800 whitespace-pre-wrap dark:text-yellow-300/80">
                         {result.constraints}
                       </p>
                     )}
@@ -348,7 +352,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 min-h-75">
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 min-h-75 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 transition-colors">
             <Terminal className="w-12 h-12 md:w-16 md:h-16 mb-4 opacity-20" />
             <p className="text-base md:text-lg font-medium opacity-50">
               等待题目解析...

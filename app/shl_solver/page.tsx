@@ -14,6 +14,7 @@ import UserHeaderActions from "@/components/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { fetchLLMs } from "@/utils/helpers";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const SHLSolverPage = () => {
   const { login } = useAuth();
@@ -75,21 +76,24 @@ const SHLSolverPage = () => {
 
   // --- Main SHLSolverPage View ---
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 pb-10 relative flex flex-col">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 dark:bg-slate-950 dark:text-slate-100 dark:selection:bg-blue-900 pb-10 relative flex flex-col transition-colors duration-300">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 safe-top shadow-sm">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 safe-top shadow-sm dark:bg-slate-900 dark:border-slate-800 transition-colors">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
           {/* Logo Title */}
           <div className="flex items-center space-x-2 md:space-x-4 w-full md:w-auto justify-between md:justify-start">
             <div className="flex items-center space-x-3">
-              <Link href="/" className="bg-blue-600 p-2 rounded-lg shadow-sm">
+              <Link
+                href="/"
+                className="bg-blue-600 p-2 rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+              >
                 <Cpu className="w-5 h-5 md:w-6 md:h-6 text-white" />
               </Link>
               <div>
-                <h1 className="text-lg md:text-xl font-bold text-slate-800 leading-tight">
+                <h1 className="text-lg md:text-xl font-bold text-slate-800 leading-tight dark:text-slate-100">
                   SHL Scenario Solver
                 </h1>
-                <p className="text-[10px] md:text-xs text-slate-500 hidden sm:block">
+                <p className="text-[10px] md:text-xs text-slate-500 hidden sm:block dark:text-slate-400">
                   业务场景算法题辅助工具
                 </p>
               </div>
@@ -97,7 +101,7 @@ const SHLSolverPage = () => {
           </div>
 
           {/* Right Side: Model Selector & Features */}
-          <div className="flex items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto">
+          <div className="flex items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto justify-end gap-3">
             {/* Model Selector */}
             <div className="relative w-full md:w-auto flex-1 md:flex-none mb-0">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
@@ -106,7 +110,7 @@ const SHLSolverPage = () => {
               <select
                 value={String(selectedModel)}
                 onChange={(e) => setSelectedModel(Number(e.target.value))}
-                className="w-full md:w-60 appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer"
+                className="w-full md:w-60 appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
               >
                 {models.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -120,6 +124,7 @@ const SHLSolverPage = () => {
             </div>
 
             {/* Login & Multi-image indicator */}
+            <ThemeToggle />
             <UserHeaderActions />
           </div>
         </div>

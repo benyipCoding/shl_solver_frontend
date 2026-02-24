@@ -15,6 +15,7 @@ import {
 import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/ValidatedInput";
 import toast from "react-hot-toast";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const AuthContent = () => {
   const router = useRouter();
@@ -216,7 +217,10 @@ const AuthContent = () => {
   }, [authMode]);
 
   return (
-    <div className="h-dvh w-full bg-slate-50 flex items-center justify-center p-4 font-sans selection:bg-blue-100 relative overflow-hidden">
+    <div className="h-dvh w-full bg-slate-50 flex items-center justify-center p-4 font-sans selection:bg-blue-100 relative overflow-hidden dark:bg-slate-950 dark:selection:bg-blue-900 transition-colors duration-500">
+      <div className="absolute top-4 right-4 z-50">
+        <ThemeToggle />
+      </div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
@@ -242,13 +246,13 @@ const AuthContent = () => {
       `}</style>
 
       {/* Decorative elements */}
-      <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-blue-50 to-transparent pointer-events-none"></div>
-      <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
-      <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-indigo-100 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+      <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-blue-50 to-transparent pointer-events-none dark:from-blue-950/20 transition-colors duration-500"></div>
+      <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-100 rounded-full blur-3xl opacity-50 pointer-events-none dark:bg-blue-900/10 dark:opacity-30 transition-colors duration-500"></div>
+      <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-indigo-100 rounded-full blur-3xl opacity-50 pointer-events-none dark:bg-indigo-900/10 dark:opacity-30 transition-colors duration-500"></div>
 
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-100 p-6 md:p-8 relative z-10 animate-fadeIn flex flex-col max-h-[95dvh] overflow-y-auto scrollbar-hide">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-100 p-6 md:p-8 relative z-10 animate-fadeIn flex flex-col max-h-[95dvh] overflow-y-auto scrollbar-hide dark:bg-slate-900/80 dark:backdrop-blur-xl dark:border-slate-800 dark:shadow-2xl transition-all duration-300">
         <div className="text-center mb-6 shrink-0">
-          <div className="bg-blue-600 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg shadow-blue-200">
+          <div className="bg-blue-600 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg shadow-blue-200 dark:shadow-blue-900/20">
             {authMode === "login" && (
               <LogIn className="w-5 h-5 md:w-6 md:h-6 text-white" />
             )}
@@ -260,12 +264,12 @@ const AuthContent = () => {
             )}
           </div>
 
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">
             {authMode === "login" && "欢迎回来"}
             {authMode === "register" && "创建账号"}
             {authMode === "forgot" && "重置密码"}
           </h2>
-          <p className="text-slate-500 text-xs md:text-sm mt-1.5">
+          <p className="text-slate-500 text-xs md:text-sm mt-1.5 dark:text-slate-400">
             {authMode === "login" && "登录 SHL 场景解题助手"}
             {authMode === "register" && "注册以解锁更多功能"}
             {authMode === "forgot" && "输入邮箱以获取重置链接"}

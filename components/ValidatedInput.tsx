@@ -20,7 +20,7 @@ const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
   maxLength,
 }) => (
   <div className="space-y-1 relative">
-    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
+    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1 dark:text-slate-400">
       {name === "email" && "邮箱"}
       {name === "password" && "密码"}
       {name === "confirmPassword" && "确认密码"}
@@ -30,7 +30,7 @@ const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
     <div className="relative">
       {Icon && (
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <Icon className="h-5 w-5 text-slate-400" />
+          <Icon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
         </div>
       )}
       <input
@@ -38,7 +38,7 @@ const ValidatedInput: React.FC<ValidatedInputComponentProps> = ({
         name={name}
         value={value}
         onChange={onChange}
-        className={`block w-full ${Icon ? "pl-10" : "px-3"} pr-3 py-2 md:py-2.5 bg-slate-50 border ${error ? "border-red-400 ring-1 ring-red-100" : "border-slate-200"} rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm ${name === "captcha" ? "text-center tracking-widest uppercase" : ""}`}
+        className={`block w-full ${Icon ? "pl-10" : "px-3"} pr-3 py-2 md:py-2.5 bg-slate-50 border ${error ? "border-red-400 ring-1 ring-red-100 dark:ring-red-900/30" : "border-slate-200 dark:border-slate-700"} rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white dark:bg-slate-800 dark:focus:bg-slate-900 transition-all text-sm ${name === "captcha" ? "text-center tracking-widest uppercase" : ""}`}
         placeholder={placeholder}
         required={required}
         maxLength={maxLength}

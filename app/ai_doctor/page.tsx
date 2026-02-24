@@ -18,6 +18,7 @@ import { fetchLLMs, compressImage, fileToBase64 } from "@/utils/helpers";
 import { useFetch } from "@/context/FetchContext";
 import Link from "next/link";
 import DisclaimerCard from "@/components/DisclaimerCard";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Home() {
   const [image, setImage] = useState<string | ArrayBuffer | null>(null);
@@ -136,32 +137,36 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen bg-slate-50 font-sans text-slate-800"
+      className="min-h-screen bg-slate-50 font-sans text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300"
       style={{ fontFamily: '"Noto Sans SC", sans-serif' }}
     >
       {/* 顶部导航 - 适配移动端宽度 */}
-      <header className="bg-white shadow-sm sticky top-0 z-20">
+      <header className="bg-white shadow-sm sticky top-0 z-20 dark:bg-slate-900 dark:border-b dark:border-slate-800 dark:shadow-none transition-colors">
         <div className="max-w-3xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
           <div className="flex items-center space-x-2 w-full sm:w-auto">
-            <Link href="/" className="bg-blue-600 p-2 rounded-lg shrink-0">
+            <Link
+              href="/"
+              className="bg-blue-600 p-2 rounded-lg shrink-0 hover:bg-blue-700 transition-colors"
+            >
               <Activity className="w-5 h-5 text-white" />
             </Link>
             {/* 小屏显示简短标题，大屏显示完整标题 */}
-            <h1 className="text-lg font-bold text-slate-900 hidden sm:block">
+            <h1 className="text-lg font-bold text-slate-900 hidden sm:block dark:text-slate-100">
               智能验单助手
             </h1>
-            <h1 className="text-lg font-bold text-slate-900 sm:hidden">
+            <h1 className="text-lg font-bold text-slate-900 sm:hidden dark:text-slate-100">
               验单助手
             </h1>
           </div>
 
           {/* 模型选择器 */}
-          <div className="flex gap-2 w-full sm:w-auto justify-end">
+          <div className="flex gap-2 w-full sm:w-auto justify-end items-center">
             <ModelSelector
               selectedModel={selectedModel}
               onSelectModel={setSelectedModel}
               models={models}
             />
+            <ThemeToggle />
             <UserHeaderActions simpleMode={true} />
           </div>
         </div>

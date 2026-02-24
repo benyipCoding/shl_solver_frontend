@@ -4,6 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { FetchProvider } from "@/context/FetchContext";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,11 +27,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <style>{`
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
         body, .font-sans {
@@ -52,12 +59,13 @@ export default function RootLayout({
           padding-top: env(safe-area-inset-top);
         }
       `}</style>
-        <AuthProvider>
-          <FetchProvider>
-            <Toaster position="top-center" />
-            {children}
-          </FetchProvider>
-        </AuthProvider>
+          <AuthProvider>
+            <FetchProvider>
+              <Toaster position="top-center" />
+              {children}
+            </FetchProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
