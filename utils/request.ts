@@ -11,14 +11,37 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window === "undefined") {
-    const { cookies } = await import("next/headers");
+    const { cookies, headers } = await import("next/headers");
     const cookieStore = await cookies();
+    const headersStore = await headers(); // 获取请求头存储
     const cookieHeader = cookieStore
       .getAll()
       .map((c) => `${c.name}=${c.value}`)
       .join("; ");
     if (cookieHeader) {
       config.headers.Cookie = cookieHeader;
+    }
+
+    // 2. 处理真实 IP 透传 (新增逻辑)
+    // 获取原始请求中的 X-Forwarded-For，如果没有则说明 Next.js 是第一跳，获取直接连接 IP
+    const distinctId = headersStore.get("x-forwarded-for");
+
+    if (distinctId) {
+      // 如果已经有转发链，直接透传
+      config.headers["X-Forwarded-For"] = distinctId;
+    } else {
+      // 这里的逻辑稍微复杂：
+      // 在 Next.js App Router 中，headers() 获取的是传入的 request header。
+      // 在大多数部署环境（Vercel, Docker behind Nginx），请求到达 Next.js 时已经有了 X-Forwarded-For。
+      // 如果你在本地开发，headersStore.get("x-forwarded-for") 可能是空的。
+      // 为了安全起见，我们主要透传已有的值。
+      // 注意：Next.js Middleware 或 Server Actions 中通常通过 header 透传 IP。
+    }
+
+    // 补充：透传 User-Agent (可选，通常对统计分析有用)
+    const userAgent = headersStore.get("user-agent");
+    if (userAgent) {
+      config.headers["User-Agent"] = userAgent;
     }
   }
   return config;

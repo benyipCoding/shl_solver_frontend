@@ -7,7 +7,7 @@ export async function GET() {
     const res = await apiClient.get("/user/me");
     return NextResponse.json(res.data);
   } catch (error: any) {
-    console.error("获取用户信息失败:", error);
+    // console.error("获取用户信息失败:", error);
     return NextResponse.json(
       { error: "获取用户信息失败" },
       { status: error.response?.status || error.status || 500 }
