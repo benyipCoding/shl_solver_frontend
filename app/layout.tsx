@@ -4,7 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { FetchProvider } from "@/context/FetchContext";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
-import { ThemeProvider } from "@/components/ThemeProvider";
+import { ThemeProvider } from "@/components/common/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

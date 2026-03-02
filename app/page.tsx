@@ -9,8 +9,8 @@ import {
   Cpu,
   Activity,
 } from "lucide-react";
-import UserHeaderActions from "@/components/UserHeaderActions";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import UserHeaderActions from "@/components/common/UserHeaderActions";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export default function Home() {
   return (

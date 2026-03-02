@@ -13,9 +13,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { FormData, ValidationErrors } from "@/interfaces/auth";
-import ValidatedInput from "@/components/ValidatedInput";
+import ValidatedInput from "@/components/auth/ValidatedInput";
 import toast from "react-hot-toast";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 const AuthContent = () => {
   const router = useRouter();

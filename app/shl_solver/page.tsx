@@ -8,13 +8,13 @@ import {
   Model,
   SHLAnalysisPayload,
 } from "@/interfaces/shl_solver";
-import ImageUploader from "@/components/ImageUploader";
-import ResultDisplay from "@/components/ResultDisplay";
-import UserHeaderActions from "@/components/UserHeaderActions";
+import ImageUploader from "@/components/shl_solver/ImageUploader";
+import ResultDisplay from "@/components/shl_solver/ResultDisplay";
+import UserHeaderActions from "@/components/common/UserHeaderActions";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { fetchLLMs } from "@/utils/helpers";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 const SHLSolverPage = () => {
   const { login } = useAuth();

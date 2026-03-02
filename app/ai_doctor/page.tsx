@@ -1,11 +1,11 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import ModelSelector from "@/components/ModelSelector";
-import UploadArea from "@/components/UploadArea";
+import ModelSelector from "@/components/ai_doctor/ModelSelector";
+import UploadArea from "@/components/ai_doctor/UploadArea";
 import { Activity } from "lucide-react";
-import FeatureModal from "@/components/FeatureModal";
-import PreviewArea from "@/components/PreviewArea";
-import ResultArea from "@/components/ResultArea";
+import FeatureModal from "@/components/ai_doctor/FeatureModal";
+import PreviewArea from "@/components/ai_doctor/PreviewArea";
+import ResultArea from "@/components/ai_doctor/ResultArea";
 import { useRouter } from "next/navigation";
 import {
   AnalyzePayload,
@@ -13,12 +13,12 @@ import {
   AnalyzeResponseData,
 } from "@/interfaces/ai_doctor";
 import { features, HomeFeature } from "@/constants/ai_doctor";
-import UserHeaderActions from "@/components/UserHeaderActions";
+import UserHeaderActions from "@/components/common/UserHeaderActions";
 import { fetchLLMs, compressImage, fileToBase64 } from "@/utils/helpers";
 import { useFetch } from "@/context/FetchContext";
 import Link from "next/link";
-import DisclaimerCard from "@/components/DisclaimerCard";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import DisclaimerCard from "@/components/ai_doctor/DisclaimerCard";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export default function Home() {
   const [image, setImage] = useState<string | ArrayBuffer | null>(null);
