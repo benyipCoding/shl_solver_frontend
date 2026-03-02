@@ -56,6 +56,8 @@ export function useChart({
       DEFAULT_CANDLESTICK_SERIES_OPTIONS
     );
 
+    chart.timeScale().fitContent();
+
     // @ts-ignore
     series.setData(generateMockData());
     chartRef.current = chart;

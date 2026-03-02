@@ -16,7 +16,7 @@ export const DEFAULT_CHART_OPTIONS: DeepPartial<ChartOptions> = {
     horzLines: { color: "#f0f3fa" },
   },
   crosshair: { mode: CrosshairMode.Normal },
-  height: 600,
+  //   height: 600,
 };
 
 export const DEFAULT_CANDLESTICK_SERIES_OPTIONS: CandlestickSeriesPartialOptions =
