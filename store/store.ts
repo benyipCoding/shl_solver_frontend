@@ -1,10 +1,12 @@
 // store/store.ts
 import { configureStore } from "@reduxjs/toolkit";
 import shlReducer from "./features/shlSlice";
+import aiDoctorReducer from "./features/aiDoctorSlice";
 
 export const store = configureStore({
   reducer: {
     shl: shlReducer,
+    aiDoctor: aiDoctorReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

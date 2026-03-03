@@ -19,24 +19,27 @@ import { useFetch } from "@/context/FetchContext";
 import Link from "next/link";
 import DisclaimerCard from "@/components/ai_doctor/DisclaimerCard";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  setError,
+  setImage,
+  setLoading,
+  setResult,
+  setExplanationStyle,
+  setSelectedModel,
+  resetAnalysis,
+} from "@/store/features/aiDoctorSlice";
 
 export default function Home() {
-  const [image, setImage] = useState<string | ArrayBuffer | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalyzeResponseData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const { image, loading, result, error, selectedModel, explanationStyle } =
+    useAppSelector((state) => state.aiDoctor);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [models, setModels] = useState<any[]>([]); // 可用模型列表
   const { customFetch } = useFetch();
 
   const router = useRouter();
-  // --- 模型选择状态 ---
-  const [selectedModel, setSelectedModel] = useState("");
-
-  // --- 解读风格状态 ---
-  const [explanationStyle, setExplanationStyle] = useState<
-    "simple" | "professional"
-  >("simple"); // simple | professional
 
   // --- 首页特性弹窗状态 (新增) ---
   const [activeFeature, setActiveFeature] = useState<HomeFeature | null>(null);
@@ -51,19 +54,19 @@ export default function Home() {
     if (!file) return;
 
     // 重置状态
-    setResult(null);
-    setError(null);
-    setLoading(true);
+    dispatch(setResult(null));
+    dispatch(setError(null));
+    dispatch(setLoading(true));
 
     try {
       const compressedFile = await compressImage(file);
       const base64 = await fileToBase64(compressedFile);
-      setImage(base64);
+      dispatch(setImage(base64 as string));
     } catch (e) {
       console.error("Image processing failed:", e);
-      setError("图片处理失败，请重试");
+      dispatch(setError("图片处理失败，请重试"));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   };
 
@@ -73,7 +76,7 @@ export default function Home() {
   };
 
   const analyzeImage = async () => {
-    setLoading(true);
+    dispatch(setLoading(true));
     // 去除 Base64 前缀
     const base64Data = (image as string).split(",")[1];
     const mimeType = (image as string).split(";")[0].split(":")[1];
@@ -97,28 +100,28 @@ export default function Home() {
 
       const response: AnalyzeResponse = await res.json();
       if (response.error) {
-        setError(response.error);
+        dispatch(setError(response.error));
         return;
       }
 
       const data = response.data;
       if (!data) {
-        setError(response.message || "无法从 AI 获取响应");
+        dispatch(setError(response.message || "无法从 AI 获取响应"));
         return;
       }
-      setResult(data);
+      dispatch(setResult(data));
     } catch (error: any) {
       console.log(error);
-      setError(error.message || "分析过程中发生错误，请稍后重试或检查网络。");
+      dispatch(
+        setError(error.message || "分析过程中发生错误，请稍后重试或检查网络。")
+      );
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   };
 
-  const resetAnalysis = () => {
-    setImage(null);
-    setResult(null);
-    setError(null);
+  const handleResetAnalysis = () => {
+    dispatch(resetAnalysis());
   };
 
   useEffect(() => {
@@ -130,10 +133,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (models.length > 0) {
-      setSelectedModel(models[0].key); // 默认选择第一个模型
+    if (models.length > 0 && !selectedModel) {
+      dispatch(setSelectedModel(models[0].key)); // 默认选择第一个模型
     }
-  }, [models]);
+  }, [models, selectedModel, dispatch]);
+
+  // 组件卸载时清除错误信息
+  useEffect(() => {
+    return () => {
+      dispatch(setError(null));
+    };
+  }, [dispatch]);
 
   return (
     <div
@@ -163,7 +173,7 @@ export default function Home() {
           <div className="flex gap-2 w-full sm:w-auto justify-end items-center">
             <ModelSelector
               selectedModel={selectedModel}
-              onSelectModel={setSelectedModel}
+              onSelectModel={(key) => dispatch(setSelectedModel(key))}
               models={models}
             />
             <ThemeToggle />
@@ -190,10 +200,10 @@ export default function Home() {
         {image && !result && (
           <PreviewArea
             image={image as string}
-            onReset={resetAnalysis}
+            onReset={handleResetAnalysis}
             error={error}
-            explanationStyle={explanationStyle as "simple" | "professional"}
-            setExplanationStyle={(s) => setExplanationStyle(s)}
+            explanationStyle={explanationStyle}
+            setExplanationStyle={(s) => dispatch(setExplanationStyle(s))}
             onAnalyze={analyzeImage}
             loading={loading}
             currentModelName={currentModelName}
@@ -206,7 +216,7 @@ export default function Home() {
             result={result}
             explanationStyle={explanationStyle}
             currentModelName={currentModelName}
-            resetAnalysis={resetAnalysis}
+            resetAnalysis={handleResetAnalysis}
           />
         )}
 
