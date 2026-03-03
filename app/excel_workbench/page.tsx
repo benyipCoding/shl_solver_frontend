@@ -249,7 +249,7 @@ Rules:
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-8 transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-8 md:pb-4 transition-colors">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <header className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 transition-colors">
