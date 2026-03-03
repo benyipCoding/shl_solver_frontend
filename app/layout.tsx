@@ -5,6 +5,7 @@ import { FetchProvider } from "@/context/FetchContext";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
+import { ReduxProvider } from "@/store/ReduxProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,13 +32,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <style>{`
+        <ReduxProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
         body, .font-sans {
@@ -59,13 +61,14 @@ export default function RootLayout({
           padding-top: env(safe-area-inset-top);
         }
       `}</style>
-          <AuthProvider>
-            <FetchProvider>
-              <Toaster position="top-center" />
-              {children}
-            </FetchProvider>
-          </AuthProvider>
-        </ThemeProvider>
+            <AuthProvider>
+              <FetchProvider>
+                <Toaster position="top-center" />
+                {children}
+              </FetchProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </ReduxProvider>
       </body>
     </html>
   );

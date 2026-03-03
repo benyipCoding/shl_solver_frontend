@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 import { ImageData } from "@/interfaces/shl_solver";
 import { compressImage } from "@/utils/helpers";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  addImages,
+  clearImages,
+  removeImage as removeImageAction,
+} from "@/store/features/shlSlice";
 
 interface ImageUploaderProps {
   onAnalyze: (imagesData: ImageData[]) => void;
@@ -27,8 +33,9 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   loading,
   selectedModelName,
 }) => {
-  const [images, setImages] = useState<string[]>([]); // Array of preview URLs
-  const [imagesData, setImagesData] = useState<ImageData[]>([]); // Array of { mimeType, data } objects
+  const dispatch = useAppDispatch();
+  const images = useAppSelector((state) => state.shl.images);
+  const imagesData = useAppSelector((state) => state.shl.imagesData);
   const [error, setError] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,11 +120,12 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 
     try {
       const results = await Promise.all(readPromises);
-      setImages((prev) => [...prev, ...results.map((r) => r.preview)]);
-      setImagesData((prev) => [
-        ...prev,
-        ...results.map((r) => ({ mimeType: r.mimeType, data: r.data })),
-      ]);
+      dispatch(
+        addImages({
+          previews: results.map((r) => r.preview),
+          data: results.map((r) => ({ mimeType: r.mimeType, data: r.data })),
+        })
+      );
       onClearResult();
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (e: any) {
@@ -129,16 +137,14 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   };
 
   const clearAllImages = () => {
-    setImages([]);
-    setImagesData([]);
+    dispatch(clearImages());
     setError(null);
     onClearResult();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-    setImagesData((prev) => prev.filter((_, i) => i !== index));
+    dispatch(removeImageAction(index));
     onClearResult();
   };
 
