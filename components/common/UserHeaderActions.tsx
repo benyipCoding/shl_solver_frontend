@@ -5,11 +5,7 @@ import { Image as ImageIcon, LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 
-const UserHeaderActions = ({
-  simpleMode = false,
-}: {
-  simpleMode?: boolean;
-}) => {
+const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout, login } = useAuth();

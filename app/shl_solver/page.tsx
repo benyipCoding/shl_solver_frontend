@@ -125,7 +125,7 @@ const SHLSolverPage = () => {
 
             {/* Login & Multi-image indicator */}
             <ThemeToggle />
-            <UserHeaderActions />
+            <UserHeaderActions simpleMode={false} />
           </div>
         </div>
       </header>

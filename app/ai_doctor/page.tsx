@@ -177,7 +177,7 @@ export default function Home() {
               models={models}
             />
             <ThemeToggle />
-            <UserHeaderActions simpleMode={true} />
+            <UserHeaderActions />
           </div>
         </div>
       </header>

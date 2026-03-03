@@ -32,7 +32,7 @@ export default function Home() {
             </Link>
             <div className="flex items-center gap-4">
               <ThemeToggle />
-              <UserHeaderActions simpleMode={true} />
+              <UserHeaderActions />
             </div>
           </div>
         </div>
