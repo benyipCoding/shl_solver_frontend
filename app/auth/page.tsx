@@ -221,7 +221,7 @@ const AuthContent = () => {
       <div className="absolute top-4 right-4 z-50">
         <ThemeToggle />
       </div>
-      <style>{`
+      {/* <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
         body, .font-sans {
@@ -243,7 +243,7 @@ const AuthContent = () => {
             -ms-overflow-style: none;
             scrollbar-width: none;
         }
-      `}</style>
+      `}</style> */}
 
       {/* Decorative elements */}
       <div className="absolute top-0 left-0 w-full h-64 bg-linear-to-b from-blue-50 to-transparent pointer-events-none dark:from-blue-950/20 transition-colors duration-500"></div>
@@ -307,9 +307,9 @@ const AuthContent = () => {
                 </button>
               </div> */}
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                {/* <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-slate-400" />
-                </div>
+                </div> */}
                 <ValidatedInput
                   type="password"
                   name="password"
@@ -318,6 +318,7 @@ const AuthContent = () => {
                   error={errors.password}
                   placeholder="••••••••"
                   required
+                  icon={Lock}
                 />
                 {errors.password && (
                   <div className="absolute -bottom-5 left-1 text-[10px] text-red-500 font-medium animate-fadeIn flex items-center bg-white/80 px-1 rounded z-10">
