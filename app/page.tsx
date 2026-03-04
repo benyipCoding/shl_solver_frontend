@@ -1,4 +1,3 @@
-import React from "react";
 import Link from "next/link";
 import {
   Sparkles,
@@ -8,7 +7,6 @@ import {
   Activity,
   FileSpreadsheet,
   Plus,
-  ArrowDown,
 } from "lucide-react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
