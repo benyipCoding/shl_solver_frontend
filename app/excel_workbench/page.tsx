@@ -91,17 +91,21 @@ export default function App() {
     setError(null);
 
     try {
-      const res = await customFetch("/api/excel_wb", {
-        method: "POST",
-        body: JSON.stringify({
-          prompt,
-          columns: aiPayloadData.columns,
-          sample_row: aiPayloadData.sampleRow,
-        }),
-      });
+      const res = await customFetch(
+        "/api/excel_wb",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            prompt,
+            columns: aiPayloadData.columns,
+            sample_row: aiPayloadData.sampleRow,
+          }),
+        },
+        true
+      );
       if (!res.ok) {
         const errData = await res.json();
-        toast.error(errData.error || errData.message || "AI 处理失败");
+        setError(errData.error || errData.message || "AI 处理失败");
       }
 
       const parsed = await res.json();
@@ -168,6 +172,12 @@ export default function App() {
       setError("导出失败: " + err.message);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      setError(null);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-8 md:pb-4 transition-colors">
