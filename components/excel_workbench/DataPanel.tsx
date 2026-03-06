@@ -8,6 +8,9 @@ interface DataPanelProps {
   historyCount: number;
   isNewRecordAdded: boolean;
   onOpenHistory: () => void;
+  sheetNames?: string[];
+  currentSheetName?: string;
+  onSheetChange?: (sheetName: string) => void;
 }
 
 export const DataPanel: React.FC<DataPanelProps> = ({
@@ -16,6 +19,9 @@ export const DataPanel: React.FC<DataPanelProps> = ({
   historyCount,
   isNewRecordAdded,
   onOpenHistory,
+  sheetNames = [],
+  currentSheetName = "",
+  onSheetChange = () => {},
 }) => {
   const displayData = activeRecord?.data || [];
   const displayColumns = activeRecord?.columns || [];
@@ -24,13 +30,36 @@ export const DataPanel: React.FC<DataPanelProps> = ({
     <div className="lg:col-span-8 flex flex-col h-150 lg:h-[calc(100vh-180px)]">
       <div className="flex-1 flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-all">
         <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950 transition-colors">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-            当前视图:{" "}
-            {activeRecord?.isOriginal
-              ? "原始数据"
-              : `操作记录 ${activeHistoryIndex}`}{" "}
-            (前100行)
-          </h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              当前视图:{" "}
+              {activeRecord?.isOriginal
+                ? "原始数据"
+                : `操作记录 ${activeHistoryIndex}`}{" "}
+              (前100行)
+            </h2>
+
+            {sheetNames.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 dark:text-slate-400">
+                  工作表:
+                </label>
+                <select
+                  value={currentSheetName}
+                  onChange={(e) => onSheetChange(e.target.value)}
+                  className="text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  aria-label="Select sheet"
+                >
+                  {sheetNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={onOpenHistory}
             className={`text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all duration-300 shadow-sm ${

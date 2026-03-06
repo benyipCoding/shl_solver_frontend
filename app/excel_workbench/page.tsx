@@ -21,6 +21,11 @@ export default function App() {
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false); // 控制抽屉开关
   const [isNewRecordAdded, setIsNewRecordAdded] = useState(false); // 控制新记录动画
 
+  // Sheet State
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [currentSheetName, setCurrentSheetName] = useState<string>("");
+  const workbookRef = useRef<XLSX.WorkBook | null>(null);
+
   // AI State
   const [prompt, setPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +39,33 @@ export default function App() {
     history.find((h) => h.id === activeHistoryId) || history[0];
   const displayData = activeRecord?.data || [];
   const displayColumns = activeRecord?.columns || [];
+
+  // Helper to load a specific sheet
+  const loadSheetData = (workbook: XLSX.WorkBook, sheet: string) => {
+    const worksheet = workbook.Sheets[sheet];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false,
+      defval: "",
+    });
+
+    const initialRecord = {
+      id: Date.now().toString(),
+      title: `原始导入数据 (${sheet})`,
+      data: jsonData as any[],
+      columns: jsonData.length > 0 ? Object.keys((jsonData as any[])[0]) : [],
+      timestamp: new Date().toLocaleTimeString(),
+      isOriginal: true,
+    };
+    setHistory([initialRecord]);
+    setActiveHistoryId(initialRecord.id);
+  };
+
+  const handleSheetChange = (sheet: string) => {
+    if (workbookRef.current && sheetNames.includes(sheet)) {
+      setCurrentSheetName(sheet);
+      loadSheetData(workbookRef.current, sheet);
+    }
+  };
 
   const handleFileUpload = (file: File) => {
     if (!file) return;
@@ -51,27 +83,16 @@ export default function App() {
       try {
         const data = e.target?.result;
         const workbook = XLSX.read(data, { type: "binary" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        workbookRef.current = workbook;
 
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-          raw: false,
-          defval: "",
-        });
+        const sheets = workbook.SheetNames;
+        setSheetNames(sheets);
 
-        // 移除了空数据拦截，允许上传空的 Excel 文件
-
-        const initialRecord = {
-          id: Date.now().toString(),
-          title: "原始导入数据",
-          data: jsonData as any[],
-          columns:
-            jsonData.length > 0 ? Object.keys((jsonData as any[])[0]) : [], // 防御性处理空数据
-          timestamp: new Date().toLocaleTimeString(),
-          isOriginal: true,
-        };
-        setHistory([initialRecord]);
-        setActiveHistoryId(initialRecord.id);
+        if (sheets.length > 0) {
+          const firstSheet = sheets[0];
+          setCurrentSheetName(firstSheet);
+          loadSheetData(workbook, firstSheet);
+        }
       } catch (err: any) {
         setError("解析时发生错误：" + err.message);
       }
@@ -204,7 +225,12 @@ export default function App() {
             <CommandPanel
               fileName={fileName}
               displayDataLength={displayData.length}
-              onCloseFile={() => setHistory([])}
+              onCloseFile={() => {
+                setHistory([]);
+                setSheetNames([]);
+                setCurrentSheetName("");
+                workbookRef.current = null;
+              }}
               prompt={prompt}
               setPrompt={setPrompt}
               isLoading={isLoading}
@@ -221,6 +247,9 @@ export default function App() {
               historyCount={history.length}
               isNewRecordAdded={isNewRecordAdded}
               onOpenHistory={() => setIsHistoryDrawerOpen(true)}
+              sheetNames={sheetNames}
+              currentSheetName={currentSheetName}
+              onSheetChange={handleSheetChange}
             />
           </div>
         )}
