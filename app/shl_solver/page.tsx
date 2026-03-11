@@ -85,11 +85,8 @@ const SHLSolverPage = () => {
 
     // 2. Load images into the uploader (preview only)
     dispatch(clearImages());
-    if (item.image_urls) {
-      // image_urls is comma separated string
-      const urls = item.image_urls
-        .split(",")
-        .filter((url) => url.trim() !== "");
+    if (item.image_urls && item.image_urls.length > 0) {
+      const urls = item.image_urls.filter((url: string) => url.trim() !== "");
       if (urls.length > 0) {
         // Pass empty data array since we don't have base64 for re-analysis, just previews
         dispatch(addImages({ previews: urls, data: [] }));

@@ -9,9 +9,10 @@ import {
   FileText,
   ChevronRight,
   User,
+  Loader2,
 } from "lucide-react";
 import { SHLSolverHistoryItem } from "@/interfaces/history";
-import { MOCK_HISTORY } from "@/utils/mock_history";
+import { useFetch } from "@/context/FetchContext";
 
 interface HistoryDrawerProps {
   isOpen: boolean;
@@ -24,13 +25,33 @@ export default function HistoryDrawer({
   onClose,
   onSelect,
 }: HistoryDrawerProps) {
+  const { customFetch } = useFetch();
   const [historyItems, setHistoryItems] = useState<SHLSolverHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
 
+  const fetchHistory = async () => {
+    try {
+      setLoading(true);
+      const res = await customFetch("/api/shl_history?page=1&size=50", {
+        method: "GET",
+      });
+      const data = await res.json();
+      if (res.ok && data.items) {
+        setHistoryItems(data.items);
+      }
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Simulate fetching data
-    setHistoryItems(MOCK_HISTORY);
-  }, []);
+    if (isOpen) {
+      fetchHistory();
+    }
+  }, [isOpen]);
 
   // Handle visibility for animation
   useEffect(() => {
@@ -84,7 +105,12 @@ export default function HistoryDrawer({
 
         {/* Content List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 dark:bg-black/20">
-          {historyItems.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+              <Loader2 className="w-8 h-8 animate-spin mb-2 text-blue-500" />
+              <p>正在加载...</p>
+            </div>
+          ) : historyItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
               <Clock className="w-10 h-10 opacity-20" />
               <p>暂无历史记录</p>
@@ -103,11 +129,13 @@ export default function HistoryDrawer({
                   <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <User className="w-3 h-3" />
                     <span className="truncate max-w-[80px] font-semibold text-slate-700 dark:text-slate-300">
-                      {item.user_id}
+                      {item.username}
                     </span>
                     <span className="text-slate-300">•</span>
                     <span>
-                      {new Date(item.created_at).toLocaleDateString()}
+                      {item.created_at
+                        ? new Date(item.created_at).toLocaleDateString()
+                        : "-"}
                     </span>
                   </div>
                   <StatusBadge status={item.status} />
