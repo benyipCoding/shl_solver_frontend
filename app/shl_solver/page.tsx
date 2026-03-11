@@ -67,8 +67,9 @@ const SHLSolverPage = () => {
         return;
       }
       setResult(data);
-    } catch (error) {
-      setError(`SHL分析失败: ${error || "未知错误"}`);
+    } catch (error: any) {
+      console.error("SHL Analysis Error:", error);
+      setError("上传的截图有无法识别的内容，可以参考历史记录里的图片");
     } finally {
       setLoading(false);
     }
@@ -185,10 +186,19 @@ const SHLSolverPage = () => {
             {/* History Toggle Button */}
             <button
               onClick={() => setIsHistoryOpen(true)}
-              className="p-2 m-0 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors "
+              className="cursor-pointer m-0 relative group p-2 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:shadow-md dark:text-indigo-300 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 transition-all border border-indigo-100 dark:border-indigo-800 ring-2 ring-transparent hover:ring-indigo-200 dark:hover:ring-indigo-800"
               title="查看历史记录"
             >
-              <HistoryIcon className="w-5 h-5" />
+              <div className="flex items-center gap-2">
+                <HistoryIcon className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                <span className="text-sm font-semibold hidden md:inline-block">
+                  历史记录
+                </span>
+              </div>
+              {/* <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white dark:border-slate-900"></span>
+              </span> */}
             </button>
 
             {/* Login & Multi-image indicator */}
