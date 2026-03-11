@@ -140,7 +140,7 @@ export default function HistoryDrawer({
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <User className="w-3 h-3" />
-                    <span className="truncate max-w-[80px] font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="truncate max-w-20 font-semibold text-slate-700 dark:text-slate-300">
                       {item.username}
                     </span>
                     <span className="text-slate-300">•</span>

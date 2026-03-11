@@ -257,12 +257,14 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
           </div>
 
           <div className="p-3 md:p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 space-y-3 transition-colors">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-200 dark:border-slate-700 dashed-border text-sm md:text-base"
-            >
-              <Plus className="w-4 h-4 mr-2" /> 继续添加 / 粘贴
-            </button>
+            {!isHistoryView && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-200 dark:border-slate-700 dashed-border text-sm md:text-base"
+              >
+                <Plus className="w-4 h-4 mr-2" /> 继续添加 / 粘贴
+              </button>
+            )}
             <button
               onClick={() => onAnalyze(imagesData)}
               disabled={loading || isHistoryView}
