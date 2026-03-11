@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Cpu, AlertCircle, ChevronDown, Sparkles } from "lucide-react";
+import {
+  Cpu,
+  AlertCircle,
+  ChevronDown,
+  Sparkles,
+  History as HistoryIcon,
+} from "lucide-react";
 import {
   AnalysisResult,
   ImageData,
@@ -15,16 +21,22 @@ import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { fetchLLMs } from "@/utils/helpers";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import HistoryDrawer from "@/components/shl_solver/HistoryDrawer";
+import { SHLSolverHistoryItem } from "@/interfaces/history";
+import { useAppDispatch } from "@/store/hooks";
+import { addImages, clearImages } from "@/store/features/shlSlice";
 
 const SHLSolverPage = () => {
   const { login } = useAuth();
   const { customFetch } = useFetch();
+  const dispatch = useAppDispatch();
   const [models, setModels] = useState<Model[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<number | null>(null); // Default to null
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
@@ -60,6 +72,39 @@ const SHLSolverPage = () => {
     }
   };
 
+  const handleHistorySelect = (item: SHLSolverHistoryItem) => {
+    // 1. Set the result for display
+    if (item.result_json) {
+      setResult(item.result_json);
+    } else {
+      setResult(null);
+      if (item.status === "failed") {
+        setError(item.error_message || "History item marked as failed.");
+      }
+    }
+
+    // 2. Load images into the uploader (preview only)
+    dispatch(clearImages());
+    if (item.image_urls) {
+      // image_urls is comma separated string
+      const urls = item.image_urls
+        .split(",")
+        .filter((url) => url.trim() !== "");
+      if (urls.length > 0) {
+        // Pass empty data array since we don't have base64 for re-analysis, just previews
+        dispatch(addImages({ previews: urls, data: [] }));
+      }
+    }
+
+    // 3. Set model if available (optional, just for UI consistency)
+    if (item.model) {
+      const modelObj = models.find((m) => m.name === item.model);
+      if (modelObj) setSelectedModel(modelObj.id);
+    }
+
+    setIsHistoryOpen(false);
+  };
+
   useEffect(() => {
     fetchLLMs().then((data) => {
       if (data) {
@@ -77,6 +122,13 @@ const SHLSolverPage = () => {
   // --- Main SHLSolverPage View ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 dark:bg-slate-950 dark:text-slate-100 dark:selection:bg-blue-900 pb-10 relative flex flex-col transition-colors duration-300">
+      {/* History Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onSelect={handleHistorySelect}
+      />
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10 safe-top shadow-sm dark:bg-slate-900 dark:border-slate-800 transition-colors">
         <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-0">
@@ -122,6 +174,15 @@ const SHLSolverPage = () => {
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </div>
             </div>
+
+            {/* History Toggle Button */}
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-2 m-0 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors "
+              title="查看历史记录"
+            >
+              <HistoryIcon className="w-5 h-5" />
+            </button>
 
             {/* Login & Multi-image indicator */}
             <ThemeToggle />
