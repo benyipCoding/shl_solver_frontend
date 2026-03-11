@@ -37,12 +37,14 @@ const SHLSolverPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<number | null>(null); // Default to null
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryView, setIsHistoryView] = useState(false); // Track if viewing history
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
     try {
       setLoading(true);
       setError(null);
+      setIsHistoryView(false); // Reset history view on new analysis
 
       const payload: SHLAnalysisPayload = {
         images_data: imagesData,
@@ -106,6 +108,7 @@ const SHLSolverPage = () => {
       if (modelObj) setSelectedModel(modelObj.id);
     }
 
+    setIsHistoryView(true); // Flag as history view
     setIsHistoryOpen(false);
   };
 
@@ -200,12 +203,16 @@ const SHLSolverPage = () => {
           {/* Left Column: Image Uploader */}
           <ImageUploader
             onAnalyze={analyzeProblem}
-            onClearResult={() => setResult(null)}
+            onClearResult={() => {
+              setResult(null);
+              setIsHistoryView(false); // Clear history view when result cleared
+            }}
             loading={loading}
             selectedModelName={
               models.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
               "AI"
             }
+            isHistoryView={isHistoryView}
           />
 
           {/* Right Column: Result Display */}

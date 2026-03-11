@@ -25,9 +25,17 @@ interface ImageUploaderProps {
   onClearResult: () => void;
   loading: boolean;
   selectedModelName: string;
+  isHistoryView?: boolean;
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
+  onAnalyze,
+  onClearResult,
+  loading,
+  selectedModelName,
+  isHistoryView = false,
+}) => {
+
   onAnalyze,
   onClearResult,
   loading,
@@ -257,9 +265,9 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             </button>
             <button
               onClick={() => onAnalyze(imagesData)}
-              disabled={loading}
+              disabled={loading || isHistoryView}
               className={`w-full py-3 rounded-xl font-bold text-base md:text-lg flex items-center justify-center shadow-md transition-all ${
-                loading
+                loading || isHistoryView
                   ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"
                   : "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white hover:shadow-lg"
               }`}
@@ -268,6 +276,11 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   正在使用 {selectedModelName} 分析...
+                </>
+              ) : isHistoryView ? (
+                <>
+                  <BookOpen className="w-5 h-5 mr-2" />
+                  历史记录查看模式
                 </>
               ) : (
                 <>
