@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Upload,
   ImageIcon,
@@ -35,18 +35,78 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   selectedModelName,
   isHistoryView = false,
 }) => {
-
-  onAnalyze,
-  onClearResult,
-  loading,
-  selectedModelName,
-}) => {
   const dispatch = useAppDispatch();
   const images = useAppSelector((state) => state.shl.images);
   const imagesData = useAppSelector((state) => state.shl.imagesData);
   const [error, setError] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const processFiles = useCallback(
+    async (filesRaw: FileList | File[]) => {
+      if (!filesRaw || filesRaw.length === 0) return;
+
+      const files = Array.from(filesRaw);
+      const validFiles = files.filter((file) => file.type.startsWith("image/"));
+
+      if (validFiles.length === 0 && files.length > 0) {
+        setError("请上传有效的图片文件 (JPG, PNG)");
+        return;
+      }
+
+      if (validFiles.length < files.length) {
+        setError("部分非图片文件已被自动过滤。");
+      } else {
+        setError(null);
+      }
+
+      setIsCompressing(true);
+
+      const readPromises = validFiles.map((file) => {
+        return new Promise<{ preview: string; data: string; mimeType: string }>(
+          async (resolve, reject) => {
+            try {
+              const compressedFile = await compressImage(file);
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (reader.result && typeof reader.result === "string") {
+                  resolve({
+                    preview: reader.result,
+                    data: reader.result.split(",")[1],
+                    mimeType: compressedFile.type,
+                  });
+                } else {
+                  reject(new Error("File reading failed"));
+                }
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(compressedFile);
+            } catch (error) {
+              reject(error);
+            }
+          }
+        );
+      });
+
+      try {
+        const results = await Promise.all(readPromises);
+        dispatch(
+          addImages({
+            previews: results.map((r) => r.preview),
+            data: results.map((r) => ({ mimeType: r.mimeType, data: r.data })),
+          })
+        );
+        onClearResult();
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } catch (e: any) {
+        setError("读取文件时出错，请重试。");
+        console.error("File reading error:", e);
+      } finally {
+        setIsCompressing(false);
+      }
+    },
+    [dispatch, onClearResult]
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -65,84 +125,24 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     }
   };
 
-  const handlePaste = (e: ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
+  const handlePaste = useCallback(
+    (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
 
-    const filesToProcess: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf("image") !== -1) {
-        const blob = items[i].getAsFile();
-        if (blob) filesToProcess.push(blob);
-      }
-    }
-    if (filesToProcess.length > 0) {
-      processFiles(filesToProcess);
-    }
-  };
-
-  const processFiles = async (filesRaw: FileList | File[]) => {
-    if (!filesRaw || filesRaw.length === 0) return;
-
-    const files = Array.from(filesRaw);
-    const validFiles = files.filter((file) => file.type.startsWith("image/"));
-
-    if (validFiles.length === 0 && files.length > 0) {
-      setError("请上传有效的图片文件 (JPG, PNG)");
-      return;
-    }
-
-    if (validFiles.length < files.length) {
-      setError("部分非图片文件已被自动过滤。");
-    } else {
-      setError(null);
-    }
-
-    setIsCompressing(true);
-
-    const readPromises = validFiles.map((file) => {
-      return new Promise<{ preview: string; data: string; mimeType: string }>(
-        async (resolve, reject) => {
-          try {
-            const compressedFile = await compressImage(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (reader.result && typeof reader.result === "string") {
-                resolve({
-                  preview: reader.result,
-                  data: reader.result.split(",")[1],
-                  mimeType: compressedFile.type,
-                });
-              } else {
-                reject(new Error("File reading failed"));
-              }
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(compressedFile);
-          } catch (error) {
-            reject(error);
-          }
+      const filesToProcess: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          const blob = items[i].getAsFile();
+          if (blob) filesToProcess.push(blob);
         }
-      );
-    });
-
-    try {
-      const results = await Promise.all(readPromises);
-      dispatch(
-        addImages({
-          previews: results.map((r) => r.preview),
-          data: results.map((r) => ({ mimeType: r.mimeType, data: r.data })),
-        })
-      );
-      onClearResult();
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (e: any) {
-      setError("读取文件时出错，请重试。");
-      console.error("File reading error:", e);
-    } finally {
-      setIsCompressing(false);
-    }
-  };
+      }
+      if (filesToProcess.length > 0) {
+        processFiles(filesToProcess);
+      }
+    },
+    [processFiles]
+  );
 
   const clearAllImages = () => {
     dispatch(clearImages());
