@@ -106,7 +106,7 @@ export const DataPanel: React.FC<DataPanelProps> = ({
                     return (
                       <td
                         key={colIdx}
-                        className="px-3 py-1.5 text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis"
+                        className="px-3 py-1.5 text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 whitespace-nowrap max-w-50 overflow-hidden text-ellipsis"
                         title={cellValue}
                       >
                         {cellValue !== undefined &&
