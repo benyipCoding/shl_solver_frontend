@@ -69,7 +69,7 @@ const SHLSolverPage = () => {
       setResult(data);
     } catch (error: any) {
       console.error("SHL Analysis Error:", error);
-      setError("上传的截图有无法识别的内容，可以参考历史记录里的图片");
+      setError("上传的截图有无法识别的内容");
     } finally {
       setLoading(false);
     }
