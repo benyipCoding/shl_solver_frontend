@@ -88,8 +88,15 @@ const SHLSolverPage = () => {
     if (item.image_urls && item.image_urls.length > 0) {
       const urls = item.image_urls.filter((url: string) => url.trim() !== "");
       if (urls.length > 0) {
+        // Prepend /uploads/ if not present and if it's not a full URL (http)
+        const displayUrls = urls.map((url) => {
+          if (url.startsWith("http") || url.startsWith("/uploads/")) {
+            return url;
+          }
+          return `/uploads/${url}`;
+        });
         // Pass empty data array since we don't have base64 for re-analysis, just previews
-        dispatch(addImages({ previews: urls, data: [] }));
+        dispatch(addImages({ previews: displayUrls, data: [] }));
       }
     }
 

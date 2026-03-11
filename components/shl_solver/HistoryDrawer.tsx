@@ -20,6 +20,18 @@ interface HistoryDrawerProps {
   onSelect: (item: SHLSolverHistoryItem) => void;
 }
 
+const formatDate = (dateString: string) => {
+  if (!dateString) return "-";
+  const date = new Date(dateString);
+  return new Intl.DateTimeFormat("default", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+};
+
 export default function HistoryDrawer({
   isOpen,
   onClose,
@@ -128,15 +140,11 @@ export default function HistoryDrawer({
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <User className="w-3 h-3" />
-                    <span className="truncate max-w-20 font-semibold text-slate-700 dark:text-slate-300">
+                    <span className="truncate max-w-[80px] font-semibold text-slate-700 dark:text-slate-300">
                       {item.username}
                     </span>
                     <span className="text-slate-300">•</span>
-                    <span>
-                      {item.created_at
-                        ? new Date(item.created_at).toLocaleDateString()
-                        : "-"}
-                    </span>
+                    <span>{formatDate(item.created_at)}</span>
                   </div>
                   <StatusBadge status={item.status} />
                 </div>
@@ -154,9 +162,6 @@ export default function HistoryDrawer({
                         : item.error_message || "等待分析..."}
                     </p>
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span className="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-300 font-mono text-[10px] uppercase tracking-wide">
-                        {item.model || "Unknown"}
-                      </span>
                       {item.token_count > 0 && (
                         <span>{item.token_count} toks</span>
                       )}
