@@ -66,7 +66,19 @@ const SHLSolverPage = () => {
         setError(`SHL分析失败: ${data.error || res.statusText}`);
         return;
       }
-      setResult(data);
+
+      if (data && data.data && Array.isArray(data.data)) {
+        if (data.data.length > 0) {
+          // 强制只取数组的第一题，伪装成以前的单对象格式存入 state
+          const singleProblemData = { ...data, data: data.data[0] };
+          setResult(singleProblemData);
+        } else {
+          setError("AI 未能识别出题目内容");
+        }
+      } else {
+        // 兜底（以防数据结构不是我们预期的）
+        setResult(data);
+      }
     } catch (error: any) {
       console.error("SHL Analysis Error:", error);
       setError("上传的截图有无法识别的内容");
