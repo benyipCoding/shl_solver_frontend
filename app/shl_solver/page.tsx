@@ -222,7 +222,7 @@ const SHLSolverPage = () => {
               models.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
               "AI"
             }
-            isHistoryView={isHistoryView}
+            isHistoryView={isHistoryView || !!result}
           />
 
           {/* Right Column: Result Display */}
