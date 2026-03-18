@@ -40,6 +40,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   const imagesData = useAppSelector((state) => state.shl.imagesData);
   const [error, setError] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFiles = useCallback(
@@ -233,23 +234,27 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             {images.map((imgSrc, index) => (
               <div
                 key={index}
-                className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 h-full transition-colors"
+                className="relative group rounded-lg shadow-sm overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-colors"
+                onClick={() => setPreviewImage(imgSrc)}
               >
                 <img
                   src={imgSrc}
                   alt={`Problem part ${index + 1}`}
-                  className="w-full object-contain max-h-48 md:max-h-64 lg:max-h-full bg-slate-50 dark:bg-slate-950"
+                  className="w-full object-contain max-h-48 md:max-h-64 lg:max-h-full bg-slate-50 dark:bg-slate-950 cursor-pointer hover:opacity-95 transition-opacity"
                 />
-                <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-10">
                   <button
-                    onClick={() => removeImage(index)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeImage(index);
+                    }}
                     className="bg-white/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-2 rounded-full shadow-sm hover:shadow-md transition-all backdrop-blur-sm"
                     title="移除此图片"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-[10px] md:text-xs px-2 py-1 rounded-full backdrop-blur-sm">
+                <div className="absolute bottom-2 left-2 bg-black/50 text-white text-[10px] md:text-xs px-2 py-1 rounded-full backdrop-blur-sm pointer-events-none">
                   Part {index + 1}
                 </div>
               </div>
@@ -324,6 +329,29 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
               支持直接拍照或从相册选择。
             </li>
           </ul>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 md:p-8 animate-fadeIn"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 z-[60] p-2 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full transition-all"
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <div className="relative flex items-center justify-center max-w-full max-h-full">
+            <img
+              src={previewImage}
+              alt="Full size preview"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
         </div>
       )}
     </div>
