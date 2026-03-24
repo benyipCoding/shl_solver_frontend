@@ -209,7 +209,7 @@ const SHLSolverPage = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 w-full flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1 lg:max-h-[calc(100vh-10.7rem)] lg:overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1 lg:max-h-[calc(100vh-10.7rem)] lg:overflow-y-auto custom-scrollbar">
           {/* Left Column: Image Uploader */}
           <ImageUploader
             onAnalyze={analyzeProblem}
