@@ -276,12 +276,9 @@ const SHLSolverPage = () => {
               </h3>
               <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4 md:mb-6">
                 如果这个工具帮助到了您，欢迎随缘打赏。
-                <br className="hidden md:block" />
-                <span className="hidden md:inline">
-                  您的支持将直接用于补贴高昂的 AI Token
-                  服务器费用，让项目能持续免费开放！
-                </span>
-                <span className="md:hidden">支持用于补贴服务器费用。</span>
+                <br />
+                您的支持将直接用于补贴高昂的 AI Token
+                服务器费用，让项目能持续免费开放！
               </p>
 
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-4 md:mb-6 w-full">
