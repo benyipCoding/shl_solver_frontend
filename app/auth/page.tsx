@@ -177,6 +177,30 @@ const AuthContent = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        body: JSON.stringify({
+          email: formData.email,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.message || "发送重置邮件失败，请稍后重试");
+        return;
+      }
+
+      toast.success(data.message || "重置邮件已发送，请检查您的邮箱");
+      // Optional: don't auto switch, let user read message
+      // setAuthMode("login");
+    } catch (error) {
+      toast.error("网络请求失败，请检查网络");
+    }
+  };
+
   const handleAuthSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     const newErrors: ValidationErrors = {};
@@ -200,6 +224,7 @@ const AuthContent = () => {
     if (hasError) return;
     if (authMode === "login") handleLogin();
     if (authMode === "register") handleRegister();
+    if (authMode === "forgot") handleForgotPassword();
   };
 
   const resetForm = () => {
@@ -294,18 +319,6 @@ const AuthContent = () => {
               required
             />
             <div className="space-y-1 relative">
-              {/* <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider ml-1">
-                  密码
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("forgot")}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  忘记密码?
-                </button>
-              </div> */}
               <div className="relative">
                 {/* <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="h-5 w-5 text-slate-400" />
@@ -326,6 +339,14 @@ const AuthContent = () => {
                     {errors.password}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setAuthMode("forgot")}
+                  className="absolute right-2 -bottom-6 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  忘记密码?
+                </button>
               </div>
             </div>
 
