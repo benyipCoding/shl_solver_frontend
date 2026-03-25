@@ -9,35 +9,38 @@ import {
   AlertTriangle,
   CheckCircle,
 } from "lucide-react";
-import { VerificationResult, ImageData } from "@/interfaces/shl_solver";
+import { ImageData } from "@/interfaces/shl_solver";
 import { compressImage } from "@/utils/helpers";
 import toast from "react-hot-toast";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import {
+  setVerificationImage,
+  setVerificationLoading,
+  setVerificationResult,
+  setVerificationError,
+  resetVerification,
+} from "@/store/features/shlSlice";
 
 interface VisualDiffProps {
   referenceCode: string;
 }
 
 const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
-  const [verificationImage, setVerificationImage] = useState<string | null>(
-    null
-  );
-  const [verificationImageData, setVerificationImageData] =
-    useState<ImageData | null>(null);
-  const [verificationLoading, setVerificationLoading] = useState(false);
-  const [verificationResult, setVerificationResult] =
-    useState<VerificationResult | null>(null);
-  const [verificationError, setVerificationError] = useState<string | null>(
-    null
-  );
+  const dispatch = useAppDispatch();
+  const {
+    image: verificationImage,
+    imageData: verificationImageData,
+    loading: verificationLoading,
+    result: verificationResult,
+    error: verificationError,
+  } = useAppSelector((state) => state.shl.verification);
+
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
 
   const verificationFileInputRef = useRef<HTMLInputElement>(null);
 
-  const resetVerification = () => {
-    setVerificationImage(null);
-    setVerificationImageData(null);
-    setVerificationResult(null);
-    setVerificationError(null);
+  const handleResetVerification = () => {
+    dispatch(resetVerification());
     if (verificationFileInputRef.current)
       verificationFileInputRef.current.value = "";
   };
@@ -57,14 +60,18 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
               event.target?.result &&
               typeof event.target.result === "string"
             ) {
-              setVerificationImage(event.target.result);
               const base64Data = (event.target.result as string).split(",")[1];
-              setVerificationImageData({
-                mimeType: compressedFile.type,
-                data: base64Data,
-              });
-              setVerificationResult(null);
-              setVerificationError(null);
+              dispatch(
+                setVerificationImage({
+                  image: event.target.result as string,
+                  imageData: {
+                    mimeType: compressedFile.type,
+                    data: base64Data,
+                  },
+                })
+              );
+              dispatch(setVerificationResult(null));
+              dispatch(setVerificationError(null));
             }
             setIsCompressing(false);
           };
@@ -87,9 +94,9 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   const verifyTypedCode = async () => {
     if (!verificationImageData || !referenceCode || verificationLoading) return;
 
-    setVerificationLoading(true);
-    setVerificationError(null);
-    setVerificationResult(null);
+    dispatch(setVerificationLoading(true));
+    dispatch(setVerificationError(null));
+    dispatch(setVerificationResult(null));
 
     const toastId = toast.loading("正在上传并进行视觉比对分析...");
 
@@ -114,7 +121,7 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         throw new Error(data.error || "比对服务请求失败");
       }
 
-      setVerificationResult(data);
+      dispatch(setVerificationResult(data));
       if (data.has_errors) {
         toast.error("发现代码差异，请检查报告", { id: toastId });
       } else {
@@ -122,10 +129,10 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
       }
     } catch (error: any) {
       console.error("Verification failed:", error);
-      setVerificationError(error.message || "请求发生未知错误");
+      dispatch(setVerificationError(error.message || "请求发生未知错误"));
       toast.error(error.message || "比对失败，请重试", { id: toastId });
     } finally {
-      setVerificationLoading(false);
+      dispatch(setVerificationLoading(false));
     }
   };
 
@@ -138,7 +145,7 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         </h4>
         {verificationImage && !verificationLoading && (
           <button
-            onClick={resetVerification}
+            onClick={handleResetVerification}
             className="text-xs text-slate-400 hover:text-red-500 flex items-center font-medium"
           >
             <Trash2 className="w-3 h-3 mr-1" /> 清除照片

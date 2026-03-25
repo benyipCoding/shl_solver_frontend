@@ -1,6 +1,10 @@
 // store/features/shlSlice.ts
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { ImageData, AnalysisResult } from "@/interfaces/shl_solver";
+import {
+  ImageData,
+  AnalysisResult,
+  VerificationResult,
+} from "@/interfaces/shl_solver";
 
 interface ShlState {
   images: string[]; // Array of preview URLs
@@ -9,6 +13,13 @@ interface ShlState {
   result: AnalysisResult | null;
   error: string | null;
   selectedModel: number | null;
+  verification: {
+    image: string | null;
+    imageData: ImageData | null;
+    loading: boolean;
+    result: VerificationResult | null;
+    error: string | null;
+  };
 }
 
 const initialState: ShlState = {
@@ -18,6 +29,13 @@ const initialState: ShlState = {
   result: null,
   error: null,
   selectedModel: null,
+  verification: {
+    image: null,
+    imageData: null,
+    loading: false,
+    result: null,
+    error: null,
+  },
 };
 
 export const shlSlice = createSlice({
@@ -48,6 +66,32 @@ export const shlSlice = createSlice({
     setResult: (state, action: PayloadAction<AnalysisResult | null>) => {
       state.result = action.payload;
     },
+    // Verification reducers
+    setVerificationImage: (
+      state,
+      action: PayloadAction<{
+        image: string | null;
+        imageData: ImageData | null;
+      }>
+    ) => {
+      state.verification.image = action.payload.image;
+      state.verification.imageData = action.payload.imageData;
+    },
+    setVerificationLoading: (state, action: PayloadAction<boolean>) => {
+      state.verification.loading = action.payload;
+    },
+    setVerificationResult: (
+      state,
+      action: PayloadAction<VerificationResult | null>
+    ) => {
+      state.verification.result = action.payload;
+    },
+    setVerificationError: (state, action: PayloadAction<string | null>) => {
+      state.verification.error = action.payload;
+    },
+    resetVerification: (state) => {
+      state.verification = initialState.verification;
+    },
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload;
     },
@@ -63,6 +107,11 @@ export const {
   clearImages,
   setLoading,
   setResult,
+  setVerificationImage,
+  setVerificationLoading,
+  setVerificationResult,
+  setVerificationError,
+  resetVerification,
   setError,
   setSelectedModel,
 } = shlSlice.actions;
