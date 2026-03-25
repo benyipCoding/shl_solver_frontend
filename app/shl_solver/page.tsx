@@ -7,6 +7,9 @@ import {
   ChevronDown,
   Sparkles,
   History as HistoryIcon,
+  HeartHandshake,
+  X,
+  Coffee,
 } from "lucide-react";
 import {
   AnalysisResult,
@@ -38,6 +41,7 @@ const SHLSolverPage = () => {
   const [selectedModel, setSelectedModel] = useState<number | null>(null); // Default to null
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryView, setIsHistoryView] = useState(false); // Track if viewing history
+  const [showSponsorModal, setShowSponsorModal] = useState(false);
 
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
@@ -161,16 +165,16 @@ const SHLSolverPage = () => {
           </div>
 
           {/* Right Side: Model Selector & Features */}
-          <div className="flex items-center space-y-2 md:space-y-0 md:space-x-3 w-full md:w-auto justify-end gap-3">
+          <div className="flex items-center w-full md:w-auto justify-end gap-2 md:gap-3">
             {/* Model Selector */}
-            <div className="relative w-full md:w-auto flex-1 md:flex-none mb-0">
+            <div className="relative flex-1 md:flex-none md:w-60">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
                 <Sparkles className="h-4 w-4 text-indigo-500" />
               </div>
               <select
                 value={String(selectedModel)}
                 onChange={(e) => setSelectedModel(Number(e.target.value))}
-                className="w-full md:w-60 appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
+                className="w-full appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
               >
                 {models.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -186,7 +190,7 @@ const SHLSolverPage = () => {
             {/* History Toggle Button */}
             <button
               onClick={() => setIsHistoryOpen(true)}
-              className="cursor-pointer m-0 relative group p-2 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:shadow-md dark:text-indigo-300 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 transition-all border border-indigo-100 dark:border-indigo-800 ring-2 ring-transparent hover:ring-indigo-200 dark:hover:ring-indigo-800"
+              className="cursor-pointer shrink-0 relative group p-2 rounded-lg md:rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:shadow-md dark:text-indigo-300 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/60 transition-all border border-indigo-100 dark:border-indigo-800 ring-2 ring-transparent hover:ring-indigo-200 dark:hover:ring-indigo-800"
               title="查看历史记录"
             >
               <div className="flex items-center gap-2">
@@ -203,7 +207,15 @@ const SHLSolverPage = () => {
 
             {/* Login & Multi-image indicator */}
             <ThemeToggle />
-            <UserHeaderActions simpleMode={false} />
+            <button
+              onClick={() => setShowSponsorModal(true)}
+              className="flex shrink-0 items-center justify-center p-2 md:px-3 md:py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium rounded-lg md:rounded-xl transition-colors border border-rose-100 dark:bg-rose-900/20 dark:hover:bg-rose-900/40 dark:text-rose-400 dark:border-rose-800"
+              title="赞助"
+            >
+              <HeartHandshake className="w-5 h-5 md:w-3.5 md:h-3.5 md:mr-1" />
+              <span className="text-xs md:text-sm hidden md:inline">赞助</span>
+            </button>
+            <UserHeaderActions simpleMode={true} />
           </div>
         </div>
       </header>
@@ -237,6 +249,88 @@ const SHLSolverPage = () => {
           </div>
         )}
       </main>
+
+      {/* Sponsor Modal */}
+      {showSponsorModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          {/* Overlay Click to Close */}
+          <div
+            className="absolute inset-0"
+            onClick={() => setShowSponsorModal(false)}
+          ></div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden relative transition-colors z-10">
+            <button
+              onClick={() => setShowSponsorModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition-colors p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="p-6 md:p-8 text-center">
+              <div className="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500 dark:text-rose-400 shadow-inner">
+                <Coffee className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+                请作者喝杯咖啡 ☕
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+                如果这个工具帮助到了您，欢迎随缘打赏。
+                <br />
+                您的支持将直接用于补贴高昂的 AI Token
+                服务器费用，让项目能持续免费开放！
+              </p>
+
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-6 w-full">
+                <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8">
+                  {/* Alipay */}
+                  <div className="flex flex-col items-center space-y-3 group">
+                    <div className="relative p-2 bg-white rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
+                      <img
+                        src="/sponsor/alipay.png"
+                        alt="支付宝打赏"
+                        className="w-40 h-40 md:w-44 md:h-44 object-contain rounded-lg"
+                      />
+                      <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/10 rounded-xl transition-colors pointer-events-none"></div>
+                    </div>
+                    <div className="flex items-center space-x-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                        支付宝 Alipay
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Divider for mobile */}
+                  <div className="w-full h-px bg-slate-200 dark:bg-slate-700 md:hidden"></div>
+
+                  {/* WeChat */}
+                  <div className="flex flex-col items-center space-y-3 group">
+                    <div className="relative p-2 bg-white rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
+                      <img
+                        src="/sponsor/wechat.png"
+                        alt="微信打赏"
+                        className="w-40 h-40 md:w-44 md:h-44 object-contain rounded-lg"
+                      />
+                      <div className="absolute inset-0 border-2 border-green-500/0 group-hover:border-green-500/10 rounded-xl transition-colors pointer-events-none"></div>
+                    </div>
+                    <div className="flex items-center space-x-1.5 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-800">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-green-600 dark:text-green-400">
+                        微信 WeChat
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs font-bold text-rose-500 dark:text-rose-400">
+                ❤️ 感谢您的鼓励与支持！
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
