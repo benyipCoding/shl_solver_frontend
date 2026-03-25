@@ -267,57 +267,60 @@ const SHLSolverPage = () => {
               <X className="w-5 h-5" />
             </button>
 
-            <div className="p-6 md:p-8 text-center">
-              <div className="w-16 h-16 bg-rose-100 dark:bg-rose-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-500 dark:text-rose-400 shadow-inner">
-                <Coffee className="w-8 h-8" />
+            <div className="p-5 md:p-8 text-center">
+              <div className="w-12 h-12 md:w-16 md:h-16 bg-rose-100 dark:bg-rose-900/30 rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 text-rose-500 dark:text-rose-400 shadow-inner">
+                <Coffee className="w-6 h-6 md:w-8 md:h-8" />
               </div>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+              <h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100 mb-1 md:mb-2">
                 请作者喝杯咖啡 ☕
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
+              <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4 md:mb-6">
                 如果这个工具帮助到了您，欢迎随缘打赏。
-                <br />
-                您的支持将直接用于补贴高昂的 AI Token
-                服务器费用，让项目能持续免费开放！
+                <br className="hidden md:block" />
+                <span className="hidden md:inline">
+                  您的支持将直接用于补贴高昂的 AI Token
+                  服务器费用，让项目能持续免费开放！
+                </span>
+                <span className="md:hidden">支持用于补贴服务器费用。</span>
               </p>
 
-              <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-6 w-full">
-                <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8">
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-4 md:mb-6 w-full">
+                <div className="flex flex-row items-center justify-center gap-3 md:gap-8">
                   {/* Alipay */}
-                  <div className="flex flex-col items-center space-y-3 group">
-                    <div className="relative p-2 bg-white rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
+                  <div className="flex flex-col items-center space-y-2 md:space-y-3 group">
+                    <div className="relative p-1.5 md:p-2 bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
                       <img
                         src="/sponsor/alipay.png"
                         alt="支付宝打赏"
-                        className="w-40 h-40 md:w-44 md:h-44 object-contain rounded-lg"
+                        className="w-28 h-28 md:w-44 md:h-44 object-contain rounded-md md:rounded-lg"
                       />
-                      <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/10 rounded-xl transition-colors pointer-events-none"></div>
+                      <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/10 rounded-lg md:rounded-xl transition-colors pointer-events-none"></div>
                     </div>
-                    <div className="flex items-center space-x-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                        支付宝 Alipay
+                    <div className="flex items-center space-x-1 px-2 py-0.5 md:px-3 md:py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-100 dark:border-blue-800">
+                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-[10px] md:text-xs font-bold text-blue-600 dark:text-blue-400">
+                        支付宝
                       </span>
                     </div>
                   </div>
 
-                  {/* Divider for mobile */}
-                  <div className="w-full h-px bg-slate-200 dark:bg-slate-700 md:hidden"></div>
+                  {/* Divider for mobile - Removed in favor of row layout */}
+                  {/* <div className="w-full h-px bg-slate-200 dark:bg-slate-700 md:hidden"></div> */}
 
                   {/* WeChat */}
-                  <div className="flex flex-col items-center space-y-3 group">
-                    <div className="relative p-2 bg-white rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
+                  <div className="flex flex-col items-center space-y-2 md:space-y-3 group">
+                    <div className="relative p-1.5 md:p-2 bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
                       <img
                         src="/sponsor/wechat.png"
                         alt="微信打赏"
-                        className="w-40 h-40 md:w-44 md:h-44 object-contain rounded-lg"
+                        className="w-28 h-28 md:w-44 md:h-44 object-contain rounded-md md:rounded-lg"
                       />
-                      <div className="absolute inset-0 border-2 border-green-500/0 group-hover:border-green-500/10 rounded-xl transition-colors pointer-events-none"></div>
+                      <div className="absolute inset-0 border-2 border-green-500/0 group-hover:border-green-500/10 rounded-lg md:rounded-xl transition-colors pointer-events-none"></div>
                     </div>
-                    <div className="flex items-center space-x-1.5 px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-800">
-                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                      <span className="text-xs font-bold text-green-600 dark:text-green-400">
-                        微信 WeChat
+                    <div className="flex items-center space-x-1 px-2 py-0.5 md:px-3 md:py-1 bg-green-50 dark:bg-green-900/20 rounded-full border border-green-100 dark:border-green-800">
+                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-500 animate-pulse"></div>
+                      <span className="text-[10px] md:text-xs font-bold text-green-600 dark:text-green-400">
+                        微信
                       </span>
                     </div>
                   </div>
