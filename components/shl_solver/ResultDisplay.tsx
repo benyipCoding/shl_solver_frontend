@@ -70,6 +70,107 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     }
   };
 
+  // --- Lightweight Syntax Highlighter ---
+  const highlightCode = (code: string) => {
+    if (!code) return "";
+
+    // 1. Escape HTML entities to prevent rendering issues
+    let html = code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // 2. Define keyword groups (VS Code Dark+ inspired colors)
+    const controlFlow = [
+      "if",
+      "else",
+      "elif",
+      "for",
+      "while",
+      "return",
+      "switch",
+      "case",
+      "break",
+      "continue",
+      "try",
+      "catch",
+      "finally",
+      "await",
+      "async",
+      "import",
+      "from",
+      "export",
+      "default",
+      "in",
+      "of",
+    ];
+    const keywords = [
+      "def",
+      "class",
+      "print",
+      "public",
+      "private",
+      "protected",
+      "static",
+      "void",
+      "int",
+      "boolean",
+      "double",
+      "float",
+      "char",
+      "byte",
+      "new",
+      "var",
+      "let",
+      "const",
+      "function",
+      "True",
+      "False",
+      "None",
+      "null",
+      "undefined",
+      "this",
+      "self",
+      "String",
+      "console",
+      "log",
+      "Math",
+    ];
+
+    // 3. Regex to tokenize: Entities, Comments, Strings, Numbers, Functions, Words
+    const regex =
+      /(&amp;|&lt;|&gt;|#.*|\/\/.*|\/\*[\s\S]*?\*\/)|((["'`])(?:\\.|[^\\])*?\3)|\b(\d+)\b|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g;
+
+    return html.replace(
+      regex,
+      (match, entityOrComment, str, quote, num, func, word) => {
+        // Ignore HTML entities to prevent breaking them
+        if (entityOrComment) {
+          if (match === "&amp;" || match === "&lt;" || match === "&gt;")
+            return match;
+          return `<span style="color: #6a9955; font-style: italic;">${match}</span>`; // Comments (Green)
+        }
+        if (str) return `<span style="color: #ce9178;">${match}</span>`; // Strings (Orange/Brown)
+        if (num) return `<span style="color: #b5cea8;">${match}</span>`; // Numbers (Light Green)
+        if (func) {
+          if (controlFlow.includes(func))
+            return `<span style="color: #c678dd; font-weight: 500;">${func}</span>`; // Control flow (Purple)
+          if (keywords.includes(func))
+            return `<span style="color: #569cd6; font-weight: 500;">${func}</span>`; // Keywords (Blue)
+          return `<span style="color: #dcdcaa;">${func}</span>`; // Functions (Yellow)
+        }
+        if (word) {
+          if (controlFlow.includes(word))
+            return `<span style="color: #c678dd; font-weight: 500;">${word}</span>`; // Control flow (Purple)
+          if (keywords.includes(word))
+            return `<span style="color: #569cd6; font-weight: 500;">${word}</span>`; // Keywords (Blue)
+          return `<span style="color: #9cdcfe;">${word}</span>`; // Variables (Light Blue)
+        }
+        return match;
+      }
+    );
+  };
+
   const renderLineWithVisibleSpaces = (line: string) => {
     if (!line) return <span className="text-slate-400 italic">[空行]</span>;
 
@@ -80,15 +181,15 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     const content = line.substring(leadingSpacesCount);
 
     return (
-      <div className="flex items-center flex-wrap break-all">
-        <div className="flex select-none">
+      <div className="flex items-center flex-wrap break-all w-full">
+        <div className="flex select-none flex-shrink-0">
           {Array.from({ length: leadingSpacesCount }).map((_, i) => (
-            <span key={i} className="text-slate-300 font-mono text-xl mx-px">
+            <span key={i} className="text-slate-600 font-mono text-xl mx-[1px]">
               •
             </span>
           ))}
         </div>
-        <span>{content}</span>
+        <span dangerouslySetInnerHTML={{ __html: highlightCode(content) }} />
       </div>
     );
   };
@@ -272,7 +373,11 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                   <div className="relative group">
                     <div className="absolute top-0 left-0 w-full h-full bg-slate-900 rounded-xl opacity-0 group-hover:opacity-5 transition-opacity pointer-events-none"></div>
                     <pre className="bg-slate-900 text-slate-100 p-4 md:p-5 rounded-xl overflow-x-auto text-xs md:text-sm font-mono leading-relaxed border border-slate-800 shadow-inner">
-                      <code>{getCodeContent()}</code>
+                      <code
+                        dangerouslySetInnerHTML={{
+                          __html: highlightCode(getCodeContent()),
+                        }}
+                      />
                     </pre>
                   </div>
 
