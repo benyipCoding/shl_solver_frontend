@@ -7,13 +7,13 @@ import {
   Check,
   Terminal,
   Copy,
-  ImageIcon,
   X,
   ChevronDown,
   Lightbulb,
   ArrowLeft,
   ArrowRight,
   Eye,
+  ScanSearch,
 } from "lucide-react";
 import {
   AnalysisResult,
@@ -21,6 +21,7 @@ import {
   ResultDisplayProps,
 } from "@/interfaces/shl_solver";
 import toast from "react-hot-toast";
+import VisualDiff from "./VisualDiff";
 
 const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   const [activeTab, setActiveTab] = useState<string>("solution"); // 'solution' or 'analysis'
@@ -28,6 +29,15 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   const [isTranscriptionMode, setIsTranscriptionMode] =
     useState<boolean>(false);
   const [currentLineIndex, setCurrentLineIndex] = useState<number>(0);
+
+  const getCodeContent = () => {
+    if (!result) return "";
+    if (result.solutions && result.solutions[selectedLanguage]) {
+      return result.solutions[selectedLanguage];
+    }
+    // Fallback if the legacy structure is returned
+    return (result as any).code || "";
+  };
 
   const copyToClipboard = (text: string) => {
     const textArea = document.createElement("textarea");
@@ -39,14 +49,6 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     document.body.removeChild(textArea);
   };
 
-  const getCodeContent = () => {
-    if (!result) return "";
-    if (result.solutions && result.solutions[selectedLanguage]) {
-      return result.solutions[selectedLanguage];
-    }
-    // Fallback if the legacy structure is returned
-    return (result as any).code || "";
-  };
 
   const enterTranscriptionMode = () => {
     setCurrentLineIndex(0);
@@ -182,9 +184,9 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
 
     return (
       <div className="flex items-center flex-wrap break-all w-full">
-        <div className="flex select-none flex-shrink-0">
+        <div className="flex select-none shrink-0">
           {Array.from({ length: leadingSpacesCount }).map((_, i) => (
-            <span key={i} className="text-slate-600 font-mono text-xl mx-[1px]">
+            <span key={i} className="text-slate-600 font-mono text-xl mx-px">
               •
             </span>
           ))}
@@ -328,6 +330,16 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
               >
                 <BookOpen className="w-4 h-4 mr-2" /> 场景与考点
               </button>
+              <button
+                onClick={() => setActiveTab("visual_diff")}
+                className={`flex-1 py-3 md:py-4 font-medium text-sm flex items-center justify-center transition-colors ${
+                  activeTab === "visual_diff"
+                    ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:text-blue-400 dark:border-blue-400 dark:bg-blue-900/20"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-800"
+                }`}
+              >
+                <ScanSearch className="w-4 h-4 mr-2" /> 拍照纠错
+              </button>
             </div>
 
             {/* Content Area */}
@@ -452,6 +464,13 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {activeTab === "visual_diff" && (
+                <div className="space-y-4 md:space-y-6">
+                  {/* --- Visual Diffing / Verification Panel --- */}
+                  <VisualDiff referenceCode={getCodeContent()} />
                 </div>
               )}
             </div>
