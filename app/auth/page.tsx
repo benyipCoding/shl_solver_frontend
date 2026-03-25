@@ -195,7 +195,7 @@ const AuthContent = () => {
 
       toast.success(data.message || "重置邮件已发送，请检查您的邮箱");
       // Optional: don't auto switch, let user read message
-      // setAuthMode("login");
+      // setAuthMode("login")
     } catch (error) {
       toast.error("网络请求失败，请检查网络");
     }
