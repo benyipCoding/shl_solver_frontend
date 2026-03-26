@@ -168,7 +168,6 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         onChange={handleVerificationFileChange}
         className="hidden"
         accept="image/*"
-        capture="environment" // Hint for mobile to use camera
       />
 
       {/* Upload/Preview Area */}
