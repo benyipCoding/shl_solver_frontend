@@ -1,17 +1,45 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Image as ImageIcon, LogIn, LogOut } from "lucide-react";
+import { Image as ImageIcon, LogIn, LogOut, Coins } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
+import CreditLogModal from "./CreditLogModal";
 
 const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout, login } = useAuth();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [balance, setBalance] = useState<{
+    free_credits: number;
+    paid_credits: number;
+    total: number;
+  } | null>(null);
+
+  const [isCreditLogModalOpen, setIsCreditLogModalOpen] = useState(false);
+
   const profileRef = useRef<HTMLDivElement>(null);
   const { customFetch } = useFetch();
+
+  const fetchBalance = async () => {
+    if (!user) return;
+    try {
+      const res = await customFetch("/api/user/balance");
+      if (res.ok) {
+        const data = await res.json();
+        setBalance(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching balance:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (isProfileOpen && user) {
+      fetchBalance();
+    }
+  }, [isProfileOpen, user]);
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -119,6 +147,22 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
                 <p className="text-xs text-slate-500 truncate">{user.email}</p>
               </div>
 
+              <div className="px-3 py-2 border-b border-slate-50">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    setIsCreditLogModalOpen(true);
+                  }}
+                  className="w-full flex items-center text-sm text-slate-700 hover:bg-slate-50 transition-colors rounded-md p-2"
+                >
+                  <Coins className="w-4 h-4 mr-2 text-yellow-500" />
+                  <span className="flex-1 text-left">算力余额</span>
+                  <span className="font-semibold text-slate-900">
+                    {balance ? balance.total : "-"}
+                  </span>
+                </button>
+              </div>
+
               <div className="py-1">
                 <button
                   onClick={() => {
@@ -135,6 +179,12 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
           )}
         </div>
       )}
+
+      {/* Credit Logs Modal */}
+      <CreditLogModal
+        isOpen={isCreditLogModalOpen}
+        onClose={() => setIsCreditLogModalOpen(false)}
+      />
     </div>
   );
 };

@@ -117,6 +117,12 @@ export default function CMSPage() {
   const [activeTab, setActiveTab] = useState("users");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // 充值算力 states
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [rechargeEmail, setRechargeEmail] = useState("");
+  const [rechargePoints, setRechargePoints] = useState<number | "">("");
+  const [isRecharging, setIsRecharging] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/auth");
@@ -133,6 +139,45 @@ export default function CMSPage() {
       </div>
     );
   }
+
+  const handleRecharge = async () => {
+    if (!rechargeEmail || !rechargePoints) {
+      alert("请填写邮箱和充值点数");
+      return;
+    }
+    if (Number(rechargePoints) <= 0) {
+      alert("充值点数必须大于0");
+      return;
+    }
+
+    setIsRecharging(true);
+    try {
+      const res = await fetch("/api/wallet_credit/recharge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: rechargeEmail,
+          points: Number(rechargePoints),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "充值失败");
+      }
+
+      alert(`充值成功！当前余额：${data.data?.balance_after}`);
+      setShowRechargeModal(false);
+      setRechargeEmail("");
+      setRechargePoints("");
+      // Refresh credits logic goes here if needed
+    } catch (err: any) {
+      alert(err.message || "系统错误，请稍后重试");
+    } finally {
+      setIsRecharging(false);
+    }
+  };
 
   const renderTable = () => {
     switch (activeTab) {
@@ -443,6 +488,16 @@ export default function CMSPage() {
               />
             </div>
 
+            {activeTab === "credits" && (
+              <button
+                onClick={() => setShowRechargeModal(true)}
+                className="flex items-center justify-center p-2 text-sm font-medium text-white rounded-lg bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 dark:focus:ring-green-800"
+              >
+                <Plus className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">充值算力</span>
+              </button>
+            )}
+
             <button className="flex items-center justify-center p-2 text-sm font-medium text-white rounded-lg bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800">
               <Plus className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">新增</span>
@@ -504,6 +559,80 @@ export default function CMSPage() {
           </div>
         </div>
       </main>
+
+      {/* Recharge Modal */}
+      {showRechargeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                充值算力
+              </h3>
+              <button
+                onClick={() => setShowRechargeModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  用户邮箱
+                </label>
+                <input
+                  type="email"
+                  value={rechargeEmail}
+                  onChange={(e) => setRechargeEmail(e.target.value)}
+                  placeholder="admin@test.com"
+                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  充值点数
+                </label>
+                <input
+                  type="number"
+                  value={rechargePoints}
+                  onChange={(e) =>
+                    setRechargePoints(
+                      e.target.value ? Number(e.target.value) : ""
+                    )
+                  }
+                  placeholder="100"
+                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowRechargeModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRecharge}
+                disabled={isRecharging}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isRecharging ? (
+                  <span className="flex items-center">
+                    <Activity className="animate-spin w-4 h-4 mr-2" />
+                    充值中...
+                  </span>
+                ) : (
+                  "确认充值"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

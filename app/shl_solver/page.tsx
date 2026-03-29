@@ -277,9 +277,15 @@ const SHLSolverPage = () => {
               <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4 md:mb-6">
                 如果这个工具帮助到了您，欢迎随缘打赏。
                 <br />
-                您的支持将直接用于补贴高昂的 AI Token
-                服务器费用，让项目能持续免费开放！
+                <span className="text-rose-600 dark:text-white font-bold">
+                  如果充值算力请务必打赏时备注账号邮箱
+                </span>
+                ，以便核对。🙏
               </p>
+
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 p-2 md:p-3 rounded-lg mb-4 md:mb-6 border border-indigo-100 dark:border-indigo-800/50 text-sm font-medium">
+                💡 充值标准：10元 = 100点算力
+              </div>
 
               <div className="bg-slate-50 dark:bg-slate-900/50 p-4 md:p-6 rounded-xl border border-slate-200 dark:border-slate-700 mb-4 md:mb-6 w-full">
                 <div className="flex flex-row items-center justify-center gap-3 md:gap-8">
