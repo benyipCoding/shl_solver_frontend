@@ -8,10 +8,13 @@ import {
   AlertTriangle,
   FileText,
   ChevronRight,
-  User,
+  User as UserIcon,
   Loader2,
+  Image as ImageIcon,
+  Cpu,
 } from "lucide-react";
 import { SHLSolverHistoryItem } from "@/interfaces/history";
+import { useAuth } from "@/context/AuthContext";
 
 interface HistoryDrawerProps {
   isOpen: boolean;
@@ -36,6 +39,7 @@ export default function HistoryDrawer({
   onClose,
   onSelect,
 }: HistoryDrawerProps) {
+  const { user } = useAuth();
   const [historyItems, setHistoryItems] = useState<SHLSolverHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -154,7 +158,7 @@ export default function HistoryDrawer({
             >
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  <User className="w-3 h-3" />
+                  <UserIcon className="w-3 h-3" />
                   <span className="truncate max-w-20 font-semibold text-slate-700 dark:text-slate-300">
                     {item.username}
                   </span>
@@ -177,9 +181,26 @@ export default function HistoryDrawer({
                       : item.error_message || "等待分析..."}
                   </p>
                   <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    {item.token_count > 0 && (
-                      <span>{item.token_count} toks</span>
+                    {/* 给普通用户显示的通用信息，不至于留空 */}
+                    <span className="flex items-center gap-1">
+                      <ImageIcon className="w-3 h-3" />
+                      {item.image_urls?.length || 0} 张图片
+                    </span>
+                    {item.model && (
+                      <span className="flex items-center gap-1">
+                        <span className="text-slate-300 mx-0.5">•</span>
+                        <Cpu className="w-3 h-3" />
+                        {item.model}
+                      </span>
                     )}
+                    {/* 只有管理员/超级管理员才显示的 Token 消耗 */}
+                    {(user?.is_staff || user?.is_superuser) &&
+                      item.token_count > 0 && (
+                        <span className="flex items-center gap-1">
+                          <span className="text-slate-300 mx-0.5">•</span>
+                          {item.token_count} toks
+                        </span>
+                      )}
                   </div>
                 </div>
 
