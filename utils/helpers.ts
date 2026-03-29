@@ -105,6 +105,7 @@ export const highlightCode = (code: string): string => {
     "default",
     "in",
     "of",
+    "except",
   ];
   const keywords = [
     "def",
