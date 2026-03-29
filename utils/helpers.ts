@@ -67,3 +67,113 @@ export const fileToBase64 = (file: File): Promise<string> => {
     reader.onerror = (error) => reject(error);
   });
 };
+
+/**
+ * 轻量代码高亮（基于正则）
+ * @param code 原始代码字符串
+ * @returns 可用于 dangerouslySetInnerHTML 的 HTML 字符串
+ */
+export const highlightCode = (code: string): string => {
+  if (!code) return "";
+
+  // Escape HTML entities to prevent rendering issues
+  let html = code
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // VS Code Dark+ inspired keyword groups
+  const controlFlow = [
+    "if",
+    "else",
+    "elif",
+    "for",
+    "while",
+    "return",
+    "switch",
+    "case",
+    "break",
+    "continue",
+    "try",
+    "catch",
+    "finally",
+    "await",
+    "async",
+    "import",
+    "from",
+    "export",
+    "default",
+    "in",
+    "of",
+  ];
+  const keywords = [
+    "def",
+    "class",
+    "print",
+    "public",
+    "private",
+    "protected",
+    "static",
+    "void",
+    "int",
+    "boolean",
+    "double",
+    "float",
+    "char",
+    "byte",
+    "new",
+    "var",
+    "let",
+    "const",
+    "function",
+    "True",
+    "False",
+    "None",
+    "null",
+    "undefined",
+    "this",
+    "self",
+    "String",
+    "console",
+    "log",
+    "Math",
+  ];
+
+  // Tokenize: entities, comments, strings, numbers, functions, words
+  const regex =
+    /(&amp;|&lt;|&gt;|#.*|\/\/.*|\/\*[\s\S]*?\*\/)|((["'`])(?:\\.|[^\\])*?\3)|\b(\d+)\b|\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\s*\()|\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g;
+
+  return html.replace(
+    regex,
+    (match, entityOrComment, str, quote, num, func, word) => {
+      // Ignore HTML entities to prevent breaking them
+      if (entityOrComment) {
+        if (match === "&amp;" || match === "&lt;" || match === "&gt;") {
+          return match;
+        }
+        return `<span style="color: #6a9955; font-style: italic;">${match}</span>`;
+      }
+      if (str) return `<span style="color: #ce9178;">${match}</span>`;
+      if (num) return `<span style="color: #b5cea8;">${match}</span>`;
+      if (func) {
+        if (controlFlow.includes(func)) {
+          return `<span style="color: #c678dd; font-weight: 500;">${func}</span>`;
+        }
+        if (keywords.includes(func)) {
+          return `<span style="color: #569cd6; font-weight: 500;">${func}</span>`;
+        }
+        return `<span style="color: #dcdcaa;">${func}</span>`;
+      }
+      if (word) {
+        if (controlFlow.includes(word)) {
+          return `<span style="color: #c678dd; font-weight: 500;">${word}</span>`;
+        }
+        if (keywords.includes(word)) {
+          return `<span style="color: #569cd6; font-weight: 500;">${word}</span>`;
+        }
+        return `<span style="color: #9cdcfe;">${word}</span>`;
+      }
+      return match;
+    }
+  );
+};
