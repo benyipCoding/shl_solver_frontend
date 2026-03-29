@@ -29,6 +29,8 @@ export interface User {
   id: number;
   email: string;
   username: string;
+  is_staff: boolean;
+  is_superuser: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
