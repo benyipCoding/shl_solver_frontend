@@ -43,6 +43,64 @@ const SHLSolverPage = () => {
   const [isHistoryView, setIsHistoryView] = useState(false); // Track if viewing history
   const [showSponsorModal, setShowSponsorModal] = useState(false);
 
+  const pollTask = async (taskId: string) => {
+    setLoading(true);
+    let isCompleted = false;
+    const pollDelay = 3000; // 每3秒查询一次
+
+    while (!isCompleted) {
+      // 如果本地存储的taskId变了或者被清空了，说明开启了新任务或重置了，则停止当前轮询
+      const currentTaskId = sessionStorage.getItem("shl_task_id");
+      if (currentTaskId !== taskId) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollDelay));
+      try {
+        const statusRes = await customFetch(
+          `/api/shl_analyze/task/${taskId}`,
+          {},
+          true
+        );
+        const statusData = await statusRes.json();
+
+        if (!statusRes.ok) {
+          setError(
+            `查询任务状态失败: ${statusData.error || statusRes.statusText}`
+          );
+          isCompleted = true;
+          sessionStorage.removeItem("shl_task_id");
+          sessionStorage.removeItem("shl_task_images");
+          setLoading(false);
+          break;
+        }
+
+        if (
+          statusData.status === "COMPLETED" ||
+          statusData.status === "completed"
+        ) {
+          setResult(statusData.result);
+          isCompleted = true;
+          sessionStorage.removeItem("shl_task_id");
+          sessionStorage.removeItem("shl_task_images");
+          setLoading(false);
+        } else if (
+          statusData.status === "FAILED" ||
+          statusData.status === "failed"
+        ) {
+          setError(`分析失败: ${statusData.error || "发生了未知错误"}`);
+          setResult(null);
+          isCompleted = true;
+          sessionStorage.removeItem("shl_task_id");
+          sessionStorage.removeItem("shl_task_images");
+          setLoading(false);
+        }
+      } catch (err: any) {
+        console.error("Task Polling Error:", err);
+      }
+    }
+  };
+
   const analyzeProblem = async (imagesData: ImageData[]) => {
     if (imagesData.length === 0) return;
     try {
@@ -68,13 +126,27 @@ const SHLSolverPage = () => {
 
       if (!res.ok) {
         setError(`SHL分析失败: ${data.error || res.statusText}`);
+        setLoading(false);
         return;
       }
-      setResult(data);
+
+      // 如果返回了任务ID，则进入轮询
+      if (data.task_id) {
+        sessionStorage.setItem("shl_task_id", data.task_id);
+        try {
+          sessionStorage.setItem("shl_task_images", JSON.stringify(imagesData));
+        } catch (e) {
+          console.error("Failed to save images to sessionStorage", e);
+        }
+        pollTask(data.task_id);
+      } else {
+        // 如果后端依然同步返回结果
+        setResult(data);
+        setLoading(false);
+      }
     } catch (error: any) {
       console.error("SHL Analysis Error:", error);
       setError("上传的截图有无法识别的内容");
-    } finally {
       setLoading(false);
     }
   };
@@ -130,6 +202,27 @@ const SHLSolverPage = () => {
       setSelectedModel(models[0].id); // 默认选择第一个模型
     }
   }, [models]);
+
+  // 恢复之前的轮询状态
+  useEffect(() => {
+    const savedTaskId = sessionStorage.getItem("shl_task_id");
+    if (savedTaskId) {
+      const savedImagesStr = sessionStorage.getItem("shl_task_images");
+      if (savedImagesStr) {
+        try {
+          const imagesData = JSON.parse(savedImagesStr) as ImageData[];
+          const displayUrls = imagesData.map(
+            (img) => `data:${img.mimeType || "image/jpeg"};base64,${img.data}`
+          );
+          dispatch(addImages({ previews: displayUrls, data: imagesData }));
+        } catch (e) {
+          console.error("Failed to restore images from sessionStorage", e);
+        }
+      }
+      pollTask(savedTaskId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 拦截页面刷新或关闭（防止大模型分析期间误触）
   useEffect(() => {
@@ -242,6 +335,8 @@ const SHLSolverPage = () => {
           <ImageUploader
             onAnalyze={analyzeProblem}
             onClearResult={() => {
+              sessionStorage.removeItem("shl_task_id");
+              sessionStorage.removeItem("shl_task_images");
               setResult(null);
               setIsHistoryView(false); // Clear history view when result cleared
             }}
