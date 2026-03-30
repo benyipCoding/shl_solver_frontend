@@ -131,6 +131,22 @@ const SHLSolverPage = () => {
     }
   }, [models]);
 
+  // 拦截页面刷新或关闭（防止大模型分析期间误触）
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (loading) {
+        e.preventDefault();
+        e.returnValue =
+          "分析正在进行中，此时离开将丢失当前进度并且仍会消耗算力，确定要离开吗？";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [loading]);
+
   // --- Main SHLSolverPage View ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 dark:bg-slate-950 dark:text-slate-100 dark:selection:bg-blue-900 pb-10 relative flex flex-col transition-colors duration-300">
