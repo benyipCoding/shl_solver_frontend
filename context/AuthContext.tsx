@@ -42,7 +42,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = (userData: User) => {
     setUser(userData);
-    localStorage.setItem("user_info", JSON.stringify(userData));
+    localStorage.setItem(
+      "user_info",
+      JSON.stringify({
+        id: userData.id,
+        username: userData.username,
+        email: userData.email,
+      })
+    );
   };
 
   const logout = async () => {
