@@ -12,6 +12,7 @@ export interface SHLSolverHistoryItem {
   status: "pending" | "completed" | "failed" | string; // Allow string to correspond to backend str
   error_message?: string;
   created_at: string; // ISO Date string
+  is_readed: boolean; // New field to track if the item has been read by the user
 }
 
 export interface SHLSolverHistoryResponse {

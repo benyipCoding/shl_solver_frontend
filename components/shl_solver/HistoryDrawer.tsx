@@ -150,12 +150,45 @@ export default function HistoryDrawer({
           {historyItems.map((item) => (
             <div
               key={item.id}
-              onClick={() => {
+              onClick={async () => {
                 onSelect(item);
                 if (window.innerWidth < 768) onClose(); // Auto close on mobile
+
+                if (item.is_readed === false) {
+                  try {
+                    const res = await fetch(`/api/shl_history/${item.id}`, {
+                      method: "PATCH",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ is_readed: true }),
+                    });
+
+                    if (res.ok) {
+                      setHistoryItems((prev) =>
+                        prev.map((h) =>
+                          h.id === item.id ? { ...h, is_readed: true } : h
+                        )
+                      );
+                    }
+                  } catch (error) {
+                    console.error("Failed to mark history as read:", error);
+                  }
+                }
               }}
-              className="group cursor-pointer bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 rounded-xl p-3 transition-all shadow-sm hover:shadow-md active:scale-[0.99] relative overflow-hidden"
+              className={`group cursor-pointer bg-white dark:bg-slate-800 border rounded-xl p-3 transition-all shadow-sm hover:shadow-md active:scale-[0.99] relative overflow-hidden ${
+                item.is_readed === false
+                  ? "border-blue-200 dark:border-blue-800"
+                  : "border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500"
+              }`}
             >
+              {item.is_readed === false && (
+                <div className="absolute -top-2 right-0">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-bl-xl rounded-tr-lg text-[10px] font-bold bg-blue-500 text-white shadow-sm z-10">
+                    NEW
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                   <UserIcon className="w-3 h-3" />

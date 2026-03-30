@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Cpu,
@@ -42,6 +42,23 @@ const SHLSolverPage = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryView, setIsHistoryView] = useState(false); // Track if viewing history
   const [showSponsorModal, setShowSponsorModal] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await customFetch("/api/shl_history/unread_count", {}, true);
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadCount(data.unread_count || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch unread count:", err);
+    }
+  }, [customFetch]);
+
+  useEffect(() => {
+    fetchUnreadCount();
+  }, [isHistoryOpen, fetchUnreadCount]);
 
   const pollTask = async (taskId: string) => {
     setLoading(true);
@@ -308,10 +325,13 @@ const SHLSolverPage = () => {
                   历史记录
                 </span>
               </div>
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white dark:border-slate-900"></span>
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-2 -right-3 flex h-4 min-w-4 items-center justify-center">
+                  <span className="relative flex justify-center items-center rounded-full w-6 h-6 text-xs font-bold text-white bg-red-500 border-2 border-white dark:border-slate-900 leading-none">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                </span>
+              )}
             </button>
 
             {/* Login & Multi-image indicator */}
