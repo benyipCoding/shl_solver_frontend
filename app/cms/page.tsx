@@ -116,6 +116,11 @@ export default function CMSPage() {
 
   const [activeTab, setActiveTab] = useState("users");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAdminStatusChecked, setIsAdminStatusChecked] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [adminRole, setAdminRole] = useState<"SuperAdmin" | "Staff" | null>(
+    null
+  );
 
   // 充值算力 states
   const [showRechargeModal, setShowRechargeModal] = useState(false);
@@ -124,14 +129,42 @@ export default function CMSPage() {
   const [isRecharging, setIsRecharging] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.push("/auth");
-    } else if (!isLoading && user && !user.is_staff && !user.is_superuser) {
-      router.push("/");
-    }
+    const checkPermission = async () => {
+      if (!isLoading && !user) {
+        router.push("/auth");
+        return;
+      }
+
+      if (!isLoading && user) {
+        try {
+          const res = await fetch("/api/user/me");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.is_superuser) {
+              setHasPermission(true);
+              setAdminRole("SuperAdmin");
+            } else if (data.is_staff) {
+              setHasPermission(true);
+              setAdminRole("Staff");
+            } else {
+              router.push("/");
+            }
+          } else {
+            router.push("/auth");
+          }
+        } catch (error) {
+          console.error("Failed to verify user permissions", error);
+          router.push("/");
+        } finally {
+          setIsAdminStatusChecked(true);
+        }
+      }
+    };
+
+    checkPermission();
   }, [user, isLoading, router]);
 
-  if (isLoading || !user || (!user.is_staff && !user.is_superuser)) {
+  if (isLoading || !isAdminStatusChecked || !hasPermission) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-500">
         <Activity className="animate-spin w-8 h-8 mr-2" />
@@ -455,7 +488,7 @@ export default function CMSPage() {
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <div className="flex items-center px-4 py-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-lg">
             <span className="w-2 h-2 mr-2 bg-green-500 rounded-full"></span>
-            当前身份：{user.is_superuser ? "SuperAdmin" : "Staff"}
+            当前身份：{adminRole}
           </div>
         </div>
       </aside>
