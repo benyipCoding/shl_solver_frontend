@@ -177,12 +177,12 @@ export default function HistoryDrawer({
               key={item.id}
               onClick={() => handleItemClick(item)}
               className={`group cursor-pointer bg-white dark:bg-slate-800 border rounded-xl p-3 transition-all shadow-sm hover:shadow-md active:scale-[0.99] relative overflow-hidden ${
-                item.is_readed === false && user?.username === item.username
+                item.is_readed === false
                   ? "border-blue-200 dark:border-blue-800"
                   : "border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500"
               }`}
             >
-              {item.is_readed === false && user?.username === item.username && (
+              {item.is_readed === false && (
                 <div className="absolute -top-2 right-0">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-bl-xl rounded-tr-lg text-[10px] font-bold bg-blue-500 text-white shadow-sm z-10">
                     NEW
