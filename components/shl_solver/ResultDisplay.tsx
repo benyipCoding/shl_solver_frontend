@@ -14,6 +14,10 @@ import {
   ArrowRight,
   Eye,
   ScanSearch,
+  Zap,
+  RefreshCw,
+  BrainCircuit,
+  Clock,
 } from "lucide-react";
 import {
   AnalysisResult,
@@ -375,14 +379,111 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             </div>
           </div>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 min-h-75 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600 transition-colors">
-            <Terminal className="w-12 h-12 md:w-16 md:h-16 mb-4 opacity-20" />
-            <p className="text-base md:text-lg font-medium opacity-50">
-              等待题目解析...
-            </p>
-            <p className="text-xs md:text-sm opacity-40 mt-2 text-center">
-              上传左侧图片后，结果将显示在这里
-            </p>
+          <div className="h-full flex flex-col justify-center text-slate-600 p-6 md:p-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 min-h-75 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400 transition-colors overflow-y-auto">
+            <div className="max-w-xl mx-auto w-full py-4">
+              <div className="flex items-center justify-center mb-6 md:mb-8 text-indigo-500 dark:text-indigo-400">
+                <Lightbulb className="w-7 h-7 md:w-8 md:h-8 mr-2 md:mr-3" />
+                <h3 className="text-lg md:text-xl font-bold text-slate-800 dark:text-slate-100">
+                  使用指南
+                </h3>
+              </div>
+
+              <div className="space-y-5 md:space-y-6 text-sm md:text-base">
+                {/* 算力消耗 */}
+                <div className="flex items-start">
+                  <div className="bg-blue-100 dark:bg-blue-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-blue-600 dark:text-blue-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-blue-200/50 dark:border-blue-800/50">
+                    <Zap className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      算力消耗标准
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      Flash模型解题{" "}
+                      <span className="font-medium text-blue-600 dark:text-blue-400">
+                        10点
+                      </span>{" "}
+                      | Pro模型解题{" "}
+                      <span className="font-medium text-blue-600 dark:text-blue-400">
+                        30点
+                      </span>{" "}
+                      | 拍照纠错{" "}
+                      <span className="font-medium text-blue-600 dark:text-blue-400">
+                        5点
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 算力退还 */}
+                <div className="flex items-start">
+                  <div className="bg-green-100 dark:bg-green-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-green-600 dark:text-green-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-green-200/50 dark:border-green-800/50">
+                    <RefreshCw className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      算力扣费与退还
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      若AI解题失败，系统将全额退还算力。您可以在右上角用户菜单中查看{" "}
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        算力明细
+                      </span>
+                      。如有异常请随时联系作者。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 模型建议 */}
+                <div className="flex items-start">
+                  <div className="bg-violet-100 dark:bg-violet-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-violet-600 dark:text-violet-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-violet-200/50 dark:border-violet-800/50">
+                    <BrainCircuit className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      选择合适的模型
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      Pro模型逻辑更强，适合复杂题目，但分析耗时稍长，敬请耐心等待。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 纠错排查 */}
+                <div className="flex items-start">
+                  <div className="bg-rose-100 dark:bg-rose-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-rose-600 dark:text-rose-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-rose-200/50 dark:border-rose-800/50">
+                    <ScanSearch className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      遇到 Bug 了？
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      代码抄完跑不通？推荐优先切换到{" "}
+                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                        拍照纠错
+                      </span>{" "}
+                      面板，快速排查排版和代码手误。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 会员与充值 */}
+                <div className="flex items-start">
+                  <div className="bg-amber-100 dark:bg-amber-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-amber-600 dark:text-amber-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-amber-200/50 dark:border-amber-800/50">
+                    <Clock className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      关于充值到账
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      由于目前算力配额为人工手动发放，可能存在延迟。若遇紧急需求，可直接联系作者微信加急。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

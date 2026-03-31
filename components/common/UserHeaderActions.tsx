@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Image as ImageIcon, LogIn, LogOut, Coins } from "lucide-react";
+import { Image as ImageIcon, LogIn, LogOut, Coins, List } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import CreditLogModal from "./CreditLogModal";
@@ -148,18 +148,22 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
               </div>
 
               <div className="px-3 py-2 border-b border-slate-50">
-                <button
-                  onClick={() => {
-                    setIsProfileOpen(false);
-                    setIsCreditLogModalOpen(true);
-                  }}
-                  className="w-full flex items-center text-sm text-slate-700 hover:bg-slate-50 transition-colors rounded-md p-2"
-                >
+                <div className="w-full flex items-center text-sm text-slate-700 rounded-md p-2">
                   <Coins className="w-4 h-4 mr-2 text-yellow-500" />
                   <span className="flex-1 text-left">算力余额</span>
                   <span className="font-semibold text-slate-900">
                     {balance ? balance.total : "-"}
                   </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    setIsCreditLogModalOpen(true);
+                  }}
+                  className="w-full flex items-center text-sm text-slate-700 hover:bg-slate-50 transition-colors rounded-md p-2 mt-1"
+                >
+                  <List className="w-4 h-4 mr-2 text-slate-400" />
+                  <span className="flex-1 text-left">算力明细</span>
                 </button>
               </div>
 
