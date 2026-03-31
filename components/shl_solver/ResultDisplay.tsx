@@ -478,7 +478,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                       关于充值到账
                     </h4>
                     <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
-                      由于目前算力配额为人工手动发放，可能存在延迟。若遇紧急需求，可直接联系作者微信加急。
+                      由于目前算力配额为人工手动发放，可能存在延迟，推荐考前一天补充算力。若遇紧急需求，可直接联系作者微信加急。
                     </p>
                   </div>
                 </div>
