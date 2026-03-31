@@ -88,6 +88,7 @@ const SHLSolverPage = () => {
           isCompleted = true;
           sessionStorage.removeItem("shl_task_id");
           sessionStorage.removeItem("shl_task_images");
+          sessionStorage.removeItem("shl_task_model_id");
           setLoading(false);
           break;
         }
@@ -100,6 +101,7 @@ const SHLSolverPage = () => {
           isCompleted = true;
           sessionStorage.removeItem("shl_task_id");
           sessionStorage.removeItem("shl_task_images");
+          sessionStorage.removeItem("shl_task_model_id");
           setLoading(false);
         } else if (
           statusData.status === "FAILED" ||
@@ -110,6 +112,7 @@ const SHLSolverPage = () => {
           isCompleted = true;
           sessionStorage.removeItem("shl_task_id");
           sessionStorage.removeItem("shl_task_images");
+          sessionStorage.removeItem("shl_task_model_id");
           setLoading(false);
         }
       } catch (err: any) {
@@ -150,6 +153,9 @@ const SHLSolverPage = () => {
       // 如果返回了任务ID，则进入轮询
       if (data.task_id) {
         sessionStorage.setItem("shl_task_id", data.task_id);
+        if (selectedModel) {
+          sessionStorage.setItem("shl_task_model_id", String(selectedModel));
+        }
         try {
           sessionStorage.setItem("shl_task_images", JSON.stringify(imagesData));
         } catch (e) {
@@ -216,7 +222,12 @@ const SHLSolverPage = () => {
 
   useEffect(() => {
     if (models.length > 0) {
-      setSelectedModel(models[0].id); // 默认选择第一个模型
+      const savedModelId = sessionStorage.getItem("shl_task_model_id");
+      if (savedModelId && models.some((m) => m.id === Number(savedModelId))) {
+        setSelectedModel(Number(savedModelId));
+      } else {
+        setSelectedModel(models[0].id); // 默认选择第一个模型
+      }
     }
   }, [models]);
 
@@ -300,7 +311,8 @@ const SHLSolverPage = () => {
               <select
                 value={String(selectedModel)}
                 onChange={(e) => setSelectedModel(Number(e.target.value))}
-                className="w-full appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
+                disabled={loading}
+                className="w-full appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
               >
                 {models.map((model) => (
                   <option key={model.id} value={model.id}>
@@ -357,6 +369,7 @@ const SHLSolverPage = () => {
             onClearResult={() => {
               sessionStorage.removeItem("shl_task_id");
               sessionStorage.removeItem("shl_task_images");
+              sessionStorage.removeItem("shl_task_model_id");
               setResult(null);
               setIsHistoryView(false); // Clear history view when result cleared
             }}
