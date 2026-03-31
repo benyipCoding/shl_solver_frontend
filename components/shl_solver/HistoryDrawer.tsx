@@ -102,6 +102,31 @@ export default function HistoryDrawer({
     }
   }, [isOpen]);
 
+  const handleItemClick = async (item: SHLSolverHistoryItem) => {
+    onSelect(item);
+    if (window.innerWidth < 768) onClose(); // Auto close on mobile
+
+    if (item.is_readed === false && user?.username === item.username) {
+      try {
+        const res = await fetch(`/api/shl_history/${item.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ is_readed: true }),
+        });
+
+        if (res.ok) {
+          setHistoryItems((prev) =>
+            prev.map((h) => (h.id === item.id ? { ...h, is_readed: true } : h))
+          );
+        }
+      } catch (error) {
+        console.error("Failed to mark history as read:", error);
+      }
+    }
+  };
+
   if (!isVisible && !isOpen) return null;
 
   return (
@@ -150,39 +175,14 @@ export default function HistoryDrawer({
           {historyItems.map((item) => (
             <div
               key={item.id}
-              onClick={async () => {
-                onSelect(item);
-                if (window.innerWidth < 768) onClose(); // Auto close on mobile
-
-                if (item.is_readed === false) {
-                  try {
-                    const res = await fetch(`/api/shl_history/${item.id}`, {
-                      method: "PATCH",
-                      headers: {
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({ is_readed: true }),
-                    });
-
-                    if (res.ok) {
-                      setHistoryItems((prev) =>
-                        prev.map((h) =>
-                          h.id === item.id ? { ...h, is_readed: true } : h
-                        )
-                      );
-                    }
-                  } catch (error) {
-                    console.error("Failed to mark history as read:", error);
-                  }
-                }
-              }}
+              onClick={() => handleItemClick(item)}
               className={`group cursor-pointer bg-white dark:bg-slate-800 border rounded-xl p-3 transition-all shadow-sm hover:shadow-md active:scale-[0.99] relative overflow-hidden ${
-                item.is_readed === false
+                item.is_readed === false && user?.username === item.username
                   ? "border-blue-200 dark:border-blue-800"
                   : "border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500"
               }`}
             >
-              {item.is_readed === false && (
+              {item.is_readed === false && user?.username === item.username && (
                 <div className="absolute -top-2 right-0">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-bl-xl rounded-tr-lg text-[10px] font-bold bg-blue-500 text-white shadow-sm z-10">
                     NEW
