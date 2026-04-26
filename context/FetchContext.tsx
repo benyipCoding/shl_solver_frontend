@@ -33,7 +33,6 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
   ): Promise<Response> => {
     try {
       const response = await fetch(input, init);
-      console.log({ response });
 
       if (response.status === 401) {
         // 401 错误，尝试刷新 Token

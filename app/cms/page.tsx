@@ -140,7 +140,6 @@ export default function CMSPage() {
           const res = await fetch("/api/user/me");
           if (res.ok) {
             const data = await res.json().then((res) => res.data);
-            console.log(data);
 
             if (data.is_superuser) {
               setHasPermission(true);
