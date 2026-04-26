@@ -66,7 +66,8 @@ export class ShapeRenderer {
       if (!this.p1 || !this.p2) return;
 
       const color = this.config.color || "#2962FF";
-      const lineWidth = this.config.lineWidth || 2;
+      const selectedBoost = this.config.isSelected ? 1 : 0;
+      const lineWidth = (this.config.lineWidth || 2) + selectedBoost;
 
       if (this.type === "line") {
         ctx.lineWidth = lineWidth;
@@ -101,7 +102,7 @@ export class ShapeRenderer {
 
         this.fibY.forEach((y: any, i: any) => {
           if (y === null) return;
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 1 + selectedBoost * 0.5;
           const levelColor = this.config.fibColors
             ? this.config.fibColors[i]
             : color;
@@ -211,6 +212,7 @@ export class ShapePrimitive {
     this.config = {
       color: "#2962ff",
       lineWidth: 2,
+      isSelected: false,
       fillBaseColor: "#2962ff",
       fibColors: [
         "#787b86",
@@ -260,6 +262,11 @@ export class ShapePrimitive {
   }
   updateConfig(newConfig: any) {
     this.config = { ...this.config, ...newConfig };
+    if (this.requestUpdate) this.requestUpdate();
+  }
+  setSelected(isSelected: boolean) {
+    if (this.config.isSelected === isSelected) return;
+    this.config = { ...this.config, isSelected };
     if (this.requestUpdate) this.requestUpdate();
   }
 }

@@ -31,6 +31,7 @@ import {
 // 4. React 主组件
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
+const SELECTED_LINE_WIDTH_BOOST = 1;
 
 const createDefaultIndicatorConfig = () => ({
   emas: [
@@ -176,6 +177,68 @@ export default function ChartApp() {
 
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
 
+  const selectedShapeIdRef = useRef<string | null>(null);
+  const selectedIndicatorRef = useRef<any>({ kind: null, id: null });
+  const indConfigRef = useRef(indConfig);
+  useEffect(() => {
+    indConfigRef.current = indConfig;
+  }, [indConfig]);
+
+  const applyIndicatorSelectionStyles = useCallback(
+    (configOverride: any = null) => {
+      const cfg = configOverride || indConfigRef.current;
+      const selected = selectedIndicatorRef.current;
+
+      cfg.emas.forEach((ema: any) => {
+        const series = emaSeriesRefs.current[ema.id];
+        if (!series) return;
+        series.applyOptions({
+          lineWidth:
+            ema.lineWidth +
+            (selected.kind === "ema" && selected.id === ema.id
+              ? SELECTED_LINE_WIDTH_BOOST
+              : 0),
+        });
+      });
+
+      if (macdLineSeriesRef.current) {
+        macdLineSeriesRef.current.applyOptions({
+          lineWidth:
+            cfg.macd.lineWidth +
+            (selected.kind === "macd" ? SELECTED_LINE_WIDTH_BOOST : 0),
+        });
+      }
+
+      if (macdSignalSeriesRef.current) {
+        macdSignalSeriesRef.current.applyOptions({
+          lineWidth:
+            cfg.macd.lineWidth +
+            (selected.kind === "signal" ? SELECTED_LINE_WIDTH_BOOST : 0),
+        });
+      }
+    },
+    []
+  );
+
+  const setSelectedIndicator = useCallback(
+    (nextSelection: any) => {
+      const next = nextSelection || { kind: null, id: null };
+      const prev = selectedIndicatorRef.current;
+      if (prev.kind === next.kind && prev.id === next.id) return;
+      selectedIndicatorRef.current = next;
+      applyIndicatorSelectionStyles();
+    },
+    [applyIndicatorSelectionStyles]
+  );
+
+  const detachShapeFromMainSeries = useCallback((shape: any) => {
+    if (!shape || !seriesRef.current) return;
+    // Primitive detach may wait for next invalidation to repaint; force one now.
+    const requestUpdate = shape.requestUpdate;
+    seriesRef.current.detachPrimitive(shape);
+    if (typeof requestUpdate === "function") requestUpdate();
+  }, []);
+
   const [mode, setMode] = useState("idle");
   const [drawType, setDrawType] = useState("line");
   const [, setLines] = useState([]);
@@ -205,6 +268,107 @@ export default function ChartApp() {
     dragStartP2: null,
     lastHoveredTime: null,
   });
+
+  const setSelectedShape = useCallback((shape: any) => {
+    const prevId = selectedShapeIdRef.current;
+    if (prevId && (!shape || prevId !== shape.id)) {
+      const prevShape = stateRef.current.lines.find((l) => l.id === prevId);
+      prevShape?.setSelected?.(false);
+    }
+
+    if (!shape) {
+      selectedShapeIdRef.current = null;
+      return;
+    }
+
+    selectedShapeIdRef.current = shape.id;
+    shape.setSelected?.(true);
+  }, []);
+
+  const clearAllSelections = useCallback(() => {
+    setSelectedShape(null);
+    setSelectedIndicator(null);
+  }, [setSelectedShape, setSelectedIndicator]);
+
+  const getEpochTime = useCallback((time: any) => {
+    if (typeof time === "number") return time;
+    if (time && typeof time.timestamp === "number") return time.timestamp;
+    return null;
+  }, []);
+
+  const findClosestEmaAtPoint = useCallback(
+    (time: any, y: number) => {
+      if (!seriesRef.current) return null;
+      const targetTime = getEpochTime(time);
+      if (targetTime === null) return null;
+
+      const index = fullDataRef.current.findIndex((d) => d.time === targetTime);
+      if (index === -1) return null;
+
+      let best: any = null;
+      const threshold = 8;
+      indConfigRef.current.emas.forEach((ema: any) => {
+        const emaPoint = fullEmaDataRef.current[ema.id]?.[index];
+        if (!emaPoint) return;
+        const yCoord = seriesRef.current.priceToCoordinate(emaPoint.value);
+        if (yCoord === null) return;
+        const dist = Math.abs(y - yCoord);
+        if (dist <= threshold && (!best || dist < best.dist)) {
+          best = { id: ema.id, dist };
+        }
+      });
+
+      return best?.id || null;
+    },
+    [getEpochTime]
+  );
+
+  const findClosestMacdAtPoint = useCallback(
+    (time: any, y: number) => {
+      const targetTime = getEpochTime(time);
+      if (targetTime === null) return null;
+
+      const index = fullMacdDataRef.current.findIndex(
+        (d) => d.time === targetTime
+      );
+      if (index === -1) return null;
+
+      const point = fullMacdDataRef.current[index];
+      if (!point) return null;
+
+      const threshold = 8;
+      let best: any = null;
+
+      if (macdLineSeriesRef.current) {
+        const yMacd = macdLineSeriesRef.current.priceToCoordinate(point.macd);
+        if (yMacd !== null) {
+          const dist = Math.abs(y - yMacd);
+          if (dist <= threshold) {
+            best = { kind: "macd", dist };
+          }
+        }
+      }
+
+      if (macdSignalSeriesRef.current) {
+        const ySignal = macdSignalSeriesRef.current.priceToCoordinate(
+          point.signal
+        );
+        if (ySignal !== null) {
+          const dist = Math.abs(y - ySignal);
+          if (dist <= threshold && (!best || dist < best.dist)) {
+            best = { kind: "signal", dist };
+          }
+        }
+      }
+
+      return best?.kind || null;
+    },
+    [getEpochTime]
+  );
+
+  useEffect(() => {
+    applyIndicatorSelectionStyles();
+  }, [indConfig, applyIndicatorSelectionStyles]);
 
   const updateLegend = useCallback(
     (hoveredTime: any) => {
@@ -331,6 +495,7 @@ export default function ChartApp() {
 
   useEffect(() => {
     setIsPlaying(false);
+    clearAllSelections();
     setTrades([]);
     Object.values(orderLinesRef.current).forEach((lines) => {
       if (lines.entry && seriesRef.current)
@@ -401,6 +566,20 @@ export default function ChartApp() {
 
   const applyIndicatorConfig = () => {
     const currentEmaIds = draftConfig.emas.map((e) => e.id);
+    if (
+      selectedIndicatorRef.current.kind === "ema" &&
+      !currentEmaIds.includes(selectedIndicatorRef.current.id)
+    ) {
+      selectedIndicatorRef.current = { kind: null, id: null };
+    }
+    if (
+      !draftConfig.macd.enabled &&
+      (selectedIndicatorRef.current.kind === "macd" ||
+        selectedIndicatorRef.current.kind === "signal")
+    ) {
+      selectedIndicatorRef.current = { kind: null, id: null };
+    }
+
     const newEmaData = {};
     draftConfig.emas.forEach((ema) => {
       newEmaData[ema.id] = calculateEMA(fullDataRef.current, ema.period);
@@ -489,6 +668,8 @@ export default function ChartApp() {
         },
       });
 
+    applyIndicatorSelectionStyles(draftConfig);
+
     updateLegend(stateRef.current.lastHoveredTime);
   };
 
@@ -536,6 +717,7 @@ export default function ChartApp() {
       );
       emaSeriesRefs.current[ema.id] = emaSeries;
     });
+    applyIndicatorSelectionStyles();
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -768,23 +950,53 @@ export default function ChartApp() {
 
     const clickHandler = (param) => {
       const state = stateRef.current;
-      if (state.mode !== "draw" || !state.currentLogical) return;
-      if (!state.isDrawing) {
-        const newLine = new ShapePrimitive(
-          state.currentLogical,
-          state.currentLogical,
-          state.drawType
-        );
-        series.attachPrimitive(newLine);
-        state.activeLine = newLine;
-        state.isDrawing = true;
-        state.lines.push(newLine);
+      if (state.mode === "draw") {
+        if (!state.currentLogical) return;
+        if (!state.isDrawing) {
+          const newLine = new ShapePrimitive(
+            state.currentLogical,
+            state.currentLogical,
+            state.drawType
+          );
+          series.attachPrimitive(newLine);
+          state.activeLine = newLine;
+          state.isDrawing = true;
+          state.lines.push(newLine);
+        } else {
+          state.isDrawing = false;
+          state.activeLine = null;
+          setMode("idle");
+          state.mode = "idle";
+          setLines([...state.lines]);
+        }
+        return;
+      }
+
+      const hoveredShape = state.lines.find(
+        (line) => line.hoveredPoint !== null
+      );
+      if (hoveredShape) {
+        setSelectedShape(hoveredShape);
+        setSelectedIndicator(null);
+        return;
+      }
+
+      if (!param.point) {
+        clearAllSelections();
+        return;
+      }
+
+      const clickedTime =
+        param.time || chart.timeScale().coordinateToTime(param.point.x);
+      const clickedEmaId = clickedTime
+        ? findClosestEmaAtPoint(clickedTime, param.point.y)
+        : null;
+
+      if (clickedEmaId) {
+        setSelectedShape(null);
+        setSelectedIndicator({ kind: "ema", id: clickedEmaId });
       } else {
-        state.isDrawing = false;
-        state.activeLine = null;
-        setMode("idle");
-        state.mode = "idle";
-        setLines([...state.lines]);
+        clearAllSelections();
       }
     };
 
@@ -804,6 +1016,8 @@ export default function ChartApp() {
 
       for (const line of state.lines) {
         if (line.hoveredPoint !== null) {
+          setSelectedShape(line);
+          setSelectedIndicator(null);
           state.dragPointIndex = line.hoveredPoint;
           state.activeLine = line;
 
@@ -865,6 +1079,8 @@ export default function ChartApp() {
         (l) => l.hoveredPoint !== null
       );
       if (hoveredShape) {
+        setSelectedShape(hoveredShape);
+        setSelectedIndicator(null);
         setContextMenu({
           x: e.clientX,
           y: e.clientY,
@@ -885,13 +1101,21 @@ export default function ChartApp() {
       )
         return;
       if (e.key === "Delete" || e.key === "Backspace") {
-        const hoveredShapeIndex = stateRef.current.lines.findIndex(
+        let hoveredShapeIndex = stateRef.current.lines.findIndex(
           (l) => l.hoveredPoint !== null
         );
+        if (hoveredShapeIndex === -1 && selectedShapeIdRef.current) {
+          hoveredShapeIndex = stateRef.current.lines.findIndex(
+            (l) => l.id === selectedShapeIdRef.current
+          );
+        }
         if (hoveredShapeIndex !== -1) {
           const shape = stateRef.current.lines[hoveredShapeIndex];
-          if (seriesRef.current) seriesRef.current.detachPrimitive(shape);
+          if (selectedShapeIdRef.current === shape.id) setSelectedShape(null);
+          detachShapeFromMainSeries(shape);
           stateRef.current.lines.splice(hoveredShapeIndex, 1);
+          stateRef.current.activeLine = null;
+          stateRef.current.dragPointIndex = null;
           setLines([...stateRef.current.lines]);
         }
       }
@@ -927,7 +1151,15 @@ export default function ChartApp() {
       emaSeriesRefs.current = {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChartLoaded]);
+  }, [
+    isChartLoaded,
+    applyIndicatorSelectionStyles,
+    clearAllSelections,
+    detachShapeFromMainSeries,
+    findClosestEmaAtPoint,
+    setSelectedIndicator,
+    setSelectedShape,
+  ]);
 
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
@@ -999,6 +1231,7 @@ export default function ChartApp() {
     macdHistSeriesRef.current = macdHist;
     macdLineSeriesRef.current = macdLine;
     macdSignalSeriesRef.current = signalLine;
+    applyIndicatorSelectionStyles();
 
     const subCrosshairMoveHandler = (param) => {
       if (param.time) {
@@ -1011,6 +1244,27 @@ export default function ChartApp() {
       }
     };
     subChart.subscribeCrosshairMove(subCrosshairMoveHandler);
+
+    const subClickHandler = (param) => {
+      if (!param.point) {
+        clearAllSelections();
+        return;
+      }
+
+      const clickedTime =
+        param.time || subChart.timeScale().coordinateToTime(param.point.x);
+      const clickedMacdKind = clickedTime
+        ? findClosestMacdAtPoint(clickedTime, param.point.y)
+        : null;
+
+      if (clickedMacdKind) {
+        setSelectedShape(null);
+        setSelectedIndicator({ kind: clickedMacdKind });
+      } else {
+        clearAllSelections();
+      }
+    };
+    subChart.subscribeClick(subClickHandler);
 
     let isSyncingMain = false;
     let isSyncingSub = false;
@@ -1058,6 +1312,7 @@ export default function ChartApp() {
       window.removeEventListener("resize", handleResize);
       if (ro) ro.disconnect();
       subChart.unsubscribeCrosshairMove(subCrosshairMoveHandler);
+      subChart.unsubscribeClick(subClickHandler);
       if (subChart.timeScaleSyncCleanup) subChart.timeScaleSyncCleanup();
       subChart.remove();
       subChartRef.current = null;
@@ -1066,7 +1321,15 @@ export default function ChartApp() {
       macdSignalSeriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChartLoaded, indConfig.macd.enabled]);
+  }, [
+    isChartLoaded,
+    indConfig.macd.enabled,
+    applyIndicatorSelectionStyles,
+    clearAllSelections,
+    findClosestMacdAtPoint,
+    setSelectedIndicator,
+    setSelectedShape,
+  ]);
 
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
@@ -1304,7 +1567,8 @@ export default function ChartApp() {
       (l) => l.id === contextMenu.shapeId
     );
     if (shape) {
-      seriesRef.current.detachPrimitive(shape);
+      if (selectedShapeIdRef.current === shape.id) setSelectedShape(null);
+      detachShapeFromMainSeries(shape);
       stateRef.current.lines = stateRef.current.lines.filter(
         (l) => l.id !== contextMenu.shapeId
       );
@@ -1448,9 +1712,8 @@ export default function ChartApp() {
   };
 
   const clearAllLines = () => {
-    stateRef.current.lines.forEach((line) =>
-      seriesRef.current?.detachPrimitive(line)
-    );
+    setSelectedShape(null);
+    stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
     stateRef.current.lines = [];
     setLines([]);
   };
