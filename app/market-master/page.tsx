@@ -700,6 +700,7 @@ export default function ChartApp() {
       borderVisible: false,
       wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
+      priceLineVisible: false,
     });
     series.setData(fullDataRef.current.slice(0, INITIAL_VISIBLE_COUNT));
 
