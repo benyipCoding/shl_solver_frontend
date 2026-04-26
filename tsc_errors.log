@@ -1,0 +1,211 @@
+﻿app/market-master/page.tsx(175,28): error TS7006: Parameter 'y' implicitly has an 'any' type.
+app/market-master/page.tsx(175,31): error TS7006: Parameter 'i' implicitly has an 'any' type.
+app/market-master/page.tsx(537,31): error TS2554: Expected 1 arguments, but got 0.
+app/market-master/page.tsx(540,15): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(541,26): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(541,45): error TS2698: Spread types may only be created from object types.
+app/market-master/page.tsx(612,11): error TS2353: Object literal may only specify known properties, and 'time' does not exist in type '(prevState: null) => null'.
+app/market-master/page.tsx(694,16): error TS2339: Property 'LightweightCharts' does not exist on type 'Window & typeof globalThis'.
+app/market-master/page.tsx(713,11): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(714,43): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(715,11): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(716,43): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(717,11): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(718,43): error TS18046: 'lines' is of type 'unknown'.
+app/market-master/page.tsx(734,7): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.
+  No index signature with a parameter of type 'string' was found on type '{}'.
+app/market-master/page.tsx(767,20): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ posGrow: string; posFall: string; negGrow: string; negFall: string; }'.
+app/market-master/page.tsx(787,7): error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type '{}'.
+  No index signature with a parameter of type 'string' was found on type '{}'.
+app/market-master/page.tsx(855,18): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ posGrow: string; posFall: string; negGrow: string; negFall: string; }'.
+app/market-master/page.tsx(880,26): error TS2339: Property 'LightweightCharts' does not exist on type 'Window & typeof globalThis'.
+app/market-master/page.tsx(938,35): error TS7006: Parameter 'param' implicitly has an 'any' type.
+app/market-master/page.tsx(945,9): error TS2554: Expected 1 arguments, but got 0.
+app/market-master/page.tsx(1150,27): error TS7006: Parameter 'param' implicitly has an 'any' type.
+app/market-master/page.tsx(1168,18): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1172,31): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/market-master/page.tsx(1243,33): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/market-master/page.tsx(1246,10): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(1250,11): error TS2353: Object literal may only specify known properties, and 'x' does not exist in type '(prevState: null) => null'.
+app/market-master/page.tsx(1261,28): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/market-master/page.tsx(1270,12): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(1276,20): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1321,29): error TS2339: Property 'LightweightCharts' does not exist on type 'Window & typeof globalThis'.
+app/market-master/page.tsx(1369,16): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ posGrow: string; posFall: string; negGrow: string; negFall: string; }'.
+app/market-master/page.tsx(1384,38): error TS7006: Parameter 'param' implicitly has an 'any' type.
+app/market-master/page.tsx(1391,9): error TS2554: Expected 1 arguments, but got 0.
+app/market-master/page.tsx(1404,26): error TS7006: Parameter 'logicalRange' implicitly has an 'any' type.
+app/market-master/page.tsx(1410,27): error TS7006: Parameter 'logicalRange' implicitly has an 'any' type.
+app/market-master/page.tsx(1474,18): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ posGrow: string; posFall: string; negGrow: string; negFall: string; }'.
+app/market-master/page.tsx(1488,15): error TS2345: Argument of type '(prevTrades: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prevTrades: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1491,19): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1494,19): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1495,21): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1495,60): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1496,32): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1498,28): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1498,68): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1499,32): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1502,26): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1503,21): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1503,61): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1504,32): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1506,28): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1506,67): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1507,32): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1513,19): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1514,37): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1514,52): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1515,24): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1515,52): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1517,20): error TS2698: Spread types may only be created from object types.
+app/market-master/page.tsx(1529,9): error TS7034: Variable 'interval' implicitly has type 'any' in some locations where its type cannot be determined.
+app/market-master/page.tsx(1531,32): error TS7005: Variable 'interval' implicitly has an 'any' type.
+app/market-master/page.tsx(1534,29): error TS7006: Parameter 'type' implicitly has an 'any' type.
+app/market-master/page.tsx(1557,16): error TS2322: Type '{ id: number; type: any; entry: any; sl: any; tp: any; units: number; status: string; pnl: number; visibleOnChart: boolean; }' is not assignable to type 'never'.
+app/market-master/page.tsx(1560,30): error TS7006: Parameter 'tradeId' implicitly has an 'any' type.
+app/market-master/page.tsx(1561,15): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1564,15): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(1564,35): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1566,15): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1567,35): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1567,46): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1568,20): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1568,46): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1571,13): error TS2698: Spread types may only be created from object types.
+app/market-master/page.tsx(1585,34): error TS7006: Parameter 'tradeId' implicitly has an 'any' type.
+app/market-master/page.tsx(1586,15): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1588,11): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(1589,15): error TS2698: Spread types may only be created from object types.
+app/market-master/page.tsx(1589,39): error TS2339: Property 'visibleOnChart' does not exist on type 'never'.
+app/market-master/page.tsx(1599,24): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1599,47): error TS2339: Property 'visibleOnChart' does not exist on type 'never'.
+app/market-master/page.tsx(1600,21): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(1613,24): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1613,47): error TS2339: Property 'visibleOnChart' does not exist on type 'never'.
+app/market-master/page.tsx(1615,49): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(1618,26): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1619,26): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1623,29): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1623,43): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1626,39): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(1628,19): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1631,28): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1639,50): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(1646,19): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1649,28): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1657,50): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(1666,45): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1669,9): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1670,29): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1670,40): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1671,14): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1671,40): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(1675,27): error TS7006: Parameter 'type' implicitly has an 'any' type.
+app/market-master/page.tsx(1683,23): error TS2339: Property 'shapeId' does not exist on type 'never'.
+app/market-master/page.tsx(1685,8): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(1685,35): error TS2339: Property 'shapeId' does not exist on type 'never'.
+app/market-master/page.tsx(1690,10): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(1690,37): error TS2339: Property 'shapeId' does not exist on type 'never'.
+app/market-master/page.tsx(1692,16): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1698,22): error TS2339: Property 'shapeId' does not exist on type 'never'.
+app/market-master/page.tsx(1699,65): error TS2339: Property 'shapeId' does not exist on type 'never'.
+app/market-master/page.tsx(1704,30): error TS7006: Parameter 'field' implicitly has an 'any' type.
+app/market-master/page.tsx(1704,37): error TS7006: Parameter 'value' implicitly has an 'any' type.
+app/market-master/page.tsx(1706,8): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(1729,29): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1731,21): error TS2339: Property 'reason' does not exist on type 'never'.
+app/market-master/page.tsx(1738,21): error TS2339: Property 'reason' does not exist on type 'never'.
+app/market-master/page.tsx(1752,51): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(1775,51): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1776,53): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1779,39): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1782,20): error TS2339: Property 'reason' does not exist on type 'never'.
+app/market-master/page.tsx(1788,13): error TS2365: Operator '>' cannot be applied to types 'string' and 'number'.
+app/market-master/page.tsx(1788,29): error TS2365: Operator '>' cannot be applied to types 'string' and 'number'.
+app/market-master/page.tsx(1790,20): error TS2365: Operator '>' cannot be applied to types 'string' and 'number'.
+app/market-master/page.tsx(1790,36): error TS2365: Operator '<' cannot be applied to types 'string' and 'number'.
+app/market-master/page.tsx(1881,16): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+app/market-master/page.tsx(1911,22): error TS7006: Parameter 'val' implicitly has an 'any' type.
+app/market-master/page.tsx(1926,36): error TS2345: Argument of type '{ visible: false; trade: null; text: string; loading: false; }' is not assignable to parameter of type 'SetStateAction<{ visible: boolean; type: string; trade: null; title: string; text: string; loading: boolean; }>'.
+  Type '{ visible: false; trade: null; text: string; loading: false; }' is missing the following properties from type '{ visible: boolean; type: string; trade: null; title: string; text: string; loading: boolean; }': type, title
+app/market-master/page.tsx(1946,67): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1948,44): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(1956,44): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(1964,44): error TS2339: Property 'closePrice' does not exist on type 'never'.
+app/market-master/page.tsx(1972,67): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1974,44): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(1975,44): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(2001,36): error TS2345: Argument of type '{ visible: false; trade: null; text: string; loading: false; }' is not assignable to parameter of type 'SetStateAction<{ visible: boolean; type: string; trade: null; title: string; text: string; loading: boolean; }>'.
+  Type '{ visible: false; trade: null; text: string; loading: false; }' is missing the following properties from type '{ visible: boolean; type: string; trade: null; title: string; text: string; loading: boolean; }': type, title
+app/market-master/page.tsx(2020,38): error TS2339: Property 'x' does not exist on type 'never'.
+app/market-master/page.tsx(2020,58): error TS2339: Property 'y' does not exist on type 'never'.
+app/market-master/page.tsx(2056,18): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(2065,34): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/market-master/page.tsx(2100,42): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/market-master/page.tsx(2249,42): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/market-master/page.tsx(2373,42): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/market-master/page.tsx(2387,42): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/market-master/page.tsx(2528,47): error TS7006: Parameter 'l' implicitly has an 'any' type.
+app/market-master/page.tsx(2602,36): error TS2339: Property 'close' does not exist on type 'never'.
+app/market-master/page.tsx(2602,56): error TS2339: Property 'open' does not exist on type 'never'.
+app/market-master/page.tsx(2607,45): error TS2339: Property 'open' does not exist on type 'never'.
+app/market-master/page.tsx(2614,36): error TS2339: Property 'close' does not exist on type 'never'.
+app/market-master/page.tsx(2614,56): error TS2339: Property 'open' does not exist on type 'never'.
+app/market-master/page.tsx(2619,45): error TS2339: Property 'high' does not exist on type 'never'.
+app/market-master/page.tsx(2626,36): error TS2339: Property 'close' does not exist on type 'never'.
+app/market-master/page.tsx(2626,56): error TS2339: Property 'open' does not exist on type 'never'.
+app/market-master/page.tsx(2631,45): error TS2339: Property 'low' does not exist on type 'never'.
+app/market-master/page.tsx(2638,36): error TS2339: Property 'close' does not exist on type 'never'.
+app/market-master/page.tsx(2638,56): error TS2339: Property 'open' does not exist on type 'never'.
+app/market-master/page.tsx(2643,45): error TS2339: Property 'close' does not exist on type 'never'.
+app/market-master/page.tsx(2648,31): error TS2339: Property 'emas' does not exist on type 'never'.
+app/market-master/page.tsx(2648,41): error TS7006: Parameter 'ema' implicitly has an 'any' type.
+app/market-master/page.tsx(2648,46): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+app/market-master/page.tsx(2684,49): error TS2339: Property 'macd' does not exist on type 'never'.
+app/market-master/page.tsx(2687,48): error TS2339: Property 'signal' does not exist on type 'never'.
+app/market-master/page.tsx(2691,34): error TS2339: Property 'hist' does not exist on type 'never'.
+app/market-master/page.tsx(2694,49): error TS2339: Property 'hist' does not exist on type 'never'.
+app/market-master/page.tsx(2766,29): error TS2322: Type 'string' is not assignable to type 'number'.
+app/market-master/page.tsx(2774,46): error TS2339: Property 'status' does not exist on type 'never'.
+app/market-master/page.tsx(2776,35): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(2777,53): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(2777,68): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(2778,38): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(2778,68): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(2779,35): error TS2339: Property 'pnl' does not exist on type 'never'.
+app/market-master/page.tsx(2781,42): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(2786,57): error TS2339: Property 'reason' does not exist on type 'never'.
+app/market-master/page.tsx(2790,71): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(2792,38): error TS2339: Property 'type' does not exist on type 'never'.
+app/market-master/page.tsx(2795,38): error TS2339: Property 'units' does not exist on type 'never'.
+app/market-master/page.tsx(2798,38): error TS2339: Property 'entry' does not exist on type 'never'.
+app/market-master/page.tsx(2801,38): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(2802,41): error TS2339: Property 'sl' does not exist on type 'never'.
+app/market-master/page.tsx(2806,38): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(2807,41): error TS2339: Property 'tp' does not exist on type 'never'.
+app/market-master/page.tsx(2813,41): error TS2339: Property 'closePrice' does not exist on type 'never'.
+app/market-master/page.tsx(2826,67): error TS2339: Property 'id' does not exist on type 'never'.
+app/market-master/page.tsx(2830,45): error TS2339: Property 'visibleOnChart' does not exist on type 'never'.
+app/market-master/page.tsx(2835,44): error TS2339: Property 'visibleOnChart' does not exist on type 'never'.
+app/market-master/page.tsx(2842,76): error TS2339: Property 'id' does not exist on type 'never'.
