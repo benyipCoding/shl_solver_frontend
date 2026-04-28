@@ -17,20 +17,21 @@ const bodyFont = Plus_Jakarta_Sans({
 });
 
 const styles = {
-  page: "relative min-h-screen overflow-hidden px-[clamp(16px,2.8vw,34px)] text-[#edf3ff] font-[var(--font-body)] bg-[radial-gradient(circle_at_8%_10%,rgba(57,134,255,0.22),transparent_35%),radial-gradient(circle_at_92%_2%,rgba(255,164,84,0.18),transparent_36%),linear-gradient(138deg,#060d1a_0%,#0b1324_46%,#141f39_100%)] max-[560px]:px-3",
+  page: "relative min-h-screen overflow-hidden px-[clamp(14px,2.8vw,34px)] text-[#edf3ff] font-[var(--font-body)] bg-[radial-gradient(circle_at_8%_10%,rgba(57,134,255,0.22),transparent_35%),radial-gradient(circle_at_92%_2%,rgba(255,164,84,0.18),transparent_36%),linear-gradient(138deg,#060d1a_0%,#0b1324_46%,#141f39_100%)] max-[560px]:px-2.5",
   backdropA:
     "pointer-events-none absolute -right-[120px] -top-[180px] h-[420px] w-[420px] rounded-[46%_54%_38%_62%/52%_42%_58%_48%] bg-[linear-gradient(135deg,rgba(89,171,255,0.18),rgba(25,87,214,0.04))] blur-[2px]",
   backdropB:
     "pointer-events-none absolute -bottom-[180px] -left-[120px] h-[360px] w-[360px] rounded-[58%_42%_64%_36%/48%_61%_39%_52%] bg-[linear-gradient(150deg,rgba(255,168,98,0.16),rgba(255,125,74,0.05))] blur-[2px]",
-  container: "relative z-[1] mx-auto grid max-w-[1220px] gap-[18px]",
-  hero: "grid gap-3 px-[clamp(18px,2.6vw,26px)] max-[760px]:gap-2.5 max-[760px]:px-1 max-[760px]:pb-1.5 [&>h1]:m-0 [&>h1]:font-[var(--font-heading)] [&>h1]:text-[clamp(1.8rem,4.8vw,2.9rem)] [&>h1]:leading-[1.1] [&>h1]:tracking-[0.02em] [&>p]:m-0 [&>p]:max-w-[760px] [&>p]:text-[#a8bbd8] [&>p]:leading-[1.6]",
+  container:
+    "relative z-[1] mx-auto grid max-w-[1220px] gap-[18px] max-[760px]:gap-3.5",
+  hero: "grid gap-3 px-[clamp(18px,2.6vw,26px)] max-[760px]:gap-2 max-[760px]:px-0.5 max-[760px]:pb-1 [&>h1]:m-0 [&>h1]:font-[var(--font-heading)] [&>h1]:text-[clamp(1.68rem,8vw,2.9rem)] [&>h1]:leading-[1.1] [&>h1]:tracking-[0.02em] [&>p]:m-0 [&>p]:max-w-[760px] [&>p]:text-[#a8bbd8] [&>p]:leading-[1.6]",
   kicker:
     "m-0 text-[0.76rem] uppercase tracking-[0.16em] text-[#9ec5ff] font-[var(--font-heading)]",
-  card: "rounded-[22px] border border-[rgba(139,182,255,0.25)] bg-[linear-gradient(160deg,rgba(15,23,39,0.88),rgba(11,17,30,0.92))] p-[clamp(14px,2vw,22px)] shadow-[0_20px_54px_rgba(7,13,25,0.52),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[7px] max-[760px]:rounded-2xl max-[760px]:p-[13px]",
+  card: "rounded-[22px] border border-[rgba(139,182,255,0.25)] bg-[linear-gradient(160deg,rgba(15,23,39,0.88),rgba(11,17,30,0.92))] p-[clamp(14px,2vw,22px)] shadow-[0_20px_54px_rgba(7,13,25,0.52),inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[7px] max-[760px]:rounded-[18px] max-[760px]:p-[11px]",
   cardHeader:
-    "mb-3.5 flex items-start justify-between gap-3 max-[560px]:flex-col max-[560px]:items-start max-[760px]:mb-[11px] [&>h2]:m-0 [&>h2]:inline-flex [&>h2]:items-center [&>h2]:gap-2 [&>h2]:text-[clamp(1rem,1.6vw,1.15rem)] [&>h2]:font-semibold [&>h2]:tracking-[0.02em] [&>h2]:font-[var(--font-heading)]",
+    "mb-3.5 flex items-start justify-between gap-3 max-[760px]:flex-col max-[760px]:items-start max-[760px]:mb-[11px] [&>h2]:m-0 [&>h2]:inline-flex [&>h2]:items-center [&>h2]:gap-2 [&>h2]:text-[clamp(1rem,1.6vw,1.15rem)] [&>h2]:font-semibold [&>h2]:tracking-[0.02em] [&>h2]:font-[var(--font-heading)]",
   headerControls:
-    "inline-flex flex-wrap items-center justify-end gap-2.5 max-[560px]:justify-start",
+    "inline-flex flex-wrap items-center justify-end gap-2.5 max-[760px]:w-full max-[760px]:justify-start",
   languageSwitch:
     "inline-flex items-center gap-[7px] rounded-full border border-[rgba(124,171,247,0.4)] bg-[rgba(24,39,68,0.6)] px-2 py-1 text-[#d8e9ff] transition-colors hover:border-[rgba(160,197,255,0.72)] hover:bg-[rgba(32,50,86,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(114,178,255,0.3)]",
   langOption:
@@ -53,11 +54,50 @@ const styles = {
     "rounded-full border border-[rgba(127,174,255,0.36)] bg-[rgba(54,95,170,0.2)] px-2.5 py-1 text-[0.8rem] text-[#d7e6ff]",
   metaHint: "self-center text-[0.84rem] text-[#a6bbd9]",
   statsLine:
-    "flex flex-wrap gap-2.5 text-[0.85rem] text-[#c5d8f3] max-[560px]:text-[0.78rem]",
+    "flex flex-wrap gap-2.5 text-[0.85rem] text-[#c5d8f3] max-[560px]:gap-1.5 max-[560px]:text-[0.76rem]",
+  summaryViewSwitch:
+    "hidden rounded-full border border-[rgba(126,173,249,0.42)] bg-[rgba(34,58,99,0.45)] px-2.5 py-1 text-[0.72rem] text-[#d6e7ff] transition-colors hover:border-[rgba(165,204,255,0.72)] hover:bg-[rgba(49,76,124,0.48)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(114,178,255,0.35)] max-[760px]:inline-flex",
   tableWrap:
-    "overflow-x-auto rounded-[14px] border border-[rgba(124,156,210,0.22)]",
+    "overflow-x-auto rounded-[14px] border border-[rgba(124,156,210,0.22)] max-[760px]:hidden",
+  summaryMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
+  summaryMobileCard:
+    "w-full appearance-none rounded-[14px] border border-[rgba(123,165,233,0.3)] bg-[rgba(20,31,54,0.55)] p-2.5 text-left transition-[border-color,background-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(115,180,255,0.38)]",
+  summaryMobileCardSelected:
+    "border-[rgba(140,187,255,0.62)] bg-[rgba(48,79,136,0.28)] shadow-[inset_0_0_0_1px_rgba(150,196,255,0.35)]",
+  summaryMobileTop:
+    "mb-2 flex items-start justify-between gap-2.5 rounded-lg border border-[rgba(125,158,214,0.2)] bg-[rgba(11,18,31,0.45)] p-2",
+  summaryMobileIdentity: "flex min-w-0 items-start gap-2",
+  summaryMobileNameWrap: "min-w-0",
+  summaryMobileName: "m-0 text-[0.88rem] font-semibold",
+  summaryMobileServer: "m-0 mt-0.5 text-[0.74rem] text-[#8ea8cd]",
+  summaryMobileBadges: "mb-2 inline-flex flex-wrap items-center gap-1.5",
+  summaryMobileAmount:
+    "mb-2 flex items-center gap-2 text-[0.74rem] text-[#b8ccec]",
+  summaryMobileTrack:
+    "h-[11px] flex-1 overflow-hidden rounded bg-[rgba(10,18,33,0.8)] border border-[rgba(255,255,255,0.06)]",
+  summaryMobileFill: "h-full rounded transition-all duration-500",
+  summaryMobileStats: "grid grid-cols-2 gap-1.5",
+  summaryMobileStat:
+    "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
+  summaryMobileHint: "m-0 text-[0.72rem] text-[#8ea8cd]",
   summaryTable:
     "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-colors [&_tbody_tr:nth-child(odd)]:bg-[rgba(20,32,56,0.34)] [&_tbody_tr:nth-child(even)]:bg-[rgba(10,19,35,0.38)] [&_tbody_tr:hover]:bg-[rgba(80,122,198,0.13)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
+  skillMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
+  skillMobileCard:
+    "rounded-[14px] border border-[rgba(123,165,233,0.3)] bg-[rgba(20,31,54,0.55)] p-2.5",
+  skillMobileHeader: "mb-2 flex items-start justify-between gap-2",
+  skillMobileName: "m-0 text-[0.84rem] font-semibold text-[#e7f2ff]",
+  skillMobileDelta:
+    "inline-flex rounded-full border px-2 py-0.5 text-[0.72rem] font-semibold",
+  skillMobileDeltaGood:
+    "border-[rgba(128,243,191,0.4)] bg-[rgba(22,115,75,0.28)] text-[#9ff6c8]",
+  skillMobileDeltaBad:
+    "border-[rgba(255,154,154,0.45)] bg-[rgba(132,54,54,0.27)] text-[#ffc6c6]",
+  skillMobileGrid: "grid grid-cols-2 gap-1.5",
+  skillMobileMetric:
+    "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
+  jobBadge:
+    "inline-block w-6 text-center text-[0.7rem] font-bold uppercase tracking-wider rounded bg-[rgba(255,255,255,0.1)] px-1 py-0.5",
   skillTable:
     "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-[rgba(80,122,198,0.13)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
   rowSelected:
@@ -87,8 +127,9 @@ const styles = {
   parseGreen:
     "border-[rgba(121,237,154,0.45)] bg-[rgba(28,122,57,0.34)] text-[#cfffd8]",
   detailGrid:
-    "grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-[18px] max-[1040px]:grid-cols-1",
-  metricGrid: "mb-3.5 grid grid-cols-3 gap-2.5 max-[760px]:grid-cols-1",
+    "grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-[18px] max-[1040px]:grid-cols-1 max-[760px]:gap-3",
+  metricGrid:
+    "mb-3.5 grid grid-cols-3 gap-2.5 max-[760px]:mb-2.5 max-[760px]:grid-cols-1",
   metricCard:
     "grid gap-[7px] rounded-[14px] border border-[rgba(128,168,232,0.25)] bg-[rgba(34,50,80,0.36)] p-[11px] [&>strong]:text-[1.2rem] [&>strong]:leading-none [&>strong]:text-[#f6f9ff]",
   metricLabel: "inline-flex items-center gap-1.5 text-[0.77rem] text-[#a9c2e6]",
@@ -97,7 +138,7 @@ const styles = {
   deltaBad: "text-[#ff9f9f]",
   rankList: "m-0 grid list-none gap-2 p-0",
   rankItem:
-    "flex items-center justify-between gap-3 rounded-xl border border-[rgba(123,158,219,0.24)] bg-[rgba(26,37,63,0.36)] p-[11px] max-[760px]:flex-col max-[760px]:items-start",
+    "flex items-center justify-between gap-3 rounded-xl border border-[rgba(123,158,219,0.24)] bg-[rgba(26,37,63,0.36)] p-[11px] max-[760px]:grid max-[760px]:grid-cols-[1fr_auto] max-[760px]:items-center",
   rankName: "m-0 text-[0.9rem] font-semibold text-[#ebf3ff]",
   rankMeta: "m-0 mt-[3px] text-[0.77rem] text-[#95b0d5]",
   rankValue:
@@ -162,6 +203,10 @@ interface StaticText {
   emptyDesc: string;
   switchZh: string;
   switchEn: string;
+  summaryViewSwitchAria: string;
+  summaryToggleShowValues: string;
+  summaryToggleBarsOnly: string;
+  summaryBarsOnlyHint: string;
 }
 
 interface CharacterSummary {
@@ -704,6 +749,11 @@ const TEXT: Record<Locale, StaticText> = {
       "当前原型使用静态模拟数据。接入后端 API 后，这里将自动加载战斗汇总与角色技能细节。",
     switchZh: "中",
     switchEn: "EN",
+    summaryViewSwitchAria: "切换战斗汇总显示模式",
+    summaryToggleShowValues: "显示 rDPS / aDPS",
+    summaryToggleBarsOnly: "仅看柱状图",
+    summaryBarsOnlyHint:
+      "当前仅显示占比柱状图，点击上方开关可查看 rDPS / aDPS。",
   },
   en: {
     kicker: "Raid Decision Lab",
@@ -758,6 +808,11 @@ const TEXT: Record<Locale, StaticText> = {
       "This prototype page uses static mock data only. Once backend API is connected, this panel can auto-load encounter summary and player skill-level details.",
     switchZh: "中",
     switchEn: "EN",
+    summaryViewSwitchAria: "Toggle encounter summary view mode",
+    summaryToggleShowValues: "Show rDPS / aDPS",
+    summaryToggleBarsOnly: "Bars only",
+    summaryBarsOnlyHint:
+      "Now showing contribution bars only. Use the switch above to reveal rDPS / aDPS.",
   },
 };
 
@@ -867,6 +922,20 @@ const jobColorMap: Record<Job, string> = {
   BLM: "#a579d6",
 };
 
+const roleClassMap: Record<Role, string> = {
+  Tank: styles.roleTank,
+  Healer: styles.roleHealer,
+  Melee: styles.roleMelee,
+  Caster: styles.roleCaster,
+};
+
+const parseClassMap: Record<ParseTier, string> = {
+  gold: styles.parseGold,
+  purple: styles.parsePurple,
+  blue: styles.parseBlue,
+  green: styles.parseGreen,
+};
+
 const FF14Page = () => {
   const [reportUrl, setReportUrl] = useState(
     "https://www.fflogs.com/reports/yZrcbBYf8GL9TqCF?fight=112"
@@ -875,6 +944,7 @@ const FF14Page = () => {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>(
     MOCK_SUMMARY[0]?.id ?? ""
   );
+  const [showMobileSummaryValues, setShowMobileSummaryValues] = useState(false);
 
   const t = TEXT[locale];
 
@@ -1031,14 +1101,19 @@ const FF14Page = () => {
                   <Sword size={18} />
                   {t.encounterSummaryTitle}
                 </h2>
-                <div className={styles.statsLine}>
-                  <span>
-                    {t.totalRdpsLabel}: {formatNumber(raidTotals.raidRdps)}
-                  </span>
-                  <span>
-                    {t.avgParseLabel}: {raidTotals.avgParse.toFixed(1)}
-                  </span>
-                </div>
+
+                <button
+                  type="button"
+                  className={styles.summaryViewSwitch}
+                  role="switch"
+                  aria-checked={showMobileSummaryValues}
+                  aria-label={t.summaryViewSwitchAria}
+                  onClick={() => setShowMobileSummaryValues((prev) => !prev)}
+                >
+                  {showMobileSummaryValues
+                    ? t.summaryToggleBarsOnly
+                    : t.summaryToggleShowValues}
+                </button>
               </div>
 
               <div className={styles.tableWrap}>
@@ -1081,7 +1156,7 @@ const FF14Page = () => {
                           <td>
                             <div className="flex items-center gap-2">
                               <span
-                                className="inline-block w-6 text-center text-[0.7rem] font-bold uppercase tracking-wider rounded bg-[rgba(255,255,255,0.1)] px-1 py-0.5"
+                                className={styles.jobBadge}
                                 style={{
                                   color: jobColor,
                                   backgroundColor: `color-mix(in srgb, ${jobColor} 15%, transparent)`,
@@ -1136,6 +1211,97 @@ const FF14Page = () => {
                   </tbody>
                 </table>
               </div>
+
+              <ul className={styles.summaryMobileList}>
+                {sortedSummary.map((member) => {
+                  const isSelected = member.id === selectedCharacter?.id;
+                  const amountPercent = (
+                    (member.rdps / raidTotals.raidRdps) *
+                    100
+                  ).toFixed(2);
+                  const barWidth = `${(member.rdps / raidTotals.maxRdps) * 100}%`;
+                  const jobColor = jobColorMap[member.job] || "#ccc";
+                  const roleClass = roleClassMap[member.role];
+                  const parseClass = parseClassMap[member.tier];
+
+                  return (
+                    <li key={`mobile-${member.id}`}>
+                      <button
+                        type="button"
+                        className={`${styles.summaryMobileCard} ${
+                          isSelected ? styles.summaryMobileCardSelected : ""
+                        }`}
+                        onClick={() => setSelectedCharacterId(member.id)}
+                      >
+                        <div className={styles.summaryMobileTop}>
+                          <div className={styles.summaryMobileIdentity}>
+                            <span
+                              className={styles.jobBadge}
+                              style={{
+                                color: jobColor,
+                                backgroundColor: `color-mix(in srgb, ${jobColor} 15%, transparent)`,
+                              }}
+                            >
+                              {member.job}
+                            </span>
+                            <div className={styles.summaryMobileNameWrap}>
+                              <p
+                                className={styles.summaryMobileName}
+                                style={{ color: jobColor }}
+                              >
+                                {member.name}
+                              </p>
+                              <p className={styles.summaryMobileServer}>
+                                {member.server}
+                              </p>
+                            </div>
+                          </div>
+                          <span className={`${styles.parseChip} ${parseClass}`}>
+                            {t.tableParse} {member.parse}
+                          </span>
+                        </div>
+
+                        <div className={styles.summaryMobileBadges}>
+                          <span className={`${styles.roleChip} ${roleClass}`}>
+                            {member.role}
+                          </span>
+                        </div>
+
+                        <div className={styles.summaryMobileAmount}>
+                          <span className="w-[44px] text-right font-medium">
+                            {amountPercent}%
+                          </span>
+                          <div className={styles.summaryMobileTrack}>
+                            <div
+                              className={styles.summaryMobileFill}
+                              style={{
+                                width: barWidth,
+                                backgroundColor: jobColor,
+                              }}
+                            />
+                          </div>
+                          <span className="w-[48px] text-right font-medium">
+                            {((member.rdps * 516) / 1000000).toFixed(2)}m
+                          </span>
+                        </div>
+
+                        {showMobileSummaryValues && (
+                          <div className={styles.summaryMobileStats}>
+                            <div className={styles.summaryMobileStat}>
+                              <span>{t.tableRdps}</span>
+                              <strong>{formatNumber(member.rdps)}</strong>
+                            </div>
+                            <div className={styles.summaryMobileStat}>
+                              <span>{t.tableAdps}</span>
+                              <strong>{formatNumber(member.adps)}</strong>
+                            </div>
+                          </div>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
 
             {selectedCharacter && selectedDetail ? (
@@ -1221,6 +1387,64 @@ const FF14Page = () => {
                       </tbody>
                     </table>
                   </div>
+
+                  <ul className={styles.skillMobileList}>
+                    {selectedDetail.skillRows.map((skill) => {
+                      const delta = skill.casts - skill.top10Casts;
+                      const deltaClass =
+                        delta >= 0
+                          ? styles.skillMobileDeltaGood
+                          : styles.skillMobileDeltaBad;
+
+                      return (
+                        <li key={`mobile-${skill.skill}`}>
+                          <div className={styles.skillMobileCard}>
+                            <div className={styles.skillMobileHeader}>
+                              <p className={styles.skillMobileName}>
+                                {skill.skill}
+                              </p>
+                              <span
+                                className={`${styles.skillMobileDelta} ${deltaClass}`}
+                              >
+                                {t.delta} {delta > 0 ? `+${delta}` : delta}
+                              </span>
+                            </div>
+
+                            <div className={styles.skillMobileGrid}>
+                              <div className={styles.skillMobileMetric}>
+                                <span>{t.yourCasts}</span>
+                                <strong>{skill.casts}</strong>
+                              </div>
+                              <div className={styles.skillMobileMetric}>
+                                <span>{t.top10Average}</span>
+                                <strong>{skill.top10Casts}</strong>
+                              </div>
+                              <div className={styles.skillMobileMetric}>
+                                <span>{t.totalDamage}</span>
+                                <strong>
+                                  {skill.damage > 0
+                                    ? formatNumber(skill.damage)
+                                    : "-"}
+                                </strong>
+                              </div>
+                              <div className={styles.skillMobileMetric}>
+                                <span>{t.hits}</span>
+                                <strong>{skill.hits}</strong>
+                              </div>
+                              <div className={styles.skillMobileMetric}>
+                                <span>{t.crit}</span>
+                                <strong>
+                                  {skill.critRate > 0
+                                    ? `${skill.critRate.toFixed(1)}%`
+                                    : "-"}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </article>
 
                 <aside className={styles.card}>
