@@ -97,7 +97,7 @@ const styles = {
   skillMobileMetric:
     "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
   jobBadge:
-    "inline-block w-6 text-center text-[0.7rem] font-bold uppercase tracking-wider rounded bg-[rgba(255,255,255,0.1)] px-1 py-0.5",
+    "tiny-icon sprite inline-block h-8 w-8 border border-[#555555] mx-[2px] align-[-6px] object-cover",
   skillTable:
     "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-[rgba(80,122,198,0.13)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
   rowSelected:
@@ -922,6 +922,33 @@ const jobColorMap: Record<Job, string> = {
   BLM: "#a579d6",
 };
 
+const ACTOR_SPRITE_SRC =
+  "https://assets.rpglogs.com/img/ff/icons/actors.png?v=35";
+
+const DEFAULT_ACTOR_SPRITE_POSITION = "calc(-5px * 0) 0";
+
+const jobSpriteNameMap: Record<Job, string> = {
+  SAM: "Samurai",
+  NIN: "Ninja",
+  DRG: "Dragoon",
+  RPR: "Reaper",
+  PLD: "Paladin",
+  WHM: "WhiteMage",
+  SGE: "Sage",
+  BLM: "BlackMage",
+};
+
+const jobSpritePositionMap: Record<Job, string> = {
+  SAM: DEFAULT_ACTOR_SPRITE_POSITION,
+  NIN: DEFAULT_ACTOR_SPRITE_POSITION,
+  DRG: DEFAULT_ACTOR_SPRITE_POSITION,
+  RPR: DEFAULT_ACTOR_SPRITE_POSITION,
+  PLD: DEFAULT_ACTOR_SPRITE_POSITION,
+  WHM: DEFAULT_ACTOR_SPRITE_POSITION,
+  SGE: DEFAULT_ACTOR_SPRITE_POSITION,
+  BLM: DEFAULT_ACTOR_SPRITE_POSITION,
+};
+
 const roleClassMap: Record<Role, string> = {
   Tank: styles.roleTank,
   Healer: styles.roleHealer,
@@ -1155,15 +1182,17 @@ const FF14Page = () => {
                         >
                           <td>
                             <div className="flex items-center gap-2">
-                              <span
-                                className={styles.jobBadge}
+                              <img
+                                src={ACTOR_SPRITE_SRC}
+                                alt={jobSpriteNameMap[member.job]}
+                                className={`${styles.jobBadge} actor-sprite-${jobSpriteNameMap[member.job]}`}
                                 style={{
-                                  color: jobColor,
-                                  backgroundColor: `color-mix(in srgb, ${jobColor} 15%, transparent)`,
+                                  objectPosition:
+                                    jobSpritePositionMap[member.job],
                                 }}
-                              >
-                                {member.job}
-                              </span>
+                                decoding="async"
+                                loading="lazy"
+                              />
                               <div className={styles.playerCell}>
                                 <span
                                   className={styles.playerName}
@@ -1235,15 +1264,17 @@ const FF14Page = () => {
                       >
                         <div className={styles.summaryMobileTop}>
                           <div className={styles.summaryMobileIdentity}>
-                            <span
-                              className={styles.jobBadge}
+                            <img
+                              src={ACTOR_SPRITE_SRC}
+                              alt={jobSpriteNameMap[member.job]}
+                              className={`${styles.jobBadge} actor-sprite-${jobSpriteNameMap[member.job]}`}
                               style={{
-                                color: jobColor,
-                                backgroundColor: `color-mix(in srgb, ${jobColor} 15%, transparent)`,
+                                objectPosition:
+                                  jobSpritePositionMap[member.job],
                               }}
-                            >
-                              {member.job}
-                            </span>
+                              decoding="async"
+                              loading="lazy"
+                            />
                             <div className={styles.summaryMobileNameWrap}>
                               <p
                                 className={styles.summaryMobileName}
