@@ -1120,8 +1120,8 @@ const FF14Page = () => {
                 <table className={styles.summaryTable}>
                   <thead>
                     <tr>
-                      <th className="w-[240px]">{t.tablePlayer}</th>
-                      <th className="min-w-[260px]">{t.tableAmount}</th>
+                      <th className="w-60">{t.tablePlayer}</th>
+                      <th className="min-w-65">{t.tableAmount}</th>
                       <th className="text-right">{t.tableRdps}</th>
                       <th className="text-right">{t.tableAdps}</th>
                       <th className="text-center">{t.tableCasts}</th>
@@ -1179,10 +1179,10 @@ const FF14Page = () => {
                           </td>
                           <td>
                             <div className="flex items-center justify-between gap-2 text-[0.8rem] text-[#c5d8f3]">
-                              <span className="w-[45px] text-right font-medium">
+                              <span className="w-11.25 text-right font-medium">
                                 {amountPercent}%
                               </span>
-                              <div className="flex-1 h-[14px] bg-[rgba(15,23,42,0.4)] rounded-sm overflow-hidden flex items-center border border-[rgba(255,255,255,0.05)]">
+                              <div className="flex-1 h-3.5 bg-[rgba(15,23,42,0.4)] rounded-sm overflow-hidden flex items-center border border-[rgba(255,255,255,0.05)]">
                                 <div
                                   style={{
                                     width: barWidth,
@@ -1191,15 +1191,15 @@ const FF14Page = () => {
                                   className="h-full rounded-sm transition-all duration-500 opacity-90 shadow-[0_0_10px_rgba(255,255,255,0.1)]"
                                 />
                               </div>
-                              <span className="w-[45px] text-right font-medium">
+                              <span className="w-11.25 text-right font-medium">
                                 {((member.rdps * 516) / 1000000).toFixed(2)}m
                               </span>
                             </div>
                           </td>
-                          <td className="text-right font-[var(--font-heading)] text-[0.88rem] tracking-[0.02em]">
+                          <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em]">
                             {formatNumber(member.rdps)}
                           </td>
-                          <td className="text-right font-[var(--font-heading)] text-[0.88rem] tracking-[0.02em] text-[#a9c2e6]">
+                          <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em] text-[#a9c2e6]">
                             {formatNumber(member.adps)}
                           </td>
                           <td className="text-center text-[0.85rem] text-[#95b0d5]">
@@ -1268,7 +1268,7 @@ const FF14Page = () => {
                         </div>
 
                         <div className={styles.summaryMobileAmount}>
-                          <span className="w-[44px] text-right font-medium">
+                          <span className="w-11 text-right font-medium">
                             {amountPercent}%
                           </span>
                           <div className={styles.summaryMobileTrack}>
@@ -1280,7 +1280,7 @@ const FF14Page = () => {
                               }}
                             />
                           </div>
-                          <span className="w-[48px] text-right font-medium">
+                          <span className="w-12 text-right font-medium">
                             {((member.rdps * 516) / 1000000).toFixed(2)}m
                           </span>
                         </div>
