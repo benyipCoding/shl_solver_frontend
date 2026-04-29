@@ -22,9 +22,7 @@ type SummaryRequestState = {
 };
 
 const FF14Page = () => {
-  const [reportUrl, setReportUrl] = useState(
-    "https://www.fflogs.com/reports/yZrcbBYf8GL9TqCF?fight=112"
-  );
+  const [reportUrl, setReportUrl] = useState("");
   const [locale, setLocale] = useState<Locale>("zh");
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>("");
   const [showMobileSummaryValues, setShowMobileSummaryValues] = useState(false);
