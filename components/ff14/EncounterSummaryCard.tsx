@@ -18,8 +18,8 @@ interface EncounterSummaryCardProps {
   selectedCharacterId: string;
   showMobileSummaryValues: boolean;
   raidTotals: {
-    raidRdps: number;
-    maxRdps: number;
+    totalDamage: number;
+    maxDamage: number;
   };
   onSelectCharacter: (characterId: string) => void;
   onToggleMobileSummaryValues: () => void;
@@ -70,11 +70,14 @@ const EncounterSummaryCard = ({
           <tbody>
             {summary.map((member) => {
               const isSelected = member.id === selectedCharacterId;
+              const totalDamage = member.totalDamage ?? 0;
               const amountPercent = (
-                (member.rdps / raidTotals.raidRdps) *
+                (totalDamage / Math.max(raidTotals.totalDamage, 1)) *
                 100
               ).toFixed(2);
-              const barWidth = `${(member.rdps / raidTotals.maxRdps) * 100}%`;
+              const barWidth = `${
+                (totalDamage / Math.max(raidTotals.maxDamage, 1)) * 100
+              }%`;
               const jobColor = jobColorMap[member.job] || "#ccc";
 
               return (
@@ -131,7 +134,7 @@ const EncounterSummaryCard = ({
                         />
                       </div>
                       <span className="w-11.25 text-right font-medium">
-                        {((member.rdps * 516) / 1000000).toFixed(2)}m
+                        {(totalDamage / 1000000).toFixed(2)}m
                       </span>
                     </div>
                   </td>
@@ -154,14 +157,18 @@ const EncounterSummaryCard = ({
       <ul className={ff14Styles.summaryMobileList}>
         {summary.map((member) => {
           const isSelected = member.id === selectedCharacterId;
+          const totalDamage = member.totalDamage ?? 0;
           const amountPercent = (
-            (member.rdps / raidTotals.raidRdps) *
+            (totalDamage / Math.max(raidTotals.totalDamage, 1)) *
             100
           ).toFixed(2);
-          const barWidth = `${(member.rdps / raidTotals.maxRdps) * 100}%`;
+          const barWidth = `${
+            (totalDamage / Math.max(raidTotals.maxDamage, 1)) * 100
+          }%`;
           const jobColor = jobColorMap[member.job] || "#ccc";
           const roleClass = roleClassMap[member.role];
           const parseClass = parseClassMap[member.tier];
+          const activePct = member.activePct ?? 0;
 
           return (
             <li key={`mobile-${member.id}`}>
@@ -197,7 +204,7 @@ const EncounterSummaryCard = ({
                     </div>
                   </div>
                   <span className={`${ff14Styles.parseChip} ${parseClass}`}>
-                    {text.tableParse} {member.parse}
+                    {text.tableActive} {activePct.toFixed(1)}%
                   </span>
                 </div>
 
@@ -221,7 +228,7 @@ const EncounterSummaryCard = ({
                     />
                   </div>
                   <span className="w-12 text-right font-medium">
-                    {((member.rdps * 516) / 1000000).toFixed(2)}m
+                    {(totalDamage / 1000000).toFixed(2)}m
                   </span>
                 </div>
 

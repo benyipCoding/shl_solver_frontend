@@ -124,6 +124,8 @@ export const ff14Styles = {
     "border-[rgba(122,244,198,0.4)] bg-[rgba(39,120,88,0.3)] text-[#bffbe0]",
   roleMelee:
     "border-[rgba(255,157,124,0.42)] bg-[rgba(147,71,37,0.3)] text-[#ffd8c1]",
+  roleRanged:
+    "border-[rgba(136,224,218,0.42)] bg-[rgba(34,110,108,0.3)] text-[#c9fffb]",
   roleCaster:
     "border-[rgba(204,148,255,0.45)] bg-[rgba(113,52,156,0.3)] text-[#e8cfff]",
   parseGold:
@@ -264,7 +266,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
   },
 ];
 
-export const JOB_SKILL_TEMPLATES: Record<Job, SkillTemplate[]> = {
+export const JOB_SKILL_TEMPLATES: Partial<Record<Job, SkillTemplate[]>> = {
   SAM: [
     {
       skill: "Midare Setsugekka",
@@ -564,14 +566,27 @@ export const JOB_SKILL_TEMPLATES: Record<Job, SkillTemplate[]> = {
 };
 
 export const JOB_BASE_RDPS: Record<Job, number> = {
-  SAM: 18350,
-  NIN: 18100,
-  DRG: 17840,
-  RPR: 17620,
   PLD: 12480,
+  WAR: 13350,
+  DRK: 13180,
+  GNB: 13620,
   WHM: 8650,
+  SCH: 8420,
+  AST: 8790,
   SGE: 8520,
+  MNK: 18550,
+  DRG: 17840,
+  NIN: 18100,
+  SAM: 18350,
+  RPR: 17620,
+  VPR: 18920,
+  BRD: 16020,
+  MCH: 17080,
+  DNC: 15840,
   BLM: 19120,
+  SMN: 18640,
+  RDM: 17710,
+  PCT: 19460,
 };
 
 export const TOP_PLAYER_NAMES = [
@@ -603,14 +618,14 @@ export const TEXT: Record<Locale, StaticText> = {
     heroDesc:
       "粘贴一条 FFLogs 战斗链接，即可在同一页面查看团队汇总、个人技能施放和同职业 Top 10 对比。",
     reportInputTitle: "1. 战斗日志输入",
-    statusReady: "模拟数据已就绪",
+    statusReady: "已识别有效链接",
     statusIdle: "等待有效链接",
     switchAria: "切换中英文",
     reportUrlLabel: "FFLogs 战斗链接",
     reportUrlPlaceholder: "https://www.fflogs.com/reports/...?...",
     reportPrefix: "报告ID",
     fightPrefix: "战斗ID",
-    todoHint: "TODO：后续替换为真实 FFLogs V1 API 响应",
+    todoHint: "战斗汇总会通过 FFLogs V1 接口实时加载，技能明细仍保留原型估算。",
     examplePrefix: "示例：",
     encounterSummaryTitle: "2. 战斗汇总",
     totalRdpsLabel: "团队总 rDPS",
@@ -647,7 +662,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "下一步可加入时间轴标记（2分钟团队增益、爆发药、机制停手），定位技能缺失发生在何时。",
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
-      "当前原型使用静态模拟数据。接入后端 API 后，这里将自动加载战斗汇总与角色技能细节。",
+      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总。技能明细与 Top10 对比仍为原型估算。",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "切换战斗汇总显示模式",
@@ -662,14 +677,15 @@ export const TEXT: Record<Locale, StaticText> = {
     heroDesc:
       "Paste one FFLogs fight URL and explore role summaries, personal skill usage, and same-job Top 10 comparisons in one screen.",
     reportInputTitle: "1. Report Input",
-    statusReady: "Mock data ready",
+    statusReady: "Valid URL detected",
     statusIdle: "Waiting for valid URL",
     switchAria: "Switch language",
     reportUrlLabel: "FFLogs fight URL",
     reportUrlPlaceholder: "https://www.fflogs.com/reports/...?...",
     reportPrefix: "Report",
     fightPrefix: "Fight",
-    todoHint: "TODO: replace with real FFLogs V1 API response",
+    todoHint:
+      "Encounter summary loads from FFLogs V1 live data. Skill breakdown still uses prototype estimation.",
     examplePrefix: "Example:",
     encounterSummaryTitle: "2. Encounter Summary",
     totalRdpsLabel: "Total rDPS",
@@ -706,7 +722,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "Next step: surface timeline markers (2-minute buffs, potion windows, forced downtime) for each skill.",
     emptyTitle: "Paste a valid FFLogs fight link to begin",
     emptyDesc:
-      "This prototype page uses static mock data only. Once backend API is connected, this panel can auto-load encounter summary and player skill-level details.",
+      "Paste a valid FFLogs fight URL and this page will load the live encounter summary. Skill breakdown and Top 10 comparison still use prototype estimation.",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "Toggle encounter summary view mode",
@@ -718,14 +734,27 @@ export const TEXT: Record<Locale, StaticText> = {
 };
 
 export const jobColorMap: Record<Job, string> = {
-  SAM: "#e46d04",
-  NIN: "#af1964",
-  DRG: "#4164cd",
-  RPR: "#965a90",
   PLD: "#a8d2e6",
+  WAR: "#cf2621",
+  DRK: "#d126cc",
+  GNB: "#796d30",
   WHM: "#fff0dc",
+  SCH: "#8657ff",
+  AST: "#ffe74a",
   SGE: "#80a0f0",
+  MNK: "#d69c00",
+  DRG: "#4164cd",
+  NIN: "#af1964",
+  SAM: "#e46d04",
+  RPR: "#965a90",
+  VPR: "#4cc0af",
+  BRD: "#91ba5e",
+  MCH: "#6ee1d6",
+  DNC: "#e2b0af",
   BLM: "#a579d6",
+  SMN: "#2d9b78",
+  RDM: "#e87b74",
+  PCT: "#ff8ed1",
 };
 
 export const ACTOR_SPRITE_SRC =
@@ -801,6 +830,7 @@ export const roleClassMap: Record<Role, string> = {
   Tank: ff14Styles.roleTank,
   Healer: ff14Styles.roleHealer,
   Melee: ff14Styles.roleMelee,
+  Ranged: ff14Styles.roleRanged,
   Caster: ff14Styles.roleCaster,
 };
 

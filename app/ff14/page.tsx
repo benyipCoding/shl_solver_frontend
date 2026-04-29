@@ -6,57 +6,133 @@ import HeroSection from "@/components/ff14/HeroSection";
 import ReportInputCard from "@/components/ff14/ReportInputCard";
 import SkillBreakdownCard from "@/components/ff14/SkillBreakdownCard";
 import TopPlayersCard from "@/components/ff14/TopPlayersCard";
+import { bodyFont, ff14Styles, headingFont, TEXT } from "@/constants/ff14";
+import type { CharacterSummary, Locale } from "@/interfaces/ff14";
 import {
-  bodyFont,
-  ff14Styles,
-  headingFont,
-  MOCK_SUMMARY,
-  TEXT,
-} from "@/constants/ff14";
-import type { Locale } from "@/interfaces/ff14";
-import { buildCharacterDetail, parseFflogsReport } from "@/utils/ff14";
+  buildCharacterDetail,
+  loadEncounterSummary,
+  parseFflogsReport,
+} from "@/utils/ff14";
+
+type SummaryRequestState = {
+  reportKey: string | null;
+  summary: CharacterSummary[];
+  error: string | null;
+  status: "idle" | "loaded" | "error";
+};
 
 const FF14Page = () => {
   const [reportUrl, setReportUrl] = useState(
     "https://www.fflogs.com/reports/yZrcbBYf8GL9TqCF?fight=112"
   );
   const [locale, setLocale] = useState<Locale>("zh");
-  const [selectedCharacterId, setSelectedCharacterId] = useState<string>(
-    MOCK_SUMMARY[0]?.id ?? ""
-  );
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>("");
   const [showMobileSummaryValues, setShowMobileSummaryValues] = useState(false);
+  const [summaryRequest, setSummaryRequest] = useState<SummaryRequestState>({
+    reportKey: null,
+    summary: [],
+    error: null,
+    status: "idle",
+  });
 
   const text = TEXT[locale];
 
   const parsedReport = useMemo(() => parseFflogsReport(reportUrl), [reportUrl]);
   const hasValidReport = Boolean(parsedReport);
+  const reportKey = parsedReport
+    ? `${parsedReport.reportId}:${parsedReport.fightId}`
+    : null;
+
+  const summaryState = !reportKey
+    ? "idle"
+    : summaryRequest.reportKey !== reportKey
+      ? "loading"
+      : summaryRequest.status;
+
+  const summaryError =
+    reportKey &&
+    summaryRequest.reportKey === reportKey &&
+    summaryRequest.status === "error"
+      ? summaryRequest.error
+      : null;
+
+  const summary = useMemo(() => {
+    if (
+      reportKey &&
+      summaryRequest.reportKey === reportKey &&
+      summaryRequest.status === "loaded"
+    ) {
+      return summaryRequest.summary;
+    }
+
+    return [];
+  }, [reportKey, summaryRequest]);
 
   const sortedSummary = useMemo(
-    () => [...MOCK_SUMMARY].sort((a, b) => b.rdps - a.rdps),
-    []
+    () => [...summary].sort((left, right) => right.rdps - left.rdps),
+    [summary]
   );
 
+  const activeSelectedCharacterId = useMemo(() => {
+    if (!sortedSummary.length) {
+      return "";
+    }
+
+    return sortedSummary.some((item) => item.id === selectedCharacterId)
+      ? selectedCharacterId
+      : (sortedSummary[0]?.id ?? "");
+  }, [selectedCharacterId, sortedSummary]);
+
   useEffect(() => {
-    if (!hasValidReport) {
+    if (!parsedReport || !reportKey) {
       return;
     }
 
-    // TODO: Replace mock data with backend call based on reportUrl.
-    // Example: GET /api/ff14/report?url=${encodeURIComponent(reportUrl)}
-    // Then hydrate summary rows + per-character skill details.
-  }, [hasValidReport, reportUrl]);
+    const controller = new AbortController();
+
+    void loadEncounterSummary(parsedReport, controller.signal)
+      .then((nextSummary) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setSummaryRequest({
+          reportKey,
+          summary: nextSummary,
+          error: null,
+          status: "loaded",
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setSummaryRequest({
+          reportKey,
+          summary: [],
+          error:
+            error instanceof Error ? error.message : "加载 FF14 战斗汇总失败",
+          status: "error",
+        });
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [parsedReport, reportKey]);
 
   const selectedCharacter = useMemo(() => {
-    if (!hasValidReport) {
+    if (!sortedSummary.length) {
       return null;
     }
 
     return (
-      sortedSummary.find((item) => item.id === selectedCharacterId) ??
+      sortedSummary.find((item) => item.id === activeSelectedCharacterId) ??
       sortedSummary[0] ??
       null
     );
-  }, [hasValidReport, selectedCharacterId, sortedSummary]);
+  }, [activeSelectedCharacterId, sortedSummary]);
 
   const selectedDetail = useMemo(() => {
     if (!selectedCharacter) {
@@ -67,14 +143,38 @@ const FF14Page = () => {
   }, [selectedCharacter]);
 
   const raidTotals = useMemo(() => {
-    const raidRdps = sortedSummary.reduce((sum, item) => sum + item.rdps, 0);
-    const maxRdps = sortedSummary[0]?.rdps ?? 1;
+    const totalDamage = sortedSummary.reduce(
+      (sum, item) => sum + (item.totalDamage ?? 0),
+      0
+    );
+    const maxDamage = Math.max(
+      ...sortedSummary.map((item) => item.totalDamage ?? 0),
+      1
+    );
 
     return {
-      raidRdps,
-      maxRdps,
+      totalDamage,
+      maxDamage,
     };
   }, [sortedSummary]);
+
+  const summaryStatusTitle = useMemo(() => {
+    if (summaryState === "loading") {
+      return locale === "zh"
+        ? "正在加载战斗汇总..."
+        : "Loading encounter summary...";
+    }
+
+    if (summaryState === "error") {
+      return locale === "zh"
+        ? "战斗汇总加载失败"
+        : "Failed to load encounter summary";
+    }
+
+    return locale === "zh"
+      ? "当前战斗没有可展示的玩家数据"
+      : "No player summary available for this fight";
+  }, [locale, summaryState]);
 
   const toggleLocale = () => {
     setLocale((prev) => (prev === "zh" ? "en" : "zh"));
@@ -102,32 +202,47 @@ const FF14Page = () => {
 
         {hasValidReport ? (
           <>
-            <EncounterSummaryCard
-              text={text}
-              summary={sortedSummary}
-              selectedCharacterId={selectedCharacterId}
-              showMobileSummaryValues={showMobileSummaryValues}
-              raidTotals={raidTotals}
-              onSelectCharacter={setSelectedCharacterId}
-              onToggleMobileSummaryValues={() => {
-                setShowMobileSummaryValues((prev) => !prev);
-              }}
-            />
+            {summaryState === "loaded" && sortedSummary.length ? (
+              <>
+                <EncounterSummaryCard
+                  text={text}
+                  summary={sortedSummary}
+                  selectedCharacterId={activeSelectedCharacterId}
+                  showMobileSummaryValues={showMobileSummaryValues}
+                  raidTotals={raidTotals}
+                  onSelectCharacter={setSelectedCharacterId}
+                  onToggleMobileSummaryValues={() => {
+                    setShowMobileSummaryValues((prev) => !prev);
+                  }}
+                />
 
-            {selectedCharacter && selectedDetail ? (
-              <section className={ff14Styles.detailGrid}>
-                <SkillBreakdownCard
-                  text={text}
-                  selectedCharacter={selectedCharacter}
-                  selectedDetail={selectedDetail}
-                />
-                <TopPlayersCard
-                  text={text}
-                  selectedCharacter={selectedCharacter}
-                  selectedDetail={selectedDetail}
-                />
+                {selectedCharacter && selectedDetail ? (
+                  <section className={ff14Styles.detailGrid}>
+                    <SkillBreakdownCard
+                      text={text}
+                      selectedCharacter={selectedCharacter}
+                      selectedDetail={selectedDetail}
+                    />
+                    <TopPlayersCard
+                      text={text}
+                      selectedCharacter={selectedCharacter}
+                      selectedDetail={selectedDetail}
+                    />
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <section className={ff14Styles.card}>
+                <div className="grid gap-2">
+                  <p className="m-0 font-(--font-heading) text-[1rem] text-[#edf3ff]">
+                    {summaryStatusTitle}
+                  </p>
+                  <p className="m-0 text-[0.88rem] leading-[1.6] text-[#a8bddc]">
+                    {summaryState === "error" ? summaryError : text.todoHint}
+                  </p>
+                </div>
               </section>
-            ) : null}
+            )}
           </>
         ) : (
           <EmptyState text={text} />

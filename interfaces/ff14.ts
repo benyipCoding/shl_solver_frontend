@@ -1,5 +1,26 @@
-export type Role = "Tank" | "Healer" | "Melee" | "Caster";
-export type Job = "SAM" | "NIN" | "DRG" | "RPR" | "PLD" | "WHM" | "SGE" | "BLM";
+export type Role = "Tank" | "Healer" | "Melee" | "Ranged" | "Caster";
+export type Job =
+  | "PLD"
+  | "WAR"
+  | "DRK"
+  | "GNB"
+  | "WHM"
+  | "SCH"
+  | "AST"
+  | "SGE"
+  | "MNK"
+  | "DRG"
+  | "NIN"
+  | "SAM"
+  | "RPR"
+  | "VPR"
+  | "BRD"
+  | "MCH"
+  | "DNC"
+  | "BLM"
+  | "SMN"
+  | "RDM"
+  | "PCT";
 export type ParseTier = "gold" | "purple" | "blue" | "green";
 export type Locale = "zh" | "en";
 
@@ -75,6 +96,8 @@ export interface CharacterSummary {
   deaths: number;
   parse: number;
   tier: ParseTier;
+  totalDamage?: number;
+  activePct?: number;
 }
 
 export interface SkillTemplate {
