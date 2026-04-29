@@ -245,16 +245,10 @@ export const loadEncounterSummary = async (
     end: String(selectedFight.end_time),
   });
 
-  const [damageDoneData, castsData] = await Promise.all([
-    fetchFf14Data<Ff14TableResponse>(
-      `/api/ff14_logs/report/tables?view=damage-done&${query.toString()}`,
-      signal
-    ),
-    fetchFf14Data<Ff14TableResponse>(
-      `/api/ff14_logs/report/tables?view=casts&${query.toString()}`,
-      signal
-    ),
-  ]);
+  const damageDoneData = await fetchFf14Data<Ff14TableResponse>(
+    `/api/ff14_logs/report/tables?view=damage-done&${query.toString()}`,
+    signal
+  );
 
   const encounterDuration = Math.max(selectedFight.combatTime, 1);
   const encounterFriendlies = fightsData.friendlies.filter((friendly) =>
@@ -262,9 +256,6 @@ export const loadEncounterSummary = async (
   );
   const serverMap = new Map<number, string>(
     encounterFriendlies.map((friendly) => [friendly.id, friendly.server ?? "-"])
-  );
-  const castsMap = new Map<number, Ff14TableEntry>(
-    (castsData.entries ?? []).map((entry) => [entry.id, entry])
   );
 
   return (damageDoneData.entries ?? [])
@@ -296,7 +287,6 @@ export const loadEncounterSummary = async (
         job,
         rdps,
         adps,
-        casts: Math.round(castsMap.get(entry.id)?.total ?? 0),
         deaths: 0,
         parse,
         tier: getParseTier(parse),

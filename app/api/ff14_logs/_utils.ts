@@ -46,6 +46,13 @@ const getProxyError = (error: unknown, fallbackMessage: string) => {
     };
   }
 
+  if (error instanceof Error) {
+    return {
+      message: error.message || fallbackMessage,
+      status: 500,
+    };
+  }
+
   return {
     message: fallbackMessage,
     status: 500,

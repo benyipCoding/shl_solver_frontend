@@ -1,8 +1,14 @@
 // 封装请求逻辑
 import axios from "axios";
 
+const apiBaseUrl =
+  process.env.API_BASE_URL?.trim() || process.env.NEXT_PUBLIC_BASE_URL?.trim();
+
+const missingApiBaseUrlMessage =
+  "缺少后端基地址配置，请设置 API_BASE_URL 或 NEXT_PUBLIC_BASE_URL";
+
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_BASE_URL,
+  baseURL: apiBaseUrl,
   headers: {
     "Content-Type": "application/json",
   },
@@ -10,6 +16,10 @@ const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
+  if (!apiBaseUrl) {
+    throw new Error(missingApiBaseUrlMessage);
+  }
+
   if (typeof window === "undefined") {
     const { cookies, headers } = await import("next/headers");
     const cookieStore = await cookies();

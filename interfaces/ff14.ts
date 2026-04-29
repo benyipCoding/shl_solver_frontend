@@ -47,7 +47,6 @@ export interface StaticText {
   tableJob: string;
   tableRdps: string;
   tableAdps: string;
-  tableCasts: string;
   tableDeaths: string;
   tableParse: string;
   tableAmount: string;
@@ -92,7 +91,6 @@ export interface CharacterSummary {
   job: Job;
   rdps: number;
   adps: number;
-  casts: number;
   deaths: number;
   parse: number;
   tier: ParseTier;

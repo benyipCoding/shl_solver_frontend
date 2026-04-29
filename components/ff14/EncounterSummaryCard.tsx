@@ -6,7 +6,6 @@ import {
   jobColorMap,
   jobSpriteNameMap,
   jobSpritePositionMap,
-  parseClassMap,
   roleClassMap,
 } from "@/constants/ff14";
 import type { CharacterSummary, StaticText } from "@/interfaces/ff14";
@@ -62,15 +61,16 @@ const EncounterSummaryCard = ({
             <tr>
               <th className="w-60">{text.tablePlayer}</th>
               <th className="min-w-65">{text.tableAmount}</th>
+              <th className="text-center">{text.tableActive}</th>
               <th className="text-right">{text.tableRdps}</th>
               <th className="text-right">{text.tableAdps}</th>
-              <th className="text-center">{text.tableCasts}</th>
             </tr>
           </thead>
           <tbody>
             {summary.map((member) => {
               const isSelected = member.id === selectedCharacterId;
               const totalDamage = member.totalDamage ?? 0;
+              const activePct = member.activePct ?? 0;
               const amountPercent = (
                 (totalDamage / Math.max(raidTotals.totalDamage, 1)) *
                 100
@@ -138,14 +138,14 @@ const EncounterSummaryCard = ({
                       </span>
                     </div>
                   </td>
+                  <td className="text-center font-(--font-heading) text-[0.88rem] tracking-[0.02em] text-[#9beee2]">
+                    {activePct.toFixed(1)}%
+                  </td>
                   <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em]">
                     {formatNumber(member.rdps)}
                   </td>
                   <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em] text-[#a9c2e6]">
                     {formatNumber(member.adps)}
-                  </td>
-                  <td className="text-center text-[0.85rem] text-[#95b0d5]">
-                    {member.casts}
                   </td>
                 </tr>
               );
@@ -167,7 +167,6 @@ const EncounterSummaryCard = ({
           }%`;
           const jobColor = jobColorMap[member.job] || "#ccc";
           const roleClass = roleClassMap[member.role];
-          const parseClass = parseClassMap[member.tier];
           const activePct = member.activePct ?? 0;
 
           return (
@@ -203,7 +202,7 @@ const EncounterSummaryCard = ({
                       </p>
                     </div>
                   </div>
-                  <span className={`${ff14Styles.parseChip} ${parseClass}`}>
+                  <span className={ff14Styles.activeChip}>
                     {text.tableActive} {activePct.toFixed(1)}%
                   </span>
                 </div>
