@@ -121,13 +121,13 @@ const EncounterSummaryCard = ({
                       <span className="w-11.25 text-right font-medium">
                         {amountPercent}%
                       </span>
-                      <div className="flex-1 h-3.5 bg-[rgba(15,23,42,0.4)] rounded-sm overflow-hidden flex items-center border border-[rgba(255,255,255,0.05)]">
+                      <div className="flex h-3.5 flex-1 items-center overflow-hidden rounded-sm border border-[rgba(255,255,255,0.05)] bg-[rgba(15,23,42,0.4)] transition-colors duration-200 group-hover:border-[rgba(171,210,255,0.18)] group-hover:bg-[rgba(31,48,79,0.62)] group-focus-visible:border-[rgba(171,210,255,0.18)] group-focus-visible:bg-[rgba(31,48,79,0.62)]">
                         <div
                           style={{
                             width: barWidth,
                             backgroundColor: jobColor,
                           }}
-                          className="h-full rounded-sm transition-all duration-500 opacity-90 shadow-[0_0_10px_rgba(255,255,255,0.1)]"
+                          className="h-full rounded-sm opacity-90 shadow-[0_0_10px_rgba(255,255,255,0.1)] transition-all duration-500 group-hover:opacity-100 group-hover:shadow-[0_0_14px_rgba(255,255,255,0.2)] group-focus-visible:opacity-100 group-focus-visible:shadow-[0_0_14px_rgba(255,255,255,0.2)]"
                         />
                       </div>
                       <span className="w-11.25 text-right font-medium">

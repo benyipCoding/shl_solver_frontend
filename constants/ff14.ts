@@ -87,7 +87,7 @@ export const ff14Styles = {
     "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
   summaryMobileHint: "m-0 text-[0.72rem] text-[#8ea8cd]",
   summaryTable:
-    "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-colors [&_tbody_tr:nth-child(odd)]:bg-[rgba(20,32,56,0.34)] [&_tbody_tr:nth-child(even)]:bg-[rgba(10,19,35,0.38)] [&_tbody_tr:hover]:bg-[rgba(80,122,198,0.13)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
+    "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-[background-color,box-shadow] [&_tbody_tr]:duration-200 [&_tbody_tr:nth-child(odd)]:bg-[rgba(20,32,56,0.34)] [&_tbody_tr:nth-child(even)]:bg-[rgba(10,19,35,0.38)] [&_tbody_tr:hover]:bg-[linear-gradient(90deg,rgba(90,145,236,0.22),rgba(90,145,236,0.08))] [&_tbody_tr:hover]:shadow-[inset_3px_0_0_rgba(154,201,255,0.95),inset_0_1px_0_rgba(174,214,255,0.08)] [&_tbody_tr:focus-visible]:bg-[linear-gradient(90deg,rgba(90,145,236,0.22),rgba(90,145,236,0.08))] [&_tbody_tr:focus-visible]:shadow-[inset_3px_0_0_rgba(154,201,255,0.95),inset_0_1px_0_rgba(174,214,255,0.08)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
   skillMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
   skillMobileCard:
     "rounded-[14px] border border-[rgba(123,165,233,0.3)] bg-[rgba(20,31,54,0.55)] p-2.5",
@@ -108,10 +108,12 @@ export const ff14Styles = {
     "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-[rgba(80,122,198,0.13)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
   rowSelected:
     "!bg-[linear-gradient(90deg,rgba(84,140,233,0.28),rgba(84,140,233,0.08))] shadow-[inset_0_0_0_1px_rgba(141,183,255,0.35)]",
-  summaryRow: "cursor-pointer",
+  summaryRow: "group cursor-pointer outline-none",
   playerCell: "grid gap-0.5",
-  playerName: "font-semibold text-[#eaf3ff]",
-  playerServer: "text-[0.78rem] text-[#8ea8cd]",
+  playerName:
+    "font-semibold text-[#eaf3ff] transition-colors duration-200 group-hover:text-white group-focus-visible:text-white",
+  playerServer:
+    "text-[0.78rem] text-[#8ea8cd] transition-colors duration-200 group-hover:text-[#bfd6fb] group-focus-visible:text-[#bfd6fb]",
   roleChip:
     "inline-block rounded-full border border-transparent px-2.5 py-[3px] text-[0.73rem]",
   parseChip:
@@ -729,28 +731,70 @@ export const jobColorMap: Record<Job, string> = {
 export const ACTOR_SPRITE_SRC =
   "https://assets.rpglogs.com/img/ff/icons/actors.png?v=35";
 
-const DEFAULT_ACTOR_SPRITE_POSITION = "calc(-5px * 0) 0";
+const DEFAULT_ACTOR_SPRITE_POSITION = "calc(-5px * 12) 0";
 
-export const jobSpriteNameMap: Record<Job, string> = {
-  SAM: "Samurai",
-  NIN: "Ninja",
-  DRG: "Dragoon",
-  RPR: "Reaper",
+type JobSpriteKey =
+  | Job
+  | "WAR"
+  | "DRK"
+  | "GNB"
+  | "SCH"
+  | "AST"
+  | "MNK"
+  | "VPR"
+  | "BRD"
+  | "MCH"
+  | "DNC"
+  | "SMN"
+  | "RDM"
+  | "PCT";
+
+export const jobSpriteNameMap: Record<JobSpriteKey, string> = {
   PLD: "Paladin",
+  WAR: "Warrior",
+  DRK: "DarkKnight",
+  GNB: "Gunbreaker",
   WHM: "WhiteMage",
+  SCH: "Scholar",
+  AST: "Astrologian",
   SGE: "Sage",
+  MNK: "Monk",
+  DRG: "Dragoon",
+  NIN: "Ninja",
+  SAM: "Samurai",
+  RPR: "Reaper",
+  VPR: "Viper",
+  BRD: "Bard",
+  MCH: "Machinist",
+  DNC: "Dancer",
   BLM: "BlackMage",
+  SMN: "Summoner",
+  RDM: "RedMage",
+  PCT: "Pictomancer",
 };
 
-export const jobSpritePositionMap: Record<Job, string> = {
-  SAM: DEFAULT_ACTOR_SPRITE_POSITION,
-  NIN: DEFAULT_ACTOR_SPRITE_POSITION,
-  DRG: DEFAULT_ACTOR_SPRITE_POSITION,
-  RPR: DEFAULT_ACTOR_SPRITE_POSITION,
-  PLD: DEFAULT_ACTOR_SPRITE_POSITION,
-  WHM: DEFAULT_ACTOR_SPRITE_POSITION,
-  SGE: DEFAULT_ACTOR_SPRITE_POSITION,
-  BLM: DEFAULT_ACTOR_SPRITE_POSITION,
+export const jobSpritePositionMap: Record<JobSpriteKey, string> = {
+  PLD: "calc(-5px * 120) 0",
+  WAR: "calc(-5px * 198) 0",
+  DRK: "calc(-5px * 54) 0",
+  GNB: "calc(-5px * 72) 0",
+  WHM: "calc(-5px * 204) 0",
+  SCH: "calc(-5px * 174) 0",
+  AST: "calc(-5px * 12) 0",
+  SGE: "calc(-5px * 162) 0",
+  MNK: "calc(-5px * 102) 0",
+  DRG: "calc(-5px * 60) 0",
+  NIN: "calc(-5px * 114) 0",
+  SAM: "calc(-5px * 168) 0",
+  RPR: "calc(-5px * 144) 0",
+  VPR: "calc(-5px * 192) 0",
+  BRD: "calc(-5px * 18) 0",
+  MCH: "calc(-5px * 90) 0",
+  DNC: "calc(-5px * 48) 0",
+  BLM: "calc(-5px * 24) 0",
+  SMN: "calc(-5px * 180) 0",
+  RDM: "calc(-5px * 150) 0",
+  PCT: "calc(-5px * 132) 0",
 };
 
 export const roleClassMap: Record<Role, string> = {
