@@ -144,7 +144,7 @@ const EventMarker = memo(function EventMarker({
       key={event.id}
       type="button"
       draggable={false}
-      className="absolute cursor-help overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
+      className="absolute overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
       style={{
         left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
         top: `${topOffset}px`,
@@ -154,7 +154,6 @@ const EventMarker = memo(function EventMarker({
           ? "rgba(9,16,30,0.92)"
           : getAbilityColor(event.abilityKey),
       }}
-      title={`${actor} · ${timeLabel} · ${event.skill}`}
       onMouseEnter={(mouseEvent) => {
         onShowTooltipFromPointer(
           event.skill,
