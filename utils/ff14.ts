@@ -109,6 +109,7 @@ interface Ff14TableResponse<TEntry = Ff14TableEntry> {
   entries?: TEntry[];
   combatTime?: number;
   totalTime?: number;
+  damageDowntime?: number;
 }
 
 interface Ff14EventAbility {
@@ -894,7 +895,14 @@ const buildEncounterSummary = (
   damageDoneData: Ff14TableResponse<Ff14TableEntry>
 ) => {
   const encounterDuration = Math.max(
-    damageDoneData.combatTime ?? selectedFight.combatTime,
+    damageDoneData.totalTime ??
+      damageDoneData.combatTime ??
+      selectedFight.combatTime,
+    1
+  );
+  const effectiveEncounterDuration = Math.max(
+    (damageDoneData.combatTime ?? selectedFight.combatTime) -
+      (damageDoneData.damageDowntime ?? 0),
     1
   );
   const encounterFriendlies = fightsData.friendlies.filter((friendly) =>
@@ -914,13 +922,17 @@ const buildEncounterSummary = (
 
       const totalDamage = Math.round(entry.total ?? 0);
       const dps = Math.round(
-        ((entry.totalDPS ?? entry.total ?? 0) * 1000) / encounterDuration
+        typeof entry.totalDPS === "number"
+          ? entry.totalDPS
+          : ((entry.total ?? 0) * 1000) / effectiveEncounterDuration
       );
       const rdps = Math.round(
-        ((entry.totalRDPS ?? entry.total ?? 0) * 1000) / encounterDuration
+        ((entry.totalRDPS ?? entry.total ?? 0) * 1000) /
+          effectiveEncounterDuration
       );
       const adps = Math.round(
-        ((entry.totalADPS ?? entry.total ?? 0) * 1000) / encounterDuration
+        ((entry.totalADPS ?? entry.total ?? 0) * 1000) /
+          effectiveEncounterDuration
       );
       const activePct = toFixedNumber(
         clamp(((entry.activeTime ?? 0) / encounterDuration) * 100, 0, 100),
@@ -1193,11 +1205,17 @@ const loadCharacterDetailForFight = async (
       selectedFight.combatTime,
     1
   );
+  const effectiveEncounterDuration = Math.max(
+    (damageDoneData.combatTime ??
+      castsData.combatTime ??
+      selectedFight.combatTime) - (damageDoneData.damageDowntime ?? 0),
+    1
+  );
   const skillRows = buildRealSkillRows(
     character,
     damageEntries,
     castEntries,
-    encounterDuration
+    effectiveEncounterDuration
   );
 
   if (!skillRows.length) {
