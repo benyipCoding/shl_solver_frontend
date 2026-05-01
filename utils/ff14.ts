@@ -462,7 +462,6 @@ const buildRealSkillRows = (
   return damageEntries
     .filter((entry) => roundAmount(entry.total) > 0 && entry.name.trim() !== "")
     .sort((left, right) => roundAmount(right.total) - roundAmount(left.total))
-    .slice(0, 10)
     .map((entry) => {
       const castEntry = castEntryByKey.get(getAbilityKey(entry));
       const casts = Math.max(roundAmount(castEntry?.total ?? entry.uses), 0);
