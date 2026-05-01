@@ -27,6 +27,12 @@ type TimelineTooltipState = {
   top: number;
 };
 
+type TimelineDragState = {
+  element: HTMLDivElement;
+  startClientX: number;
+  startScrollLeft: number;
+};
+
 const ZOOM_LEVELS = [4, 6, 8, 10, 14, 20, 30, 40, 60] as const;
 const EVENT_COLORS = [
   "#7ed7ff",
@@ -137,6 +143,7 @@ const EventMarker = memo(function EventMarker({
     <button
       key={event.id}
       type="button"
+      draggable={false}
       className="absolute cursor-help overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
       style={{
         left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
@@ -175,6 +182,7 @@ const EventMarker = memo(function EventMarker({
           alt=""
           className="h-full w-full object-cover"
           decoding="async"
+          draggable={false}
           loading="lazy"
           width={size}
           height={size}
@@ -192,6 +200,11 @@ const TopPlayersCard = ({
   const [zoomIndex, setZoomIndex] = useState(7);
   const [mobileCompareActorId, setMobileCompareActorId] = useState("");
   const [tooltip, setTooltip] = useState<TimelineTooltipState | null>(null);
+  const activeTimelineDragRef = useRef<TimelineDragState | null>(null);
+  const dragBodyStyleRef = useRef<{
+    cursor: string;
+    userSelect: string;
+  } | null>(null);
   const desktopTimelineRef = useRef<HTMLDivElement | null>(null);
   const mobileTimelineRef = useRef<HTMLDivElement | null>(null);
   const timelineTracks = useMemo(
@@ -297,6 +310,97 @@ const TopPlayersCard = ({
     setTooltip(null);
   }, []);
 
+  useEffect(() => {
+    if (!hasTimelineEvents) {
+      return;
+    }
+
+    const stopTimelineDrag = () => {
+      const activeDrag = activeTimelineDragRef.current;
+
+      if (!activeDrag) {
+        return;
+      }
+
+      activeDrag.element.style.cursor = "";
+
+      if (typeof document !== "undefined" && dragBodyStyleRef.current) {
+        document.body.style.cursor = dragBodyStyleRef.current.cursor;
+        document.body.style.userSelect = dragBodyStyleRef.current.userSelect;
+      }
+
+      dragBodyStyleRef.current = null;
+      activeTimelineDragRef.current = null;
+    };
+
+    const handleTimelineDragMove = (mouseEvent: MouseEvent) => {
+      const activeDrag = activeTimelineDragRef.current;
+
+      if (!activeDrag) {
+        return;
+      }
+
+      const deltaX = mouseEvent.clientX - activeDrag.startClientX;
+      activeDrag.element.scrollLeft = activeDrag.startScrollLeft - deltaX;
+      mouseEvent.preventDefault();
+    };
+
+    const handleTimelineDragStart = (mouseEvent: MouseEvent) => {
+      if (mouseEvent.button !== 0) {
+        return;
+      }
+
+      const element = mouseEvent.currentTarget;
+
+      if (!(element instanceof HTMLDivElement)) {
+        return;
+      }
+
+      if (typeof document !== "undefined") {
+        dragBodyStyleRef.current = {
+          cursor: document.body.style.cursor,
+          userSelect: document.body.style.userSelect,
+        };
+        document.body.style.cursor = "grabbing";
+        document.body.style.userSelect = "none";
+      }
+
+      element.style.cursor = "grabbing";
+
+      activeTimelineDragRef.current = {
+        element,
+        startClientX: mouseEvent.clientX,
+        startScrollLeft: element.scrollLeft,
+      };
+      clearTooltip();
+      mouseEvent.preventDefault();
+    };
+
+    const timelineContainers = [
+      desktopTimelineRef.current,
+      mobileTimelineRef.current,
+    ].filter((element): element is HTMLDivElement => Boolean(element));
+
+    timelineContainers.forEach((element) => {
+      element.addEventListener("mousedown", handleTimelineDragStart);
+    });
+
+    window.addEventListener("mousemove", handleTimelineDragMove);
+    window.addEventListener("mouseup", stopTimelineDrag);
+    window.addEventListener("blur", stopTimelineDrag);
+
+    return () => {
+      timelineContainers.forEach((element) => {
+        element.removeEventListener("mousedown", handleTimelineDragStart);
+      });
+
+      window.removeEventListener("mousemove", handleTimelineDragMove);
+      window.removeEventListener("mouseup", stopTimelineDrag);
+      window.removeEventListener("blur", stopTimelineDrag);
+      stopTimelineDrag();
+    };
+  }, [clearTooltip, hasTimelineEvents]);
+
   const clampTooltipPosition = useCallback((left: number, top: number) => {
     if (typeof window === "undefined") {
       return { left, top };
@@ -322,6 +426,10 @@ const TopPlayersCard = ({
       clientX: number,
       clientY: number
     ) => {
+      if (activeTimelineDragRef.current) {
+        return;
+      }
+
       const nextPosition = clampTooltipPosition(
         clientX + TOOLTIP_POINTER_OFFSET_X,
         clientY + TOOLTIP_POINTER_OFFSET_Y
@@ -359,6 +467,10 @@ const TopPlayersCard = ({
       actor: string,
       element: HTMLButtonElement
     ) => {
+      if (activeTimelineDragRef.current) {
+        return;
+      }
+
       const rect = element.getBoundingClientRect();
       const nextPosition = clampTooltipPosition(
         rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
@@ -446,7 +558,7 @@ const TopPlayersCard = ({
       {hasTimelineEvents ? (
         <div
           ref={desktopTimelineRef}
-          className="mt-4 overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden"
+          className="mt-4 overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden cursor-grab active:cursor-grabbing"
         >
           <div className="min-w-max">
             <div className="flex">
@@ -601,7 +713,7 @@ const TopPlayersCard = ({
 
           <div
             ref={mobileTimelineRef}
-            className="overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            className="overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] cursor-grab active:cursor-grabbing"
           >
             <div
               className="min-w-full"
