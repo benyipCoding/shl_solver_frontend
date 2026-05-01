@@ -19,6 +19,18 @@ const SkillBreakdownCard = ({
   selectedCharacter,
   selectedDetail,
 }: SkillBreakdownCardProps) => {
+  const sortedSkillRows = [...selectedDetail.skillRows].sort(
+    (left, right) => right.damage - left.damage
+  );
+  const totalDamage = Math.max(
+    sortedSkillRows.reduce((sum, skill) => sum + skill.damage, 0),
+    1
+  );
+  const maxDamage = Math.max(
+    ...sortedSkillRows.map((skill) => skill.damage),
+    1
+  );
+
   return (
     <article className={ff14Styles.card}>
       <div className={ff14Styles.cardHeader}>
@@ -53,60 +65,115 @@ const SkillBreakdownCard = ({
         </div>
       </div>
 
-      <div className={ff14Styles.tableWrap}>
-        <table className={ff14Styles.skillTable}>
-          <thead>
-            <tr>
-              <th>{text.skillHeader}</th>
-              <th>{text.yourCasts}</th>
-              <th>{text.top10Average}</th>
-              <th>{text.delta}</th>
-              <th>{text.totalDamage}</th>
-              <th>{text.hits}</th>
-              <th>{text.crit}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {selectedDetail.skillRows.map((skill) => {
-              const delta = skill.casts - skill.top10Casts;
-              const deltaClass =
-                delta >= 0 ? ff14Styles.deltaGood : ff14Styles.deltaBad;
+      <div className={ff14Styles.skillPanel}>
+        <div className={ff14Styles.skillPanelHeader}>
+          <span>{text.skillHeader}</span>
+          <span>{text.tableAmount}</span>
+          <span>{text.yourCasts}</span>
+          <span>{text.top10Average}</span>
+          <span>{text.delta}</span>
+          <span>{text.crit}</span>
+          <span>{text.totalDamage}</span>
+          <span>{text.top10Damage}</span>
+        </div>
 
-              return (
-                <tr key={skill.skill}>
-                  <td>{skill.skill}</td>
-                  <td>{skill.casts}</td>
-                  <td>{skill.top10Casts}</td>
-                  <td>
-                    <span className={`${ff14Styles.deltaText} ${deltaClass}`}>
-                      {delta > 0 ? `+${delta}` : delta}
+        <div className={ff14Styles.skillRowsDesktop}>
+          {sortedSkillRows.map((skill, index) => {
+            const delta = skill.casts - skill.top10Casts;
+            const deltaClass =
+              delta >= 0 ? ff14Styles.deltaGood : ff14Styles.deltaBad;
+            const damageShare =
+              skill.damage > 0 ? (skill.damage / totalDamage) * 100 : 0;
+            const barWidth =
+              skill.damage > 0
+                ? Math.max((skill.damage / maxDamage) * 100, 6)
+                : 0;
+
+            return (
+              <div key={skill.skill} className={ff14Styles.skillRow}>
+                <div className={ff14Styles.skillIdentityCell}>
+                  <span className={ff14Styles.skillIconPlaceholder} aria-hidden>
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <div className={ff14Styles.skillIdentityCopy}>
+                    <p className={ff14Styles.skillName}>{skill.skill}</p>
+                    <p className={ff14Styles.skillSubline}>
+                      {text.totalDamage}{" "}
+                      {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className={ff14Styles.skillAmountCell}>
+                  <div className={ff14Styles.skillAmountMeta}>
+                    <strong>{damageShare.toFixed(2)}%</strong>
+                    <span>
+                      {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
                     </span>
-                  </td>
-                  <td>{skill.damage > 0 ? formatNumber(skill.damage) : "-"}</td>
-                  <td>{skill.hits}</td>
-                  <td>
-                    {skill.critRate > 0 ? `${skill.critRate.toFixed(1)}%` : "-"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                  <div className={ff14Styles.skillAmountTrack}>
+                    <span
+                      className={ff14Styles.skillAmountFill}
+                      style={{ width: `${barWidth}%` }}
+                    />
+                  </div>
+                </div>
+
+                <span className={ff14Styles.skillStatValue}>{skill.casts}</span>
+                <span className={ff14Styles.skillStatValue}>
+                  {skill.top10Casts}
+                </span>
+                <span className={`${ff14Styles.deltaText} ${deltaClass}`}>
+                  {delta > 0 ? `+${delta}` : delta}
+                </span>
+                <span className={ff14Styles.skillStatValue}>
+                  {skill.critRate > 0 ? `${skill.critRate.toFixed(1)}%` : "-"}
+                </span>
+                <span className={ff14Styles.skillDamageValue}>
+                  {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                </span>
+                <span className={ff14Styles.skillStatValue}>
+                  {skill.top10Damage > 0
+                    ? formatNumber(skill.top10Damage)
+                    : "-"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <ul className={ff14Styles.skillMobileList}>
-        {selectedDetail.skillRows.map((skill) => {
+        {sortedSkillRows.map((skill, index) => {
           const delta = skill.casts - skill.top10Casts;
           const deltaClass =
             delta >= 0
               ? ff14Styles.skillMobileDeltaGood
               : ff14Styles.skillMobileDeltaBad;
+          const damageShare =
+            skill.damage > 0 ? (skill.damage / totalDamage) * 100 : 0;
 
           return (
             <li key={`mobile-${skill.skill}`}>
               <div className={ff14Styles.skillMobileCard}>
                 <div className={ff14Styles.skillMobileHeader}>
-                  <p className={ff14Styles.skillMobileName}>{skill.skill}</p>
+                  <div className={ff14Styles.skillMobileIdentity}>
+                    <span
+                      className={ff14Styles.skillIconPlaceholder}
+                      aria-hidden
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div>
+                      <p className={ff14Styles.skillMobileName}>
+                        {skill.skill}
+                      </p>
+                      <p className={ff14Styles.skillMobileSubline}>
+                        {damageShare.toFixed(2)}% ·{" "}
+                        {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                      </p>
+                    </div>
+                  </div>
                   <span
                     className={`${ff14Styles.skillMobileDelta} ${deltaClass}`}
                   >
@@ -130,14 +197,18 @@ const SkillBreakdownCard = ({
                     </strong>
                   </div>
                   <div className={ff14Styles.skillMobileMetric}>
-                    <span>{text.hits}</span>
-                    <strong>{skill.hits}</strong>
-                  </div>
-                  <div className={ff14Styles.skillMobileMetric}>
                     <span>{text.crit}</span>
                     <strong>
                       {skill.critRate > 0
                         ? `${skill.critRate.toFixed(1)}%`
+                        : "-"}
+                    </strong>
+                  </div>
+                  <div className={ff14Styles.skillMobileMetric}>
+                    <span>{text.top10Damage}</span>
+                    <strong>
+                      {skill.top10Damage > 0
+                        ? formatNumber(skill.top10Damage)
                         : "-"}
                     </strong>
                   </div>

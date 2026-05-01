@@ -11,6 +11,7 @@ import type {
   ParseTier,
   ParsedReport,
   Role,
+  SkillRow,
   SkillTemplate,
   TopPlayer,
 } from "@/interfaces/ff14";
@@ -55,8 +56,26 @@ interface Ff14TableEntry {
   totalADPS?: number;
 }
 
-interface Ff14TableResponse {
-  entries?: Ff14TableEntry[];
+interface Ff14AbilityTableEntry {
+  name: string;
+  guid?: number;
+  type?: number | string;
+  total: number;
+  totalADPS?: number;
+  uses?: number;
+  hitCount?: number;
+  tickCount?: number;
+  multistrikeHitCount?: number;
+  multistrikeTickCount?: number;
+  critHitCount?: number;
+  critTickCount?: number;
+  uptime?: number;
+}
+
+interface Ff14TableResponse<TEntry = Ff14TableEntry> {
+  entries?: TEntry[];
+  combatTime?: number;
+  totalTime?: number;
 }
 
 const FFLOGS_JOB_MAP: Record<string, Job> = {
@@ -151,6 +170,8 @@ const clamp = (value: number, min: number, max: number) =>
 const toFixedNumber = (value: number, digits: number) =>
   Number(value.toFixed(digits));
 
+const roundAmount = (value?: number) => Math.round(value ?? 0);
+
 const getJobFromFflogsType = (type: string): Job | null =>
   FFLOGS_JOB_MAP[type] ?? null;
 
@@ -218,7 +239,7 @@ const fetchFf14Data = async <T>(path: string, signal?: AbortSignal) => {
   return payload.data;
 };
 
-export const loadEncounterSummary = async (
+const loadSelectedFight = async (
   report: ParsedReport,
   signal?: AbortSignal
 ) => {
@@ -239,18 +260,137 @@ export const loadEncounterSummary = async (
     throw new Error("未找到对应战斗记录");
   }
 
+  return {
+    fightsData,
+    selectedFight,
+    fightId,
+  };
+};
+
+const buildReportTableQuery = (
+  reportId: string,
+  fight: Pick<Ff14ReportFight, "start_time" | "end_time">,
+  extraParams?: Record<string, string | number | undefined>
+) => {
   const query = new URLSearchParams({
-    code: report.reportId,
-    start: String(selectedFight.start_time),
-    end: String(selectedFight.end_time),
+    code: reportId,
+    start: String(fight.start_time),
+    end: String(fight.end_time),
   });
 
-  const damageDoneData = await fetchFf14Data<Ff14TableResponse>(
-    `/api/ff14_logs/report/tables?view=damage-done&${query.toString()}`,
+  Object.entries(extraParams ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    query.set(key, String(value));
+  });
+
+  return query.toString();
+};
+
+const loadReportTable = async <TEntry>(
+  reportId: string,
+  fight: Pick<Ff14ReportFight, "start_time" | "end_time">,
+  view: string,
+  signal?: AbortSignal,
+  extraParams?: Record<string, string | number | undefined>
+) =>
+  fetchFf14Data<Ff14TableResponse<TEntry>>(
+    `/api/ff14_logs/report/tables?view=${encodeURIComponent(view)}&${buildReportTableQuery(
+      reportId,
+      fight,
+      extraParams
+    )}`,
     signal
   );
 
-  const encounterDuration = Math.max(selectedFight.combatTime, 1);
+const getAbilityKey = (entry: Pick<Ff14AbilityTableEntry, "guid" | "name">) =>
+  typeof entry.guid === "number" ? `guid:${entry.guid}` : `name:${entry.name}`;
+
+const getTotalHits = (entry?: Partial<Ff14AbilityTableEntry>) =>
+  (entry?.hitCount ?? 0) +
+  (entry?.tickCount ?? 0) +
+  (entry?.multistrikeHitCount ?? 0) +
+  (entry?.multistrikeTickCount ?? 0);
+
+const getTotalCrits = (entry?: Partial<Ff14AbilityTableEntry>) =>
+  (entry?.critHitCount ?? 0) + (entry?.critTickCount ?? 0);
+
+const buildMockTop10Benchmark = (
+  template: SkillTemplate | undefined,
+  damage: number,
+  casts: number
+) => ({
+  top10Casts: Math.max(
+    template?.top10Casts ?? 0,
+    casts,
+    Math.round(casts * 1.06)
+  ),
+  top10Damage: Math.max(
+    template?.top10Damage ?? 0,
+    damage,
+    Math.round(damage * 1.08)
+  ),
+});
+
+const buildRealSkillRows = (
+  character: CharacterSummary,
+  damageEntries: Ff14AbilityTableEntry[],
+  castEntries: Ff14AbilityTableEntry[]
+): SkillRow[] => {
+  const castEntryByKey = new Map<string, Ff14AbilityTableEntry>();
+
+  castEntries.forEach((entry) => {
+    castEntryByKey.set(getAbilityKey(entry), entry);
+  });
+
+  const templates = getSkillTemplates(character);
+
+  return damageEntries
+    .filter((entry) => roundAmount(entry.total) > 0 && entry.name.trim() !== "")
+    .sort((left, right) => roundAmount(right.total) - roundAmount(left.total))
+    .slice(0, 10)
+    .map((entry, index) => {
+      const castEntry = castEntryByKey.get(getAbilityKey(entry));
+      const casts = Math.max(roundAmount(castEntry?.total ?? entry.uses), 0);
+      const critDenominator = getTotalHits(entry);
+      const critRate =
+        critDenominator > 0
+          ? toFixedNumber(
+              clamp((getTotalCrits(entry) / critDenominator) * 100, 0, 100),
+              1
+            )
+          : 0;
+      const damage = roundAmount(entry.totalADPS ?? entry.total);
+      const top10Benchmark = buildMockTop10Benchmark(
+        templates[index],
+        damage,
+        casts
+      );
+
+      return {
+        skill: entry.name,
+        casts,
+        hits: Math.max(getTotalHits(entry), casts),
+        damage,
+        top10Damage: top10Benchmark.top10Damage,
+        critRate,
+        top10Casts: top10Benchmark.top10Casts,
+      };
+    });
+};
+
+const buildEncounterSummary = (
+  fightsData: Ff14ReportFightsResponse,
+  fightId: number,
+  selectedFight: Ff14ReportFight,
+  damageDoneData: Ff14TableResponse<Ff14TableEntry>
+) => {
+  const encounterDuration = Math.max(
+    damageDoneData.combatTime ?? selectedFight.combatTime,
+    1
+  );
   const encounterFriendlies = fightsData.friendlies.filter((friendly) =>
     friendly.fights?.some((fight) => fight.id === fightId)
   );
@@ -297,6 +437,174 @@ export const loadEncounterSummary = async (
       return summary;
     }, [])
     .sort((left, right) => right.adps - left.adps);
+};
+
+const loadCharacterDetailForFight = async (
+  reportId: string,
+  selectedFight: Ff14ReportFight,
+  character: CharacterSummary,
+  signal?: AbortSignal
+): Promise<CharacterDetail> => {
+  const [damageDoneData, castsData] = await Promise.all([
+    loadReportTable<Ff14AbilityTableEntry>(
+      reportId,
+      selectedFight,
+      "damage-done",
+      signal,
+      { sourceid: character.id }
+    ),
+    loadReportTable<Ff14AbilityTableEntry>(
+      reportId,
+      selectedFight,
+      "casts",
+      signal,
+      { sourceid: character.id }
+    ),
+  ]);
+
+  const damageEntries = damageDoneData.entries ?? [];
+  const castEntries = castsData.entries ?? [];
+  const skillRows = buildRealSkillRows(character, damageEntries, castEntries);
+
+  if (!skillRows.length) {
+    throw new Error("未获取到技能明细数据");
+  }
+
+  const encounterDuration = Math.max(
+    damageDoneData.combatTime ??
+      castsData.combatTime ??
+      selectedFight.combatTime,
+    1
+  );
+  const totalDamage = Math.max(
+    skillRows.reduce((sum, skill) => sum + skill.damage, 0),
+    1
+  );
+  const topBurstDamage = skillRows
+    .slice(0, 3)
+    .reduce((sum, skill) => sum + skill.damage, 0);
+  const weightedCritRate =
+    skillRows.reduce((sum, skill) => sum + skill.damage * skill.critRate, 0) /
+    totalDamage;
+  const dotUptimeCandidates = damageEntries
+    .filter((entry) => (entry.uptime ?? 0) > 0 && (entry.tickCount ?? 0) > 0)
+    .map((entry) =>
+      clamp(((entry.uptime ?? 0) / encounterDuration) * 100, 0, 100)
+    );
+
+  return {
+    burstWindowScore: clamp(
+      Math.round((topBurstDamage / totalDamage) * 55 + weightedCritRate * 0.9),
+      0,
+      99
+    ),
+    gcdUptime: toFixedNumber(clamp(character.activePct ?? 0, 0, 100), 1),
+    dotUptime: toFixedNumber(
+      dotUptimeCandidates.length ? Math.max(...dotUptimeCandidates) : 0,
+      1
+    ),
+    skillRows,
+    topPlayers: buildTopPlayers(character.job),
+  };
+};
+
+export const loadEncounterSummary = async (
+  report: ParsedReport,
+  signal?: AbortSignal
+) => {
+  const { fightsData, selectedFight, fightId } = await loadSelectedFight(
+    report,
+    signal
+  );
+  const damageDoneData = await loadReportTable<Ff14TableEntry>(
+    report.reportId,
+    selectedFight,
+    "damage-done",
+    signal
+  );
+
+  return buildEncounterSummary(
+    fightsData,
+    fightId,
+    selectedFight,
+    damageDoneData
+  );
+};
+
+export const loadCharacterDetail = async (
+  report: ParsedReport,
+  character: CharacterSummary,
+  signal?: AbortSignal
+): Promise<CharacterDetail> => {
+  const { selectedFight } = await loadSelectedFight(report, signal);
+
+  return loadCharacterDetailForFight(
+    report.reportId,
+    selectedFight,
+    character,
+    signal
+  );
+};
+
+export const loadEncounterData = async (
+  report: ParsedReport,
+  signal?: AbortSignal
+) => {
+  const { fightsData, selectedFight, fightId } = await loadSelectedFight(
+    report,
+    signal
+  );
+  const damageDoneData = await loadReportTable<Ff14TableEntry>(
+    report.reportId,
+    selectedFight,
+    "damage-done",
+    signal
+  );
+  const summary = buildEncounterSummary(
+    fightsData,
+    fightId,
+    selectedFight,
+    damageDoneData
+  );
+
+  const detailResults = await Promise.allSettled(
+    summary.map(async (character) => ({
+      characterId: character.id,
+      detail: await loadCharacterDetailForFight(
+        report.reportId,
+        selectedFight,
+        character,
+        signal
+      ),
+    }))
+  );
+
+  const detailsByCharacterId: Record<string, CharacterDetail> = {};
+  const detailErrorsByCharacterId: Record<string, string> = {};
+
+  detailResults.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      detailsByCharacterId[result.value.characterId] = result.value.detail;
+      return;
+    }
+
+    const character = summary[index];
+
+    if (!character) {
+      return;
+    }
+
+    detailErrorsByCharacterId[character.id] =
+      result.reason instanceof Error
+        ? result.reason.message
+        : "加载技能明细失败";
+  });
+
+  return {
+    summary,
+    detailsByCharacterId,
+    detailErrorsByCharacterId,
+  };
 };
 
 export const parseFflogsReport = (input: string): ParsedReport | null => {
@@ -376,6 +684,7 @@ export const buildCharacterDetail = (
       casts,
       hits,
       damage,
+      top10Damage: template.top10Damage,
       critRate,
       top10Casts: template.top10Casts,
     };

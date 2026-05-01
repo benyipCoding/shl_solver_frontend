@@ -59,6 +59,7 @@ export interface StaticText {
   skillHeader: string;
   yourCasts: string;
   top10Average: string;
+  top10Damage: string;
   delta: string;
   totalDamage: string;
   hits: string;
@@ -111,6 +112,7 @@ export interface SkillRow {
   casts: number;
   hits: number;
   damage: number;
+  top10Damage: number;
   critRate: number;
   top10Casts: number;
 }

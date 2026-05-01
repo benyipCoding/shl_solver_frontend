@@ -88,11 +88,36 @@ export const ff14Styles = {
   summaryMobileHint: "m-0 text-[0.72rem] text-[#8ea8cd]",
   summaryTable:
     "w-full min-w-[760px] border-collapse [&_th]:sticky [&_th]:top-0 [&_th]:z-[1] [&_th]:border-b [&_th]:border-[rgba(105,130,170,0.25)] [&_th]:bg-[rgba(25,38,64,0.52)] [&_th]:p-[11px_12px] [&_th]:text-left [&_th]:text-[0.72rem] [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-[#9fb9df] [&_td]:border-b [&_td]:border-[rgba(105,130,170,0.25)] [&_td]:p-[11px_12px] [&_td]:text-left [&_td]:text-[0.86rem] [&_tbody_tr]:transition-[background-color,box-shadow] [&_tbody_tr]:duration-200 [&_tbody_tr:nth-child(odd)]:bg-[rgba(20,32,56,0.34)] [&_tbody_tr:nth-child(even)]:bg-[rgba(10,19,35,0.38)] [&_tbody_tr:hover]:bg-[linear-gradient(90deg,rgba(90,145,236,0.22),rgba(90,145,236,0.08))] [&_tbody_tr:hover]:shadow-[inset_3px_0_0_rgba(154,201,255,0.95),inset_0_1px_0_rgba(174,214,255,0.08)] [&_tbody_tr:focus-visible]:bg-[linear-gradient(90deg,rgba(90,145,236,0.22),rgba(90,145,236,0.08))] [&_tbody_tr:focus-visible]:shadow-[inset_3px_0_0_rgba(154,201,255,0.95),inset_0_1px_0_rgba(174,214,255,0.08)] max-[760px]:[&_th]:p-[9px_10px] max-[760px]:[&_td]:p-[9px_10px] max-[760px]:[&_th]:text-[0.8rem] max-[760px]:[&_td]:text-[0.8rem]",
+  skillPanel:
+    "overflow-hidden rounded-[16px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[760px]:hidden",
+  skillPanelHeader:
+    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_88px_132px_132px] items-center gap-3 border-b border-[rgba(105,130,170,0.25)] bg-[rgba(25,38,64,0.52)] px-4 py-3 text-[0.72rem] font-semibold uppercase tracking-[0.05em] text-[#9fb9df]",
+  skillRowsDesktop: "grid",
+  skillRow:
+    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_88px_132px_132px] items-center gap-3 border-b border-[rgba(105,130,170,0.22)] px-4 py-3 transition-[background-color,box-shadow] duration-200 odd:bg-[rgba(20,32,56,0.34)] even:bg-[rgba(10,19,35,0.38)] hover:bg-[linear-gradient(90deg,rgba(90,145,236,0.2),rgba(90,145,236,0.07))] hover:shadow-[inset_3px_0_0_rgba(154,201,255,0.95)] last:border-b-0",
+  skillIdentityCell: "flex min-w-0 items-center gap-3",
+  skillIconPlaceholder:
+    "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-[rgba(129,172,239,0.42)] bg-[linear-gradient(145deg,rgba(52,84,138,0.85),rgba(23,42,76,0.95))] font-[var(--font-heading)] text-[0.82rem] tracking-[0.08em] text-[#e8f2ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+  skillIdentityCopy: "min-w-0",
+  skillName: "m-0 truncate text-[0.92rem] font-semibold text-[#edf4ff]",
+  skillSubline: "m-0 mt-1 text-[0.74rem] text-[#8ea8cd]",
+  skillAmountCell: "grid gap-2",
+  skillAmountMeta:
+    "flex items-center justify-between gap-3 text-[0.8rem] [&>strong]:font-[var(--font-heading)] [&>strong]:text-[#eaf3ff] [&>span]:text-[#8ea8cd]",
+  skillAmountTrack:
+    "h-3 overflow-hidden rounded-full border border-[rgba(113,145,196,0.22)] bg-[rgba(6,13,25,0.82)]",
+  skillAmountFill:
+    "block h-full rounded-full bg-[linear-gradient(90deg,#38a9c9_0%,#59c2ea_42%,#83dcff_100%)] shadow-[0_0_12px_rgba(89,194,234,0.28)]",
+  skillStatValue: "text-[0.86rem] text-[#dfeaf8]",
+  skillDamageValue:
+    "text-[0.88rem] font-semibold text-[#c9ec9d] font-[var(--font-heading)]",
   skillMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
   skillMobileCard:
-    "rounded-[14px] border border-[rgba(123,165,233,0.3)] bg-[rgba(20,31,54,0.55)] p-2.5",
+    "rounded-[14px] border border-[rgba(123,165,233,0.3)] bg-[rgba(20,31,54,0.55)] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+  skillMobileIdentity: "flex min-w-0 items-center gap-2.5",
   skillMobileHeader: "mb-2 flex items-start justify-between gap-2",
   skillMobileName: "m-0 text-[0.84rem] font-semibold text-[#e7f2ff]",
+  skillMobileSubline: "m-0 mt-0.5 text-[0.72rem] text-[#8ea8cd]",
   skillMobileDelta:
     "inline-flex rounded-full border px-2 py-0.5 text-[0.72rem] font-semibold",
   skillMobileDeltaGood:
@@ -138,8 +163,7 @@ export const ff14Styles = {
     "border-[rgba(149,189,255,0.45)] bg-[rgba(53,94,167,0.34)] text-[#cfe2ff]",
   parseGreen:
     "border-[rgba(121,237,154,0.45)] bg-[rgba(28,122,57,0.34)] text-[#cfffd8]",
-  detailGrid:
-    "grid grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] gap-[18px] max-[1040px]:grid-cols-1 max-[760px]:gap-3",
+  detailGrid: "grid grid-cols-1 gap-[18px] max-[760px]:gap-3",
   metricGrid:
     "mb-3.5 grid grid-cols-3 gap-2.5 max-[760px]:mb-2.5 max-[760px]:grid-cols-1",
   metricCard:
@@ -619,7 +643,8 @@ export const TEXT: Record<Locale, StaticText> = {
     reportUrlPlaceholder: "https://www.fflogs.com/reports/...?...",
     reportPrefix: "报告ID",
     fightPrefix: "战斗ID",
-    todoHint: "战斗汇总会通过 FFLogs V1 接口实时加载，技能明细仍保留原型估算。",
+    todoHint:
+      "战斗汇总与技能明细会通过 FFLogs V1 接口实时加载，Top10 对比暂时仍保留原型估算。",
     examplePrefix: "示例：",
     encounterSummaryTitle: "2. 战斗汇总",
     totalRdpsLabel: "团队总 rDPS",
@@ -642,6 +667,7 @@ export const TEXT: Record<Locale, StaticText> = {
     skillHeader: "技能",
     yourCasts: "你的施放",
     top10Average: "Top10 均值",
+    top10Damage: "Top10 平均伤害",
     delta: "差值",
     totalDamage: "总伤害",
     hits: "命中",
@@ -655,7 +681,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "下一步可加入时间轴标记（2分钟团队增益、爆发药、机制停手），定位技能缺失发生在何时。",
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
-      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总。技能明细与 Top10 对比仍为原型估算。",
+      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总与技能明细。Top10 对比暂时仍保留原型估算。",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "切换战斗汇总显示模式",
@@ -678,7 +704,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "Report",
     fightPrefix: "Fight",
     todoHint:
-      "Encounter summary loads from FFLogs V1 live data. Skill breakdown still uses prototype estimation.",
+      "Encounter summary and skill breakdown load from FFLogs V1 live data. Top 10 comparisons still use prototype estimates for now.",
     examplePrefix: "Example:",
     encounterSummaryTitle: "2. Encounter Summary",
     totalRdpsLabel: "Total rDPS",
@@ -701,6 +727,7 @@ export const TEXT: Record<Locale, StaticText> = {
     skillHeader: "Skill",
     yourCasts: "Your casts",
     top10Average: "Top10 avg",
+    top10Damage: "Top10 avg dmg",
     delta: "Delta",
     totalDamage: "Total damage",
     hits: "Hits",
