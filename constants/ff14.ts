@@ -644,7 +644,7 @@ export const TEXT: Record<Locale, StaticText> = {
     kicker: "团队复盘实验室",
     heroTitle: "FFXIV 战斗分析器",
     heroDesc:
-      "粘贴一条 FFLogs 战斗链接，即可在同一页面查看团队汇总、个人技能施放和同职业 Top 10 对比。",
+      "粘贴一条 FFLogs 战斗链接，即可在同一页面查看团队伤害构成、个人技能明细、同职业高分样本和时间轴对照。",
     reportInputTitle: "1. 战斗日志输入",
     statusReady: "已识别有效链接",
     statusIdle: "等待有效链接",
@@ -654,7 +654,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "报告ID",
     fightPrefix: "战斗ID",
     todoHint:
-      "战斗汇总、技能明细、技能表中的 Top10 基准以及第4模块的时间轴对比都会通过 FFLogs V1 接口实时加载。",
+      "识别到有效战斗链接后，页面会自动加载战斗汇总、技能明细、同职业高分基准和时间轴对照数据。",
     examplePrefix: "示例：",
     encounterSummaryTitle: "2. 战斗汇总",
     totalRdpsLabel: "团队总 rDPS",
@@ -685,13 +685,13 @@ export const TEXT: Record<Locale, StaticText> = {
     top10Title: "4. 同职业 Top 10",
     killLabel: "击杀",
     timelineHint:
-      "横向滚动查看每次施法的落点，放大后可直接比对 opener、2 分钟爆发和机制停手造成的错位。",
+      "时间轴浏览器支持横向拖动与滚动查看施法落点，按住 Ctrl + 鼠标滚轮可快速缩放，便于对比 opener、2 分钟爆发和机制停手造成的错位。",
     timelineScale: "缩放",
     timelineSampleLabel: "有效参考样本",
     timelineSelfLabel: "你",
     timelineEmpty: "当前时间轴事件不足，暂时无法绘制可比较的轨道。",
     timelineMobileHint:
-      "时间轴对比为桌面优先设计；请在较宽屏幕下横向滚动并使用缩放查看技能落点。",
+      "时间轴对比为桌面优先设计；移动端可横向拖动查看轨道，并使用上方缩放按钮观察技能落点。",
     coachingTitle: "复盘建议",
     coachingDesc1:
       "先看你与 Top 10 在 opener 和 2 分钟窗口的错位，再回头检查技能次数差距。",
@@ -699,7 +699,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "如果发现某一串技能整体右移，优先检查起手、资源预留和机制停手，而不只是单个技能少打一发。",
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
-      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总、技能明细、技能表 Top10 基准与同职业时间轴。",
+      "输入有效 FFLogs 战斗链接后，这里会自动展示团队汇总、技能明细、同职业高分样本与时间轴对照。",
     backToSummary: "返回战斗汇总",
     switchZh: "中",
     switchEn: "EN",
@@ -713,7 +713,7 @@ export const TEXT: Record<Locale, StaticText> = {
     kicker: "Raid Decision Lab",
     heroTitle: "FFXIV Combat Analyzer",
     heroDesc:
-      "Paste one FFLogs fight URL and explore role summaries, personal skill usage, and same-job Top 10 comparisons in one screen.",
+      "Paste one FFLogs fight URL to review team damage distribution, personal skill detail, same-job high-rank samples, and aligned timelines on one screen.",
     reportInputTitle: "1. Report Input",
     statusReady: "Valid URL detected",
     statusIdle: "Waiting for valid URL",
@@ -723,7 +723,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "Report",
     fightPrefix: "Fight",
     todoHint:
-      "Encounter summary, skill breakdown, the skill-table Top 10 benchmarks, and the timeline comparison in module 4 all load from FFLogs V1 live data.",
+      "Once the fight URL is recognized, the page automatically loads the encounter summary, skill breakdown, same-job benchmarks, and timeline comparison.",
     examplePrefix: "Example:",
     encounterSummaryTitle: "2. Encounter Summary",
     totalRdpsLabel: "Total rDPS",
@@ -754,14 +754,14 @@ export const TEXT: Record<Locale, StaticText> = {
     top10Title: "4. Same Job Top 10",
     killLabel: "kill",
     timelineHint:
-      "Scroll horizontally to inspect each cast point, then zoom in to compare opener alignment, two-minute burst windows, and downtime gaps.",
+      "Use horizontal drag or scroll to inspect cast timing, and hold Ctrl while using the mouse wheel to zoom for opener alignment, two-minute burst windows, and downtime gaps.",
     timelineScale: "Scale",
     timelineSampleLabel: "Reference logs",
     timelineSelfLabel: "You",
     timelineEmpty:
       "The timeline does not have enough cast events yet to draw a useful comparison track.",
     timelineMobileHint:
-      "This timeline is desktop-first. Use a wider screen to scroll horizontally and zoom into cast timing.",
+      "This timeline is desktop-first. On smaller screens, drag horizontally to browse the track and use the zoom buttons above for closer timing checks.",
     coachingTitle: "Coaching Snapshot",
     coachingDesc1:
       "Check opener and two-minute alignment first, then use cast-count deltas to confirm which buttons fell behind.",
@@ -769,7 +769,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "If an entire sequence drifts to the right, investigate opener setup, resource banking, and forced downtime before blaming one missing cast.",
     emptyTitle: "Paste a valid FFLogs fight link to begin",
     emptyDesc:
-      "Paste a valid FFLogs fight URL and this page will load the live encounter summary, skill breakdown, Top 10 benchmarks, and same-job timelines.",
+      "Paste a valid FFLogs fight URL and this page will show the encounter summary, skill breakdown, same-job high-rank samples, and timeline comparison.",
     backToSummary: "Back to summary",
     switchZh: "中",
     switchEn: "EN",

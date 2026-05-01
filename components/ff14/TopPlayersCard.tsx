@@ -558,7 +558,7 @@ const TopPlayersCard = ({
       {hasTimelineEvents ? (
         <div
           ref={desktopTimelineRef}
-          className="mt-4 overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden cursor-grab active:cursor-grabbing"
+          className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden cursor-grab active:cursor-grabbing"
         >
           <div className="min-w-max">
             <div className="flex">
@@ -713,7 +713,7 @@ const TopPlayersCard = ({
 
           <div
             ref={mobileTimelineRef}
-            className="overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] cursor-grab active:cursor-grabbing"
+            className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] cursor-grab active:cursor-grabbing"
           >
             <div
               className="min-w-full"
