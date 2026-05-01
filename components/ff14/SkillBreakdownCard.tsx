@@ -69,6 +69,10 @@ const SkillBreakdownCard = ({
         </div>
       </div>
 
+      <p className="-mt-1 mb-3.5 max-w-4xl text-[0.82rem] leading-[1.65] text-[#9cb4d8] max-[760px]:mb-2.5 max-[760px]:text-[0.76rem]">
+        {text.burstWindowScoreHint}
+      </p>
+
       <div className={ff14Styles.metricGrid}>
         <div className={ff14Styles.metricCard}>
           <span className={ff14Styles.metricLabel}>

@@ -53,6 +53,7 @@ export interface StaticText {
   tableActive: string;
   tableDps: string;
   skillBreakdownTitle: string;
+  burstWindowScoreHint: string;
   burstWindowScore: string;
   gcdUptime: string;
   dotUptime: string;

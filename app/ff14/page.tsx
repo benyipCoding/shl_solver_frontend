@@ -1,5 +1,7 @@
 "use client";
+import Link from "next/link";
 import { startTransition, useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import EmptyState from "@/components/ff14/EmptyState";
 import EncounterSummaryCard from "@/components/ff14/EncounterSummaryCard";
 import HeroSection from "@/components/ff14/HeroSection";
@@ -62,6 +64,7 @@ const FF14Page = () => {
     });
 
   const text = TEXT[locale];
+  const backToHomeLabel = locale === "zh" ? "返回主页" : "Back to home";
 
   const parsedReport = useMemo(() => parseFflogsReport(reportUrl), [reportUrl]);
   const hasValidReport = Boolean(parsedReport);
@@ -429,6 +432,13 @@ const FF14Page = () => {
       <div className={ff14Styles.backdropB} aria-hidden />
 
       <div className={ff14Styles.container}>
+        <div className="px-[clamp(18px,2.6vw,26px)] pt-5 max-[760px]:px-0.5 max-[760px]:pt-3">
+          <Link href="/" className={ff14Styles.detailBackButton}>
+            <ArrowLeft className="h-4 w-4" />
+            <span>{backToHomeLabel}</span>
+          </Link>
+        </div>
+
         <HeroSection text={text} />
 
         <ReportInputCard

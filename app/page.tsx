@@ -6,6 +6,7 @@ import {
   Cpu,
   Activity,
   FileSpreadsheet,
+  Swords,
   Plus,
 } from "lucide-react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
@@ -170,18 +171,41 @@ export default function Home() {
                 </div>
               </Link>
 
-              {/* Card 4: 更多功能开发中 */}
-              <div className="relative bg-gray-50 dark:bg-slate-800/50 p-8 rounded-2xl border border-dashed border-gray-300 dark:border-slate-700 flex flex-col items-center justify-center text-center hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors min-h-75">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                  <Plus className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+              {/* Card 4: FF14 战斗分析器 */}
+              <Link
+                href="/ff14"
+                className="group relative bg-white dark:bg-slate-900 p-8 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
+              >
+                <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] dark:opacity-[0.05] dark:group-hover:opacity-[0.1] transition-opacity duration-500 rotate-12">
+                  <Swords className="w-48 h-48 text-amber-600 dark:text-amber-400" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-500 dark:text-gray-400 mb-2">
-                  更多功能
+
+                <div className="w-14 h-14 bg-amber-50 dark:bg-amber-900/40 rounded-xl flex items-center justify-center mb-6 group-hover:bg-amber-600 dark:group-hover:bg-amber-600 group-hover:scale-110 transition-all duration-300 shadow-sm">
+                  <Swords className="h-7 w-7 text-amber-600 dark:text-amber-300 group-hover:text-white transition-colors" />
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
+                  FF14 战斗分析器
                 </h3>
-                <p className="text-gray-400 dark:text-gray-500 max-w-xs mx-auto">
-                  我们正在研发更多实用的 AI 工具，敬请期待...
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed mb-6 font-medium grow">
+                  接入 FF Logs 战报，快速查看队伍
+                  DPS、技能拆解与同职业对标，帮助你更高效地复盘高难本与团队战斗表现。
                 </p>
+
+                <div className="mt-auto pt-4 flex items-center text-sm font-semibold text-amber-600 dark:text-amber-300 group-hover:text-amber-700 dark:group-hover:text-amber-200 transition-colors">
+                  <span>立即分析</span>
+                  <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </Link>
+            </div>
+
+            <div className="mt-8 relative bg-gray-50 dark:bg-slate-800/50 px-6 py-5 rounded-2xl border border-dashed border-gray-300 dark:border-slate-700 text-center hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+              <div className="w-11 h-11 mx-auto mb-3 bg-gray-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                <Plus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
               </div>
+              <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 font-medium">
+                更多 AI 工具仍在持续扩展中，后续会继续加入更多实用能力。
+              </p>
             </div>
           </div>
         </section>

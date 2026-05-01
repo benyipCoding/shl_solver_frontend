@@ -671,6 +671,8 @@ export const TEXT: Record<Locale, StaticText> = {
     tableActive: "活跃度",
     tableDps: "DPS",
     skillBreakdownTitle: "3. 技能明细",
+    burstWindowScoreHint:
+      "爆发窗口评分当前按你的 rDPS 相对职业基线的表现与活跃度综合估算，用于快速判断爆发执行稳定性；暂不直接读取 opener 或 2 分钟窗口时间轴错位。",
     burstWindowScore: "爆发窗口评分",
     gcdUptime: "GCD 覆盖率",
     dotUptime: "DOT 覆盖率",
@@ -742,6 +744,8 @@ export const TEXT: Record<Locale, StaticText> = {
     tableActive: "Active",
     tableDps: "DPS",
     skillBreakdownTitle: "3. Skill Breakdown",
+    burstWindowScoreHint:
+      "Burst Window Score is currently an estimate derived from your rDPS versus the job baseline plus active uptime. It is a quick proxy for burst execution stability and does not yet directly score opener or two-minute timeline drift.",
     burstWindowScore: "Burst Window Score",
     gcdUptime: "GCD Uptime",
     dotUptime: "DOT/Uptime",

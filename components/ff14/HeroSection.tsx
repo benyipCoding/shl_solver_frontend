@@ -8,7 +8,7 @@ interface HeroSectionProps {
 const HeroSection = ({ text }: HeroSectionProps) => {
   return (
     <section className={ff14Styles.hero}>
-      <p className={ff14Styles.kicker}>{text.kicker}</p>
+      {/* <p className={ff14Styles.kicker}>{text.kicker}</p> */}
       <h1>{text.heroTitle}</h1>
       <p>{text.heroDesc}</p>
     </section>
