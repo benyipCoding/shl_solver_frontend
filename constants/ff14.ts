@@ -696,6 +696,7 @@ export const TEXT: Record<Locale, StaticText> = {
     timelineEmpty: "当前时间轴事件不足，暂时无法绘制可比较的轨道。",
     timelineMobileHint:
       "时间轴对比为桌面优先设计；移动端可横向拖动查看轨道，并使用上方缩放按钮观察技能落点。",
+    timelineBackToOverview: "返回全局时间轴",
     coachingTitle: "复盘建议",
     coachingDesc1:
       "先看你与 Top 10 在 opener 和 2 分钟窗口的错位，再回头检查技能次数差距。",
@@ -770,6 +771,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "The timeline does not have enough cast events yet to draw a useful comparison track.",
     timelineMobileHint:
       "This timeline is desktop-first. On smaller screens, drag horizontally to browse the track and use the zoom buttons above for closer timing checks.",
+    timelineBackToOverview: "Back to full timeline",
     coachingTitle: "Coaching Snapshot",
     coachingDesc1:
       "Check opener and two-minute alignment first, then use cast-count deltas to confirm which buttons fell behind.",

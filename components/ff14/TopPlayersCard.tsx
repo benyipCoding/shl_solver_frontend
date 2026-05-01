@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Minus, Plus, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, Minus, Plus, Trophy } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ff14Styles, jobColorMap } from "@/constants/ff14";
@@ -25,6 +25,13 @@ type TimelineTooltipState = {
   skill: string;
   time: string;
   top: number;
+};
+
+type TimelineGuideArea = "desktopOverview" | "desktopCompare" | "mobile";
+
+type TimelineGuideState = {
+  area: TimelineGuideArea;
+  left: number;
 };
 
 type TimelineDragState = {
@@ -197,7 +204,11 @@ const TopPlayersCard = ({
   topComparison,
 }: TopPlayersCardProps) => {
   const [zoomIndex, setZoomIndex] = useState(7);
+  const [desktopCompareActorId, setDesktopCompareActorId] = useState("");
   const [mobileCompareActorId, setMobileCompareActorId] = useState("");
+  const [timelineGuide, setTimelineGuide] = useState<TimelineGuideState | null>(
+    null
+  );
   const [tooltip, setTooltip] = useState<TimelineTooltipState | null>(null);
   const activeTimelineDragRef = useRef<TimelineDragState | null>(null);
   const dragBodyStyleRef = useRef<{
@@ -221,6 +232,13 @@ const TopPlayersCard = ({
     () => timelineTracks.filter((track) => !track.isSelectedCharacter),
     [timelineTracks]
   );
+  const activeDesktopCompareTrack = useMemo(
+    () =>
+      referenceTimelineTracks.find(
+        (track) => track.actorId === desktopCompareActorId
+      ) ?? null,
+    [desktopCompareActorId, referenceTimelineTracks]
+  );
   const activeMobileCompareTrack = useMemo(
     () =>
       referenceTimelineTracks.find(
@@ -230,6 +248,13 @@ const TopPlayersCard = ({
       null,
     [mobileCompareActorId, referenceTimelineTracks]
   );
+  const desktopCompareTracks = useMemo(
+    () =>
+      [selectedTimelineTrack, activeDesktopCompareTrack].filter(
+        (track): track is TimelineTrack => Boolean(track)
+      ),
+    [activeDesktopCompareTrack, selectedTimelineTrack]
+  );
   const mobileTimelineTracks = useMemo(
     () =>
       [selectedTimelineTrack, activeMobileCompareTrack].filter(
@@ -237,6 +262,7 @@ const TopPlayersCard = ({
       ),
     [activeMobileCompareTrack, selectedTimelineTrack]
   );
+  const isDesktopCompareMode = Boolean(activeDesktopCompareTrack);
   const pxPerSecond = ZOOM_LEVELS[zoomIndex];
   const tickStepSec =
     pxPerSecond >= 20 ? 1 : pxPerSecond >= 14 ? 2 : pxPerSecond >= 8 ? 5 : 10;
@@ -303,11 +329,59 @@ const TopPlayersCard = ({
         element.removeEventListener("wheel", handleTimelineWheel);
       });
     };
-  }, [hasTimelineEvents, stepZoom]);
+  }, [hasTimelineEvents, isDesktopCompareMode, stepZoom]);
 
   const clearTooltip = useCallback(() => {
     setTooltip(null);
   }, []);
+
+  const clearTimelineGuide = useCallback(() => {
+    setTimelineGuide(null);
+  }, []);
+
+  const updateTimelineGuide = useCallback(
+    (area: TimelineGuideArea, element: HTMLDivElement, clientX: number) => {
+      if (activeTimelineDragRef.current) {
+        return;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const nextLeft = Math.min(
+        Math.max(clientX - rect.left, 0),
+        element.clientWidth
+      );
+
+      setTimelineGuide((currentGuide) => {
+        if (
+          currentGuide?.area === area &&
+          Math.abs(currentGuide.left - nextLeft) < 0.5
+        ) {
+          return currentGuide;
+        }
+
+        return {
+          area,
+          left: nextLeft,
+        };
+      });
+    },
+    []
+  );
+
+  const openDesktopCompare = useCallback(
+    (actorId: string) => {
+      clearTooltip();
+      clearTimelineGuide();
+      setDesktopCompareActorId(actorId);
+    },
+    [clearTimelineGuide, clearTooltip]
+  );
+
+  const closeDesktopCompare = useCallback(() => {
+    clearTooltip();
+    clearTimelineGuide();
+    setDesktopCompareActorId("");
+  }, [clearTimelineGuide, clearTooltip]);
 
   useEffect(() => {
     if (!hasTimelineEvents) {
@@ -372,6 +446,7 @@ const TopPlayersCard = ({
         startScrollLeft: element.scrollLeft,
       };
       clearTooltip();
+      clearTimelineGuide();
       mouseEvent.preventDefault();
     };
 
@@ -398,7 +473,12 @@ const TopPlayersCard = ({
       window.removeEventListener("blur", stopTimelineDrag);
       stopTimelineDrag();
     };
-  }, [clearTooltip, hasTimelineEvents]);
+  }, [
+    clearTimelineGuide,
+    clearTooltip,
+    hasTimelineEvents,
+    isDesktopCompareMode,
+  ]);
 
   const clampTooltipPosition = useCallback((left: number, top: number) => {
     if (typeof window === "undefined") {
@@ -554,7 +634,7 @@ const TopPlayersCard = ({
         </div>
       ) : null}
 
-      {hasTimelineEvents ? (
+      {hasTimelineEvents && !isDesktopCompareMode ? (
         <div
           ref={desktopTimelineRef}
           className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden cursor-grab active:cursor-grabbing"
@@ -572,29 +652,76 @@ const TopPlayersCard = ({
                   {text.tablePlayer}
                 </div>
 
-                {timelineTracks.map((track) => (
-                  <div
-                    key={`meta-${track.actorId}`}
-                    className={`border-b border-[rgba(105,130,170,0.18)] px-4 py-1 last:border-b-0 ${
-                      track.isSelectedCharacter
-                        ? "bg-[rgba(52,84,138,0.16)]"
-                        : "bg-[rgba(12,22,39,0.52)]"
-                    }`}
-                    style={{ height: `${TRACK_HEIGHT}px` }}
-                  >
-                    <div className="min-w-0">
-                      <p className="m-0 truncate text-[0.92rem] font-semibold text-[#edf4ff]">
-                        {track.name}
-                      </p>
-                      <p className="m-0 mt-1 truncate text-[0.74rem] text-[#89a3cb]">
-                        {formatNumber(track.rdps)} rDPS
-                      </p>
+                {timelineTracks.map((track) => {
+                  const isClickable = !track.isSelectedCharacter;
+
+                  return (
+                    <div
+                      key={`meta-${track.actorId}`}
+                      className={`border-b border-[rgba(105,130,170,0.18)] px-2 py-1 last:border-b-0 ${
+                        track.isSelectedCharacter
+                          ? "bg-[rgba(52,84,138,0.16)]"
+                          : "bg-[rgba(12,22,39,0.52)]"
+                      }`}
+                      style={{ height: `${TRACK_HEIGHT}px` }}
+                    >
+                      {isClickable ? (
+                        <button
+                          type="button"
+                          className="group flex h-full w-full items-center gap-3 rounded-xl px-2 text-left transition-[background-color,box-shadow] hover:bg-[rgba(52,84,138,0.2)] hover:shadow-[inset_0_0_0_1px_rgba(150,196,255,0.14)] focus-visible:bg-[rgba(52,84,138,0.2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(126,173,249,0.28)]"
+                          onClick={() => openDesktopCompare(track.actorId)}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="m-0 truncate text-[0.92rem] font-semibold text-[#edf4ff] transition-colors group-hover:text-white group-focus-visible:text-white">
+                              {track.name}
+                            </p>
+                            <p className="m-0 mt-1 truncate text-[0.74rem] text-[#89a3cb] transition-colors group-hover:text-[#bfd6fb] group-focus-visible:text-[#bfd6fb]">
+                              {formatNumber(track.rdps)} rDPS
+                            </p>
+                          </div>
+                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[rgba(126,173,249,0.22)] bg-[rgba(14,24,41,0.55)] text-[#89a3cb] transition-[border-color,color,background-color] group-hover:border-[rgba(165,204,255,0.6)] group-hover:bg-[rgba(34,58,99,0.45)] group-hover:text-[#edf4ff] group-focus-visible:border-[rgba(165,204,255,0.6)] group-focus-visible:bg-[rgba(34,58,99,0.45)] group-focus-visible:text-[#edf4ff]">
+                            <ArrowRightLeft size={12} />
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-between gap-3 rounded-xl px-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="m-0 truncate text-[0.92rem] font-semibold text-[#edf4ff]">
+                              {track.name}
+                            </p>
+                            <p className="m-0 mt-1 truncate text-[0.74rem] text-[#89a3cb]">
+                              {formatNumber(track.rdps)} rDPS
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.28)] bg-[rgba(34,58,99,0.38)] px-2.5 py-1 text-[0.68rem] text-[#dce9ff]">
+                            {text.timelineSelfLabel}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              <div className="shrink-0" style={{ width: `${timelineWidth}px` }}>
+              <div
+                className="relative shrink-0"
+                style={{ width: `${timelineWidth}px` }}
+                onMouseMove={(mouseEvent) => {
+                  updateTimelineGuide(
+                    "desktopOverview",
+                    mouseEvent.currentTarget,
+                    mouseEvent.clientX
+                  );
+                }}
+                onMouseLeave={clearTimelineGuide}
+              >
+                {timelineGuide?.area === "desktopOverview" ? (
+                  <div
+                    className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[repeating-linear-gradient(to_bottom,rgba(191,214,251,0.88)_0_6px,transparent_6px_12px)] opacity-80"
+                    style={{ left: `${timelineGuide.left}px` }}
+                    aria-hidden
+                  />
+                ) : null}
                 <div
                   className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
                   style={{ height: `${AXIS_HEIGHT}px` }}
@@ -675,6 +802,191 @@ const TopPlayersCard = ({
         </div>
       ) : null}
 
+      {hasTimelineEvents && isDesktopCompareMode ? (
+        <div className="mt-4 space-y-3 max-[920px]:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[rgba(126,173,249,0.28)] bg-[rgba(34,58,99,0.38)] px-2.5 py-1 text-[0.72rem] text-[#dce9ff]">
+                {text.timelineSelfLabel}
+              </span>
+              {selectedTimelineTrack ? (
+                <span className="rounded-full border border-[rgba(126,173,249,0.2)] bg-[rgba(20,35,60,0.45)] px-3 py-1 text-[0.78rem] text-[#edf4ff]">
+                  {selectedTimelineTrack.name}
+                </span>
+              ) : null}
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(126,173,249,0.18)] bg-[rgba(13,22,39,0.6)] text-[#9fb9df]">
+                <ArrowRightLeft size={14} />
+              </span>
+              {activeDesktopCompareTrack ? (
+                <span className="rounded-full border border-[rgba(126,173,249,0.2)] bg-[rgba(20,35,60,0.45)] px-3 py-1 text-[0.78rem] text-[#edf4ff]">
+                  {activeDesktopCompareTrack.name}
+                </span>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              className={ff14Styles.detailBackButton}
+              onClick={closeDesktopCompare}
+            >
+              <ArrowLeft size={14} />
+              {text.timelineBackToOverview}
+            </button>
+          </div>
+
+          {referenceTimelineTracks.length ? (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {referenceTimelineTracks.map((track) => {
+                const isActive =
+                  activeDesktopCompareTrack?.actorId === track.actorId;
+
+                return (
+                  <button
+                    key={`desktop-select-${track.actorId}`}
+                    type="button"
+                    className={`min-w-36 rounded-2xl border px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? "border-[rgba(144,191,255,0.6)] bg-[rgba(48,79,136,0.28)] text-[#edf4ff]"
+                        : "border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] text-[#9fb9df]"
+                    }`}
+                    onClick={() => openDesktopCompare(track.actorId)}
+                  >
+                    <span className="block truncate text-[0.82rem] font-semibold">
+                      {track.name}
+                    </span>
+                    <span className="mt-1 block text-[0.72rem] opacity-80">
+                      {formatNumber(track.rdps)} rDPS
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div
+            ref={desktopTimelineRef}
+            className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] cursor-grab active:cursor-grabbing"
+          >
+            <div
+              className="relative min-w-full"
+              style={{ width: `${timelineWidth}px` }}
+              onMouseMove={(mouseEvent) => {
+                updateTimelineGuide(
+                  "desktopCompare",
+                  mouseEvent.currentTarget,
+                  mouseEvent.clientX
+                );
+              }}
+              onMouseLeave={clearTimelineGuide}
+            >
+              {timelineGuide?.area === "desktopCompare" ? (
+                <div
+                  className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[repeating-linear-gradient(to_bottom,rgba(191,214,251,0.88)_0_6px,transparent_6px_12px)] opacity-80"
+                  style={{ left: `${timelineGuide.left}px` }}
+                  aria-hidden
+                />
+              ) : null}
+              <div
+                className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
+                style={{ height: `${AXIS_HEIGHT}px` }}
+              >
+                {timelineTicks.map((tick) => {
+                  const shouldShowTickLabel =
+                    tick === 0 ||
+                    tick === lastTimelineTick ||
+                    tick % tickLabelStepSec === 0;
+
+                  return (
+                    <div
+                      key={`desktop-compare-tick-${tick}`}
+                      className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
+                      style={{ left: `${tick * pxPerSecond}px` }}
+                    >
+                      {shouldShowTickLabel ? (
+                        <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
+                          {formatTimelineTime(tick * 1000)}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {desktopCompareTracks.map((track) => (
+                <div
+                  key={`desktop-compare-track-${track.actorId}`}
+                  className="border-b border-[rgba(105,130,170,0.18)] px-4 py-3 last:border-b-0"
+                >
+                  <div
+                    className={`relative overflow-hidden rounded-xl border ${
+                      track.isSelectedCharacter
+                        ? "border-[rgba(126,173,249,0.32)] bg-[rgba(52,84,138,0.14)]"
+                        : "border-[rgba(105,130,170,0.2)] bg-[rgba(10,19,35,0.4)]"
+                    }`}
+                    style={{
+                      height: `${TRACK_HEIGHT}px`,
+                      ...buildTrackBackgroundStyle(
+                        pxPerSecond,
+                        tickStepSec,
+                        tickLabelStepSec
+                      ),
+                    }}
+                  >
+                    {track.isSelectedCharacter ? (
+                      <div
+                        className="absolute inset-y-0 left-0 w-0.5"
+                        style={{ backgroundColor: accentColor }}
+                        aria-hidden
+                      />
+                    ) : null}
+
+                    <div className="pointer-events-none absolute left-3 top-2 z-1 flex min-w-0 max-w-[calc(100%-24px)] items-center gap-2">
+                      <span className="truncate text-[0.8rem] font-semibold text-[#edf4ff] drop-shadow-[0_1px_6px_rgba(5,10,20,0.65)]">
+                        {track.name}
+                      </span>
+                      <span className="shrink-0 text-[0.68rem] text-[#bfd6fb] drop-shadow-[0_1px_6px_rgba(5,10,20,0.65)]">
+                        {formatNumber(track.rdps)} rDPS
+                      </span>
+                      {track.isSelectedCharacter ? (
+                        <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.28)] bg-[rgba(34,58,99,0.6)] px-2 py-0.5 text-[0.64rem] text-[#dce9ff]">
+                          {text.timelineSelfLabel}
+                        </span>
+                      ) : track.rank ? (
+                        <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.2)] bg-[rgba(13,22,39,0.72)] px-2 py-0.5 text-[0.64rem] text-[#bfd6fb]">
+                          #{track.rank}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {track.events.map((event, index) => {
+                      const size = Math.min(
+                        Math.max(Math.round(pxPerSecond * 1.45), 14),
+                        24
+                      );
+                      const topOffset = 10 + (index % 2) * 18;
+
+                      return (
+                        <EventMarker
+                          key={event.id}
+                          actor={track.name}
+                          event={event}
+                          onClearTooltip={clearTooltip}
+                          onShowTooltipFromElement={showTooltipFromElement}
+                          onShowTooltipFromPointer={showTooltipFromPointer}
+                          pxPerSecond={pxPerSecond}
+                          size={size}
+                          topOffset={topOffset}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {hasTimelineEvents ? (
         <div className="mt-4 hidden gap-3 max-[920px]:grid">
           <div className="rounded-2xl border border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] px-4 py-3 text-[0.82rem] leading-[1.6] text-[#b9cdea]">
@@ -715,11 +1027,26 @@ const TopPlayersCard = ({
             className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] cursor-grab active:cursor-grabbing"
           >
             <div
-              className="min-w-full"
+              className="relative min-w-full"
               style={{
                 width: `${Math.max(Math.round(topComparison.maxDurationMs / 1000) * pxPerSecond + 32, 560)}px`,
               }}
+              onMouseMove={(mouseEvent) => {
+                updateTimelineGuide(
+                  "mobile",
+                  mouseEvent.currentTarget,
+                  mouseEvent.clientX
+                );
+              }}
+              onMouseLeave={clearTimelineGuide}
             >
+              {timelineGuide?.area === "mobile" ? (
+                <div
+                  className="pointer-events-none absolute inset-y-0 z-10 w-px bg-[repeating-linear-gradient(to_bottom,rgba(191,214,251,0.88)_0_6px,transparent_6px_12px)] opacity-80"
+                  style={{ left: `${timelineGuide.left}px` }}
+                  aria-hidden
+                />
+              ) : null}
               <div
                 className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
                 style={{ height: `${AXIS_HEIGHT}px` }}

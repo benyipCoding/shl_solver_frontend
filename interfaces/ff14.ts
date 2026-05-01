@@ -75,6 +75,7 @@ export interface StaticText {
   timelineSelfLabel: string;
   timelineEmpty: string;
   timelineMobileHint: string;
+  timelineBackToOverview: string;
   coachingTitle: string;
   coachingDesc1: string;
   coachingDesc2: string;
