@@ -121,6 +121,9 @@ interface Ff14EventEntry {
   timestamp?: number;
   type?: string;
   ability?: Ff14EventAbility;
+  duration?: number;
+  packetID?: number;
+  sourceID?: number;
 }
 
 interface Ff14EventResponse<TEvent = Ff14EventEntry> {
@@ -134,6 +137,14 @@ interface Ff14ReferenceAbilityRow {
   hits: number;
   damage: number;
 }
+
+interface PendingTimelineCast {
+  abilitySourceKey: string;
+  beginEntry: Ff14EventEntry;
+  index: number;
+}
+
+const TIMELINE_CAST_PAIR_TOLERANCE_MS = 250;
 
 const FFLOGS_JOB_MAP: Record<string, Job> = {
   Paladin: "PLD",
@@ -464,29 +475,92 @@ const buildReferenceAbilityRows = (
     });
 };
 
-const buildTimelineEvent = (
-  entry: Ff14EventEntry,
-  fightStartTime: number,
-  index: number
-): TimelineEvent | null => {
+const getTimelineEventMetadata = (entry: Ff14EventEntry) => {
   const abilityName = entry.ability?.name?.trim();
 
   if (!abilityName || typeof entry.timestamp !== "number") {
     return null;
   }
 
-  const abilityKey = getAbilityKey({
-    guid: entry.ability?.guid,
-    name: abilityName,
-  });
-
   return {
-    id: `${abilityKey}:${entry.timestamp}:${index}`,
-    abilityKey,
     abilityIconUrl: toAbilityIconUrl(entry.ability?.abilityIcon),
+    abilityKey: getAbilityKey({
+      guid: entry.ability?.guid,
+      name: abilityName,
+    }),
     skill: abilityName,
     timestampMs: entry.timestamp,
-    relativeMs: Math.max(entry.timestamp - fightStartTime, 0),
+  };
+};
+
+const getTimelineAbilitySourceKey = (
+  entry: Pick<Ff14EventEntry, "sourceID">,
+  abilityKey: string
+) => `${entry.sourceID ?? 0}:${abilityKey}`;
+
+const getTimelineCastDurationMs = (
+  entry: Pick<Ff14EventEntry, "duration" | "timestamp">,
+  castTimestampMs?: number
+) => {
+  if (typeof entry.duration === "number" && Number.isFinite(entry.duration)) {
+    return Math.max(entry.duration, 0);
+  }
+
+  if (
+    typeof castTimestampMs === "number" &&
+    typeof entry.timestamp === "number" &&
+    Number.isFinite(castTimestampMs)
+  ) {
+    return Math.max(castTimestampMs - entry.timestamp, 0);
+  }
+
+  return null;
+};
+
+const getTimelineCastPairWindowMs = (
+  entry: Pick<Ff14EventEntry, "duration" | "timestamp">
+) => (getTimelineCastDurationMs(entry) ?? 0) + TIMELINE_CAST_PAIR_TOLERANCE_MS;
+
+const getTimelineEventSortWeight = (entryType?: string) =>
+  entryType === "begincast" ? 0 : 1;
+
+const buildTimelineEvent = ({
+  entry,
+  fightStartTime,
+  index,
+  timestampMs,
+  castDurationMs = null,
+  castState = null,
+  idSuffix,
+}: {
+  entry: Ff14EventEntry;
+  fightStartTime: number;
+  index: number;
+  timestampMs?: number;
+  castDurationMs?: number | null;
+  castState?: TimelineEvent["castState"];
+  idSuffix?: string;
+}): TimelineEvent | null => {
+  const metadata = getTimelineEventMetadata(entry);
+
+  if (!metadata) {
+    return null;
+  }
+
+  const resolvedTimestampMs =
+    typeof timestampMs === "number" && Number.isFinite(timestampMs)
+      ? timestampMs
+      : metadata.timestampMs;
+
+  return {
+    id: `${metadata.abilityKey}:${resolvedTimestampMs}:${idSuffix ?? entry.type ?? "event"}:${index}`,
+    abilityKey: metadata.abilityKey,
+    abilityIconUrl: metadata.abilityIconUrl,
+    skill: metadata.skill,
+    timestampMs: resolvedTimestampMs,
+    relativeMs: Math.max(resolvedTimestampMs - fightStartTime, 0),
+    castDurationMs,
+    castState,
   };
 };
 
@@ -496,7 +570,8 @@ const loadCharacterTimelineEvents = async (
   sourceId: number,
   signal?: AbortSignal
 ) => {
-  const timelineEvents: TimelineEvent[] = [];
+  const rawTimelineEntries: Array<{ entry: Ff14EventEntry; index: number }> =
+    [];
   const seenEventKeys = new Set<string>();
   let nextStartTime = selectedFight.start_time;
 
@@ -513,24 +588,23 @@ const loadCharacterTimelineEvents = async (
     );
 
     (payload.events ?? []).forEach((entry, index) => {
-      const timelineEvent = buildTimelineEvent(
-        entry,
-        selectedFight.start_time,
-        index
-      );
+      const metadata = getTimelineEventMetadata(entry);
 
-      if (!timelineEvent) {
+      if (!metadata) {
         return;
       }
 
-      const eventKey = `${timelineEvent.timestampMs}:${timelineEvent.abilityKey}`;
+      const eventKey =
+        typeof entry.packetID === "number"
+          ? `packet:${entry.packetID}`
+          : `${entry.type ?? "event"}:${metadata.timestampMs}:${entry.sourceID ?? 0}:${metadata.abilityKey}`;
 
       if (seenEventKeys.has(eventKey)) {
         return;
       }
 
       seenEventKeys.add(eventKey);
-      timelineEvents.push(timelineEvent);
+      rawTimelineEntries.push({ entry, index });
     });
 
     const cursor = payload.nextPageTimestamp;
@@ -541,6 +615,148 @@ const loadCharacterTimelineEvents = async (
 
     nextStartTime = cursor;
   }
+
+  rawTimelineEntries.sort((left, right) => {
+    const leftTimestamp = left.entry.timestamp ?? 0;
+    const rightTimestamp = right.entry.timestamp ?? 0;
+
+    if (leftTimestamp !== rightTimestamp) {
+      return leftTimestamp - rightTimestamp;
+    }
+
+    return (
+      getTimelineEventSortWeight(left.entry.type) -
+      getTimelineEventSortWeight(right.entry.type)
+    );
+  });
+
+  const timelineEvents: TimelineEvent[] = [];
+  const pendingTimelineCasts = new Map<string, PendingTimelineCast>();
+
+  const finalizePendingTimelineCast = (
+    pendingCast: PendingTimelineCast,
+    castState: TimelineEvent["castState"]
+  ) => {
+    const timelineEvent = buildTimelineEvent({
+      entry: pendingCast.beginEntry,
+      fightStartTime: selectedFight.start_time,
+      index: pendingCast.index,
+      castDurationMs: getTimelineCastDurationMs(pendingCast.beginEntry),
+      castState,
+      idSuffix: `begincast:${castState}`,
+    });
+
+    if (timelineEvent) {
+      timelineEvents.push(timelineEvent);
+    }
+  };
+
+  const flushPendingTimelineCast = (
+    abilitySourceKey: string,
+    castState: TimelineEvent["castState"]
+  ) => {
+    const pendingCast = pendingTimelineCasts.get(abilitySourceKey);
+
+    if (!pendingCast) {
+      return;
+    }
+
+    pendingTimelineCasts.delete(abilitySourceKey);
+    finalizePendingTimelineCast(pendingCast, castState);
+  };
+
+  const flushExpiredPendingTimelineCasts = (currentTimestampMs: number) => {
+    Array.from(pendingTimelineCasts.entries()).forEach(
+      ([abilitySourceKey, pendingCast]) => {
+        const beginTimestampMs = pendingCast.beginEntry.timestamp ?? 0;
+
+        if (
+          beginTimestampMs +
+            getTimelineCastPairWindowMs(pendingCast.beginEntry) >=
+          currentTimestampMs
+        ) {
+          return;
+        }
+
+        flushPendingTimelineCast(abilitySourceKey, "interrupted");
+      }
+    );
+  };
+
+  rawTimelineEntries.forEach(({ entry, index }) => {
+    const metadata = getTimelineEventMetadata(entry);
+
+    if (!metadata) {
+      return;
+    }
+
+    flushExpiredPendingTimelineCasts(metadata.timestampMs);
+
+    const abilitySourceKey = getTimelineAbilitySourceKey(
+      entry,
+      metadata.abilityKey
+    );
+
+    if (entry.type === "begincast") {
+      flushPendingTimelineCast(abilitySourceKey, "interrupted");
+      pendingTimelineCasts.set(abilitySourceKey, {
+        abilitySourceKey,
+        beginEntry: entry,
+        index,
+      });
+      return;
+    }
+
+    if (entry.type === "cast") {
+      const pendingCast = pendingTimelineCasts.get(abilitySourceKey);
+
+      if (pendingCast) {
+        const beginTimestampMs = pendingCast.beginEntry.timestamp ?? 0;
+
+        if (
+          metadata.timestampMs >= beginTimestampMs &&
+          metadata.timestampMs <=
+            beginTimestampMs +
+              getTimelineCastPairWindowMs(pendingCast.beginEntry)
+        ) {
+          const completedCastEvent = buildTimelineEvent({
+            entry: pendingCast.beginEntry,
+            fightStartTime: selectedFight.start_time,
+            index: pendingCast.index,
+            castDurationMs: getTimelineCastDurationMs(
+              pendingCast.beginEntry,
+              metadata.timestampMs
+            ),
+            castState: "completed",
+            idSuffix: "begincast:completed",
+          });
+
+          pendingTimelineCasts.delete(abilitySourceKey);
+
+          if (completedCastEvent) {
+            timelineEvents.push(completedCastEvent);
+            return;
+          }
+        } else {
+          flushPendingTimelineCast(abilitySourceKey, "interrupted");
+        }
+      }
+    }
+
+    const timelineEvent = buildTimelineEvent({
+      entry,
+      fightStartTime: selectedFight.start_time,
+      index,
+    });
+
+    if (timelineEvent) {
+      timelineEvents.push(timelineEvent);
+    }
+  });
+
+  pendingTimelineCasts.forEach((pendingCast) => {
+    finalizePendingTimelineCast(pendingCast, "interrupted");
+  });
 
   return timelineEvents.sort(
     (left, right) => left.relativeMs - right.relativeMs

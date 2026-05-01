@@ -96,7 +96,7 @@ const ReportInputCard = ({
         ) : (
           <span className={ff14Styles.metaHint}>
             {text.examplePrefix}
-            https://www.fflogs.com/reports/yZrcbBYf8GL9TqCF?fight=112
+            https://www.fflogs.com/reports/QXfxpW6crMaAtm1C?fight=7
           </span>
         )}
       </div>

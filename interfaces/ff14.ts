@@ -138,6 +138,8 @@ export interface SkillBenchmark {
   top10Damage: number;
 }
 
+export type TimelineCastState = "completed" | "interrupted";
+
 export interface TopPlayer {
   rank: number;
   name: string;
@@ -153,6 +155,8 @@ export interface TimelineEvent {
   skill: string;
   timestampMs: number;
   relativeMs: number;
+  castDurationMs: number | null;
+  castState: TimelineCastState | null;
 }
 
 export interface TimelineTrack {

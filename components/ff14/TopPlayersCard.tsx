@@ -60,6 +60,7 @@ const TOOLTIP_HEIGHT = 56;
 const TOOLTIP_POINTER_OFFSET_X = 10;
 const TOOLTIP_POINTER_OFFSET_Y = 8;
 const TOOLTIP_ELEMENT_OFFSET_Y = 8;
+const CAST_TAIL_MIN_WIDTH = 10;
 
 const clampZoomIndex = (value: number) =>
   Math.min(Math.max(value, 0), ZOOM_LEVELS.length - 1);
@@ -83,6 +84,28 @@ const getAbilityColor = (abilityKey: string) => {
   }
 
   return EVENT_COLORS[hash % EVENT_COLORS.length];
+};
+
+const getCastTailStyles = (
+  castState: TimelineTrack["events"][number]["castState"]
+) => {
+  if (castState === "completed") {
+    return {
+      background:
+        "linear-gradient(90deg, rgba(62,182,104,0.96), rgba(123,244,165,0.72))",
+      boxShadow: "0 0 16px rgba(85, 225, 137, 0.34)",
+    };
+  }
+
+  if (castState === "interrupted") {
+    return {
+      background:
+        "linear-gradient(90deg, rgba(210,76,76,0.96), rgba(255,135,135,0.72))",
+      boxShadow: "0 0 16px rgba(255, 115, 115, 0.32)",
+    };
+  }
+
+  return null;
 };
 
 const sortTimelineTracks = (tracks: TimelineTrack[]) =>
@@ -145,56 +168,87 @@ const EventMarker = memo(function EventMarker({
 }: EventMarkerProps) {
   const timeLabel = formatTimelineTime(event.relativeMs);
   const hasAbilityIcon = Boolean(event.abilityIconUrl);
+  const markerLeft = Math.max(
+    (event.relativeMs / 1000) * pxPerSecond - size / 2,
+    0
+  );
+  const castTailStyles = event.castState
+    ? getCastTailStyles(event.castState)
+    : null;
+  const castTailWidth =
+    castTailStyles && event.castDurationMs && event.castDurationMs > 0
+      ? Math.max(
+          (event.castDurationMs / 1000) * pxPerSecond,
+          CAST_TAIL_MIN_WIDTH
+        )
+      : 0;
+  const castTailHeight = Math.max(Math.round(size * 0.34), 8);
 
   return (
-    <button
-      key={event.id}
-      type="button"
-      draggable={false}
-      className="absolute overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
-      style={{
-        left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
-        top: `${topOffset}px`,
-        width: `${size}px`,
-        height: `${size}px`,
-        backgroundColor: hasAbilityIcon
-          ? "rgba(9,16,30,0.92)"
-          : getAbilityColor(event.abilityKey),
-      }}
-      onMouseEnter={(mouseEvent) => {
-        onShowTooltipFromPointer(
-          event.skill,
-          timeLabel,
-          actor,
-          mouseEvent.clientX,
-          mouseEvent.clientY
-        );
-      }}
-      onMouseLeave={onClearTooltip}
-      onFocus={(focusEvent) => {
-        onShowTooltipFromElement(
-          event.skill,
-          timeLabel,
-          actor,
-          focusEvent.currentTarget
-        );
-      }}
-      onBlur={onClearTooltip}
-      aria-label={`${actor} ${timeLabel} ${event.skill}`}
-    >
-      {event.abilityIconUrl ? (
-        <Image
-          src={event.abilityIconUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          decoding="async"
-          draggable={false}
-          loading="lazy"
-          width={size}
-          height={size}
+    <>
+      {castTailStyles && castTailWidth > 0 ? (
+        <div
+          className="pointer-events-none absolute rounded-full"
+          style={{
+            left: `${markerLeft + size / 2}px`,
+            top: `${topOffset + size / 2 - castTailHeight / 2}px`,
+            width: `${castTailWidth}px`,
+            height: `${castTailHeight}px`,
+            ...castTailStyles,
+          }}
+          aria-hidden
         />
       ) : null}
-    </button>
+
+      <button
+        key={event.id}
+        type="button"
+        draggable={false}
+        className="absolute z-10 overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
+        style={{
+          left: `${markerLeft}px`,
+          top: `${topOffset}px`,
+          width: `${size}px`,
+          height: `${size}px`,
+          backgroundColor: hasAbilityIcon
+            ? "rgba(9,16,30,0.92)"
+            : getAbilityColor(event.abilityKey),
+        }}
+        onMouseEnter={(mouseEvent) => {
+          onShowTooltipFromPointer(
+            event.skill,
+            timeLabel,
+            actor,
+            mouseEvent.clientX,
+            mouseEvent.clientY
+          );
+        }}
+        onMouseLeave={onClearTooltip}
+        onFocus={(focusEvent) => {
+          onShowTooltipFromElement(
+            event.skill,
+            timeLabel,
+            actor,
+            focusEvent.currentTarget
+          );
+        }}
+        onBlur={onClearTooltip}
+        aria-label={`${actor} ${timeLabel} ${event.skill}`}
+      >
+        {event.abilityIconUrl ? (
+          <Image
+            src={event.abilityIconUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            decoding="async"
+            draggable={false}
+            loading="lazy"
+            width={size}
+            height={size}
+          />
+        ) : null}
+      </button>
+    </>
   );
 });
 
@@ -642,7 +696,7 @@ const TopPlayersCard = ({
           <div className="min-w-max">
             <div className="flex">
               <div
-                className="sticky left-0 z-5 shrink-0 border-r border-[rgba(105,130,170,0.28)] bg-[linear-gradient(180deg,rgba(13,22,39,0.97),rgba(11,18,31,0.97))] backdrop-blur-sm"
+                className="sticky left-0 z-20 shrink-0 border-r border-[rgba(105,130,170,0.28)] bg-[linear-gradient(180deg,rgba(13,22,39,0.97),rgba(11,18,31,0.97))] backdrop-blur-sm"
                 style={{ width: `${LEFT_COLUMN_WIDTH}px` }}
               >
                 <div
@@ -704,7 +758,7 @@ const TopPlayersCard = ({
               </div>
 
               <div
-                className="relative shrink-0"
+                className="relative z-0 shrink-0"
                 style={{ width: `${timelineWidth}px` }}
                 onMouseMove={(mouseEvent) => {
                   updateTimelineGuide(
