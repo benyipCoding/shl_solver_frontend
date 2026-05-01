@@ -128,15 +128,6 @@ interface Ff14EventResponse<TEvent = Ff14EventEntry> {
   nextPageTimestamp?: number;
 }
 
-interface Ff14CharacterParseEntry {
-  encounterID?: number;
-  spec?: string;
-  difficulty?: number;
-  reportID?: string;
-  fightID?: number;
-  startTime?: number;
-}
-
 interface Ff14ReferenceAbilityRow {
   abilityKey: string;
   casts: number;
@@ -848,94 +839,6 @@ const loadEncounterRankingReferences = async (
   return rankingReferences;
 };
 
-const loadCharacterParsesForReference = async (
-  reference: Pick<
-    Ff14EncounterRankingEntry,
-    "name" | "serverName" | "regionName"
-  >,
-  signal?: AbortSignal
-) => {
-  const characterName = reference.name.trim();
-  const serverName = reference.serverName?.trim();
-  const serverRegion = reference.regionName?.trim();
-
-  if (!characterName || !serverName || !serverRegion) {
-    return [] as Ff14CharacterParseEntry[];
-  }
-
-  const query = new URLSearchParams({
-    characterName,
-    serverName,
-    serverRegion,
-  });
-
-  return fetchFf14Data<Ff14CharacterParseEntry[]>(
-    `/api/ff14_logs/parses/character?${query.toString()}`,
-    signal
-  );
-};
-
-const resolveReferenceFromCharacterParses = async (
-  reference: Ff14EncounterRankingReference,
-  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
-  job: Job,
-  signal?: AbortSignal
-): Promise<Ff14EncounterRankingReference> => {
-  const encounterId = selectedFight.boss;
-
-  if (!encounterId) {
-    return reference;
-  }
-
-  try {
-    const parses = await loadCharacterParsesForReference(reference, signal);
-    const matchingParses = parses.filter(
-      (
-        entry
-      ): entry is Ff14CharacterParseEntry & {
-        reportID: string;
-        fightID: number;
-      } =>
-        entry.encounterID === encounterId &&
-        getJobFromFflogsType(entry.spec ?? "") === job &&
-        hasValidReferenceLog(entry)
-    );
-
-    if (!matchingParses.length) {
-      return reference;
-    }
-
-    const sameDifficultyParses =
-      typeof selectedFight.difficulty === "number"
-        ? matchingParses.filter(
-            (entry) => entry.difficulty === selectedFight.difficulty
-          )
-        : matchingParses;
-    const candidateParses = sameDifficultyParses.length
-      ? sameDifficultyParses
-      : matchingParses;
-    const latestParse = [...candidateParses].sort(
-      (left, right) => (right.startTime ?? 0) - (left.startTime ?? 0)
-    )[0];
-
-    if (!latestParse) {
-      return reference;
-    }
-
-    return {
-      ...reference,
-      reportID: latestParse.reportID,
-      fightID: latestParse.fightID,
-    };
-  } catch (error) {
-    if (signal?.aborted) {
-      throw error;
-    }
-
-    return reference;
-  }
-};
-
 const loadReferenceSkillRows = async (
   reference: Ff14EncounterRankingReference,
   job: Job,
@@ -982,34 +885,9 @@ const loadReferenceSkillRows = async (
 
 const loadReferenceSkillRowsWithFallback = async (
   reference: Ff14EncounterRankingReference,
-  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
   job: Job,
   signal?: AbortSignal
-) => {
-  const resolvedReference = await resolveReferenceFromCharacterParses(
-    reference,
-    selectedFight,
-    job,
-    signal
-  );
-
-  try {
-    return await loadReferenceSkillRows(resolvedReference, job, signal);
-  } catch (error) {
-    if (signal?.aborted) {
-      throw error;
-    }
-
-    if (
-      resolvedReference.reportID === reference.reportID &&
-      resolvedReference.fightID === reference.fightID
-    ) {
-      throw error;
-    }
-
-    return loadReferenceSkillRows(reference, job, signal);
-  }
-};
+) => loadReferenceSkillRows(reference, job, signal);
 
 const loadReferenceTimelineTrack = async (
   reference: Ff14EncounterRankingReference,
@@ -1056,40 +934,10 @@ const loadReferenceTimelineTrack = async (
 
 const loadReferenceTimelineTrackWithFallback = async (
   reference: Ff14EncounterRankingReference,
-  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
   job: Job,
   rank: number,
   signal?: AbortSignal
-) => {
-  const resolvedReference = await resolveReferenceFromCharacterParses(
-    reference,
-    selectedFight,
-    job,
-    signal
-  );
-
-  try {
-    return await loadReferenceTimelineTrack(
-      resolvedReference,
-      job,
-      rank,
-      signal
-    );
-  } catch (error) {
-    if (signal?.aborted) {
-      throw error;
-    }
-
-    if (
-      resolvedReference.reportID === reference.reportID &&
-      resolvedReference.fightID === reference.fightID
-    ) {
-      throw error;
-    }
-
-    return loadReferenceTimelineTrack(reference, job, rank, signal);
-  }
-};
+) => loadReferenceTimelineTrack(reference, job, rank, signal);
 
 const loadCharacterDetailForFight = async (
   reportId: string,
@@ -1322,19 +1170,13 @@ export const loadEncounterTopComparison = async (
         ),
       Promise.allSettled(
         rankingReferences.map((reference) =>
-          loadReferenceSkillRowsWithFallback(
-            reference,
-            selectedFight,
-            character.job,
-            signal
-          )
+          loadReferenceSkillRowsWithFallback(reference, character.job, signal)
         )
       ),
       Promise.allSettled(
         rankingReferences.map((reference, index) =>
           loadReferenceTimelineTrackWithFallback(
             reference,
-            selectedFight,
             character.job,
             index + 1,
             signal
