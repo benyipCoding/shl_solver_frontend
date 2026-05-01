@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Minus, Plus, Trophy } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ff14Styles, jobColorMap } from "@/constants/ff14";
 import type {
@@ -48,6 +48,12 @@ const TOOLTIP_POINTER_OFFSET_X = 10;
 const TOOLTIP_POINTER_OFFSET_Y = 8;
 const TOOLTIP_ELEMENT_OFFSET_Y = 8;
 
+const clampZoomIndex = (value: number) =>
+  Math.min(Math.max(value, 0), ZOOM_LEVELS.length - 1);
+
+const getNextZoomIndex = (currentIndex: number, direction: -1 | 1) =>
+  clampZoomIndex(currentIndex + direction);
+
 const formatTimelineTime = (valueMs: number) => {
   const totalSeconds = Math.max(Math.floor(valueMs / 1000), 0);
   const minutes = Math.floor(totalSeconds / 60);
@@ -92,12 +98,98 @@ const buildTrackBackgroundStyle = (
   backgroundSize: `${Math.max(gridStepSec * pxPerSecond, 8)}px 100%, ${Math.max(accentGridStepSec * pxPerSecond, 8)}px 100%`,
 });
 
+interface EventMarkerProps {
+  actor: string;
+  event: TimelineTrack["events"][number];
+  onClearTooltip: () => void;
+  onShowTooltipFromElement: (
+    skill: string,
+    time: string,
+    actor: string,
+    element: HTMLButtonElement
+  ) => void;
+  onShowTooltipFromPointer: (
+    skill: string,
+    time: string,
+    actor: string,
+    clientX: number,
+    clientY: number
+  ) => void;
+  pxPerSecond: number;
+  size: number;
+  topOffset: number;
+}
+
+const EventMarker = memo(function EventMarker({
+  actor,
+  event,
+  onClearTooltip,
+  onShowTooltipFromElement,
+  onShowTooltipFromPointer,
+  pxPerSecond,
+  size,
+  topOffset,
+}: EventMarkerProps) {
+  const timeLabel = formatTimelineTime(event.relativeMs);
+  const hasAbilityIcon = Boolean(event.abilityIconUrl);
+
+  return (
+    <button
+      key={event.id}
+      type="button"
+      className="absolute cursor-help overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
+      style={{
+        left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
+        top: `${topOffset}px`,
+        width: `${size}px`,
+        height: `${size}px`,
+        backgroundColor: hasAbilityIcon
+          ? "rgba(9,16,30,0.92)"
+          : getAbilityColor(event.abilityKey),
+      }}
+      title={`${actor} · ${timeLabel} · ${event.skill}`}
+      onMouseEnter={(mouseEvent) => {
+        onShowTooltipFromPointer(
+          event.skill,
+          timeLabel,
+          actor,
+          mouseEvent.clientX,
+          mouseEvent.clientY
+        );
+      }}
+      onMouseLeave={onClearTooltip}
+      onFocus={(focusEvent) => {
+        onShowTooltipFromElement(
+          event.skill,
+          timeLabel,
+          actor,
+          focusEvent.currentTarget
+        );
+      }}
+      onBlur={onClearTooltip}
+      aria-label={`${actor} ${timeLabel} ${event.skill}`}
+    >
+      {event.abilityIconUrl ? (
+        <Image
+          src={event.abilityIconUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          decoding="async"
+          loading="lazy"
+          width={size}
+          height={size}
+        />
+      ) : null}
+    </button>
+  );
+});
+
 const TopPlayersCard = ({
   text,
   selectedCharacter,
   topComparison,
 }: TopPlayersCardProps) => {
-  const [zoomIndex, setZoomIndex] = useState(1);
+  const [zoomIndex, setZoomIndex] = useState(7);
   const [mobileCompareActorId, setMobileCompareActorId] = useState("");
   const [tooltip, setTooltip] = useState<TimelineTooltipState | null>(null);
   const desktopTimelineRef = useRef<HTMLDivElement | null>(null);
@@ -164,11 +256,9 @@ const TopPlayersCard = ({
   );
   const accentColor = jobColorMap[selectedCharacter.job] ?? "#8bc5ff";
 
-  const stepZoom = (direction: -1 | 1) => {
-    setZoomIndex((prev) =>
-      Math.min(Math.max(prev + direction, 0), ZOOM_LEVELS.length - 1)
-    );
-  };
+  const stepZoom = useCallback((direction: -1 | 1) => {
+    setZoomIndex((prev) => getNextZoomIndex(prev, direction));
+  }, []);
 
   useEffect(() => {
     if (!hasTimelineEvents) {
@@ -176,23 +266,13 @@ const TopPlayersCard = ({
     }
 
     const handleTimelineWheel = (wheelEvent: globalThis.WheelEvent) => {
-      if (Math.abs(wheelEvent.deltaY) <= Math.abs(wheelEvent.deltaX)) {
+      if (!wheelEvent.ctrlKey || wheelEvent.deltaY === 0) {
         return;
       }
 
       wheelEvent.preventDefault();
 
-      setZoomIndex((prev) => {
-        if (wheelEvent.deltaY < 0) {
-          return Math.min(prev + 1, ZOOM_LEVELS.length - 1);
-        }
-
-        if (wheelEvent.deltaY > 0) {
-          return Math.max(prev - 1, 0);
-        }
-
-        return prev;
-      });
+      stepZoom(wheelEvent.deltaY < 0 ? 1 : -1);
     };
 
     const timelineContainers = [
@@ -211,13 +291,13 @@ const TopPlayersCard = ({
         element.removeEventListener("wheel", handleTimelineWheel);
       });
     };
-  }, [hasTimelineEvents]);
+  }, [hasTimelineEvents, stepZoom]);
 
-  const clearTooltip = () => {
+  const clearTooltip = useCallback(() => {
     setTooltip(null);
-  };
+  }, []);
 
-  const clampTooltipPosition = (left: number, top: number) => {
+  const clampTooltipPosition = useCallback((left: number, top: number) => {
     if (typeof window === "undefined") {
       return { left, top };
     }
@@ -232,122 +312,83 @@ const TopPlayersCard = ({
         window.innerHeight - TOOLTIP_HEIGHT - 12
       ),
     };
-  };
+  }, []);
 
-  const showTooltipFromPointer = (
-    skill: string,
-    time: string,
-    actor: string,
-    clientX: number,
-    clientY: number
-  ) => {
-    const nextPosition = clampTooltipPosition(
-      clientX + TOOLTIP_POINTER_OFFSET_X,
-      clientY + TOOLTIP_POINTER_OFFSET_Y
-    );
+  const showTooltipFromPointer = useCallback(
+    (
+      skill: string,
+      time: string,
+      actor: string,
+      clientX: number,
+      clientY: number
+    ) => {
+      const nextPosition = clampTooltipPosition(
+        clientX + TOOLTIP_POINTER_OFFSET_X,
+        clientY + TOOLTIP_POINTER_OFFSET_Y
+      );
 
-    setTooltip({
-      actor,
-      left: nextPosition.left - 340,
-      skill,
-      time,
-      top: nextPosition.top - 60,
-    });
-  };
+      setTooltip((currentTooltip) => {
+        const nextTooltip = {
+          actor,
+          left: nextPosition.left - 340,
+          skill,
+          time,
+          top: nextPosition.top - 60,
+        };
 
-  const showTooltipFromElement = (
-    skill: string,
-    time: string,
-    actor: string,
-    element: HTMLButtonElement
-  ) => {
-    const rect = element.getBoundingClientRect();
-    const nextPosition = clampTooltipPosition(
-      rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
-      rect.top - TOOLTIP_HEIGHT - TOOLTIP_ELEMENT_OFFSET_Y
-    );
+        if (
+          currentTooltip?.actor === nextTooltip.actor &&
+          currentTooltip?.left === nextTooltip.left &&
+          currentTooltip?.skill === nextTooltip.skill &&
+          currentTooltip?.time === nextTooltip.time &&
+          currentTooltip?.top === nextTooltip.top
+        ) {
+          return currentTooltip;
+        }
 
-    setTooltip({
-      actor,
-      left: nextPosition.left,
-      skill,
-      time,
-      top: nextPosition.top,
-    });
-  };
+        return nextTooltip;
+      });
+    },
+    [clampTooltipPosition]
+  );
 
-  const renderEventMarker = ({
-    event,
-    size,
-    topOffset,
-    track,
-  }: {
-    event: TimelineTrack["events"][number];
-    size: number;
-    topOffset: number;
-    track: TimelineTrack;
-  }) => {
-    const timeLabel = formatTimelineTime(event.relativeMs);
-    const hasAbilityIcon = Boolean(event.abilityIconUrl);
+  const showTooltipFromElement = useCallback(
+    (
+      skill: string,
+      time: string,
+      actor: string,
+      element: HTMLButtonElement
+    ) => {
+      const rect = element.getBoundingClientRect();
+      const nextPosition = clampTooltipPosition(
+        rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
+        rect.top - TOOLTIP_HEIGHT - TOOLTIP_ELEMENT_OFFSET_Y
+      );
 
-    return (
-      <button
-        key={event.id}
-        type="button"
-        className="absolute cursor-help overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
-        style={{
-          left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
-          top: `${topOffset}px`,
-          width: `${size}px`,
-          height: `${size}px`,
-          backgroundColor: hasAbilityIcon
-            ? "rgba(9,16,30,0.92)"
-            : getAbilityColor(event.abilityKey),
-        }}
-        onMouseEnter={(mouseEvent) => {
-          showTooltipFromPointer(
-            event.skill,
-            timeLabel,
-            track.name,
-            mouseEvent.clientX,
-            mouseEvent.clientY
-          );
-        }}
-        onMouseMove={(mouseEvent) => {
-          showTooltipFromPointer(
-            event.skill,
-            timeLabel,
-            track.name,
-            mouseEvent.clientX,
-            mouseEvent.clientY
-          );
-        }}
-        onMouseLeave={clearTooltip}
-        onFocus={(focusEvent) => {
-          showTooltipFromElement(
-            event.skill,
-            timeLabel,
-            track.name,
-            focusEvent.currentTarget
-          );
-        }}
-        onBlur={clearTooltip}
-        aria-label={`${track.name} ${timeLabel} ${event.skill}`}
-      >
-        {event.abilityIconUrl ? (
-          <Image
-            src={event.abilityIconUrl}
-            alt=""
-            className="h-full w-full object-cover"
-            decoding="async"
-            loading="lazy"
-            width={size}
-            height={size}
-          />
-        ) : null}
-      </button>
-    );
-  };
+      setTooltip((currentTooltip) => {
+        const nextTooltip = {
+          actor,
+          left: nextPosition.left,
+          skill,
+          time,
+          top: nextPosition.top,
+        };
+
+        if (
+          currentTooltip?.actor === nextTooltip.actor &&
+          currentTooltip?.left === nextTooltip.left &&
+          currentTooltip?.skill === nextTooltip.skill &&
+          currentTooltip?.time === nextTooltip.time &&
+          currentTooltip?.top === nextTooltip.top
+        ) {
+          return currentTooltip;
+        }
+
+        return nextTooltip;
+      });
+    },
+    [clampTooltipPosition]
+  );
 
   return (
     <aside className={ff14Styles.card}>
@@ -496,17 +537,24 @@ const TopPlayersCard = ({
 
                     {track.events.map((event, index) => {
                       const size = Math.min(
-                        Math.max(Math.round(pxPerSecond * 1.35), 13),
-                        22
+                        Math.max(Math.round(pxPerSecond * 1.45), 14),
+                        24
                       );
                       const topOffset = 10 + (index % 2) * 18;
 
-                      return renderEventMarker({
-                        event,
-                        size,
-                        topOffset,
-                        track,
-                      });
+                      return (
+                        <EventMarker
+                          key={event.id}
+                          actor={track.name}
+                          event={event}
+                          onClearTooltip={clearTooltip}
+                          onShowTooltipFromElement={showTooltipFromElement}
+                          onShowTooltipFromPointer={showTooltipFromPointer}
+                          pxPerSecond={pxPerSecond}
+                          size={size}
+                          topOffset={topOffset}
+                        />
+                      );
                     })}
                   </div>
                 ))}
@@ -634,17 +682,24 @@ const TopPlayersCard = ({
 
                     {track.events.map((event, index) => {
                       const size = Math.min(
-                        Math.max(Math.round(pxPerSecond * 1.25), 13),
-                        20
+                        Math.max(Math.round(pxPerSecond * 1.35), 14),
+                        22
                       );
                       const topOffset = 9 + (index % 2) * 18;
 
-                      return renderEventMarker({
-                        event,
-                        size,
-                        topOffset,
-                        track,
-                      });
+                      return (
+                        <EventMarker
+                          key={event.id}
+                          actor={track.name}
+                          event={event}
+                          onClearTooltip={clearTooltip}
+                          onShowTooltipFromElement={showTooltipFromElement}
+                          onShowTooltipFromPointer={showTooltipFromPointer}
+                          pxPerSecond={pxPerSecond}
+                          size={size}
+                          topOffset={topOffset}
+                        />
+                      );
                     })}
                   </div>
                 </div>
