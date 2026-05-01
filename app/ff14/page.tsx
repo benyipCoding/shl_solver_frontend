@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import EmptyState from "@/components/ff14/EmptyState";
 import EncounterSummaryCard from "@/components/ff14/EncounterSummaryCard";
 import HeroSection from "@/components/ff14/HeroSection";
@@ -11,8 +11,13 @@ import type {
   CharacterDetail,
   CharacterSummary,
   Locale,
+  TopJobComparison,
 } from "@/interfaces/ff14";
-import { loadEncounterData, parseFflogsReport } from "@/utils/ff14";
+import {
+  loadEncounterData,
+  loadEncounterTopComparison,
+  parseFflogsReport,
+} from "@/utils/ff14";
 
 type EncounterRequestState = {
   reportKey: string | null;
@@ -21,6 +26,12 @@ type EncounterRequestState = {
   detailErrorsByCharacterId: Record<string, string>;
   error: string | null;
   status: "idle" | "loading" | "loaded" | "error";
+};
+
+type TopComparisonRequestState = {
+  comparisonsByKey: Record<string, TopJobComparison>;
+  errorsByKey: Record<string, string>;
+  loadingKeys: Record<string, boolean>;
 };
 
 const FF14Page = () => {
@@ -36,6 +47,12 @@ const FF14Page = () => {
       detailErrorsByCharacterId: {},
       error: null,
       status: "idle",
+    });
+  const [topComparisonRequest, setTopComparisonRequest] =
+    useState<TopComparisonRequestState>({
+      comparisonsByKey: {},
+      errorsByKey: {},
+      loadingKeys: {},
     });
 
   const text = TEXT[locale];
@@ -91,6 +108,23 @@ const FF14Page = () => {
       ? `${reportKey}:${activeSelectedCharacterId}`
       : null;
 
+  const selectedCharacter = useMemo(() => {
+    if (!sortedSummary.length) {
+      return null;
+    }
+
+    return (
+      sortedSummary.find((item) => item.id === activeSelectedCharacterId) ??
+      sortedSummary[0] ??
+      null
+    );
+  }, [activeSelectedCharacterId, sortedSummary]);
+
+  const topPlayersRequestKey =
+    reportKey && selectedCharacter
+      ? `${reportKey}:${selectedCharacter.job}`
+      : null;
+
   useEffect(() => {
     if (!parsedReport || !reportKey) {
       return;
@@ -98,13 +132,15 @@ const FF14Page = () => {
 
     const controller = new AbortController();
 
-    setEncounterRequest({
-      reportKey,
-      summary: [],
-      detailsByCharacterId: {},
-      detailErrorsByCharacterId: {},
-      error: null,
-      status: "loading",
+    startTransition(() => {
+      setEncounterRequest({
+        reportKey,
+        summary: [],
+        detailsByCharacterId: {},
+        detailErrorsByCharacterId: {},
+        error: null,
+        status: "loading",
+      });
     });
 
     void loadEncounterData(parsedReport, controller.signal)
@@ -143,17 +179,94 @@ const FF14Page = () => {
     };
   }, [parsedReport, reportKey]);
 
-  const selectedCharacter = useMemo(() => {
-    if (!sortedSummary.length) {
-      return null;
+  const cachedTopComparison = topPlayersRequestKey
+    ? (topComparisonRequest.comparisonsByKey[topPlayersRequestKey] ?? null)
+    : null;
+  const topPlayersError = topPlayersRequestKey
+    ? (topComparisonRequest.errorsByKey[topPlayersRequestKey] ?? null)
+    : null;
+
+  useEffect(() => {
+    if (
+      !parsedReport ||
+      !selectedCharacter ||
+      !topPlayersRequestKey ||
+      cachedTopComparison ||
+      topPlayersError
+    ) {
+      return;
     }
 
-    return (
-      sortedSummary.find((item) => item.id === activeSelectedCharacterId) ??
-      sortedSummary[0] ??
-      null
-    );
-  }, [activeSelectedCharacterId, sortedSummary]);
+    const controller = new AbortController();
+
+    startTransition(() => {
+      setTopComparisonRequest((prev) => ({
+        ...prev,
+        loadingKeys: {
+          ...prev.loadingKeys,
+          [topPlayersRequestKey]: true,
+        },
+      }));
+    });
+
+    void loadEncounterTopComparison(
+      parsedReport,
+      selectedCharacter.job,
+      controller.signal
+    )
+      .then((comparison) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setTopComparisonRequest((prev) => {
+          const nextLoadingKeys = { ...prev.loadingKeys };
+          delete nextLoadingKeys[topPlayersRequestKey];
+
+          const nextErrorsByKey = { ...prev.errorsByKey };
+          delete nextErrorsByKey[topPlayersRequestKey];
+
+          return {
+            comparisonsByKey: {
+              ...prev.comparisonsByKey,
+              [topPlayersRequestKey]: comparison,
+            },
+            errorsByKey: nextErrorsByKey,
+            loadingKeys: nextLoadingKeys,
+          };
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setTopComparisonRequest((prev) => {
+          const nextLoadingKeys = { ...prev.loadingKeys };
+          delete nextLoadingKeys[topPlayersRequestKey];
+
+          return {
+            comparisonsByKey: prev.comparisonsByKey,
+            errorsByKey: {
+              ...prev.errorsByKey,
+              [topPlayersRequestKey]:
+                error instanceof Error ? error.message : "加载 Top10 榜单失败",
+            },
+            loadingKeys: nextLoadingKeys,
+          };
+        });
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    cachedTopComparison,
+    parsedReport,
+    selectedCharacter,
+    topPlayersError,
+    topPlayersRequestKey,
+  ]);
 
   const detailError =
     detailRequestKey && encounterRequest.reportKey === reportKey
@@ -169,6 +282,36 @@ const FF14Page = () => {
       ? (encounterRequest.detailsByCharacterId[activeSelectedCharacterId] ??
         null)
       : null;
+
+  const topPlayersState = !topPlayersRequestKey
+    ? "idle"
+    : cachedTopComparison
+      ? "loaded"
+      : topPlayersError
+        ? "error"
+        : "loading";
+
+  const selectedDetailWithTopComparison =
+    selectedDetail && cachedTopComparison
+      ? {
+          ...selectedDetail,
+          skillRows: selectedDetail.skillRows.map((row) => {
+            const benchmark =
+              cachedTopComparison.benchmarksByAbilityKey[row.abilityKey];
+
+            if (!benchmark) {
+              return row;
+            }
+
+            return {
+              ...row,
+              top10Casts: benchmark.top10Casts,
+              top10Damage: benchmark.top10Damage,
+            };
+          }),
+          topPlayers: cachedTopComparison.topPlayers,
+        }
+      : selectedDetail;
 
   const detailState = !detailRequestKey
     ? "idle"
@@ -234,6 +377,24 @@ const FF14Page = () => {
       : "No skill breakdown available for this character";
   }, [detailState, locale]);
 
+  const topPlayersStatusTitle = useMemo(() => {
+    if (topPlayersState === "loading") {
+      return locale === "zh"
+        ? "正在加载 Top10 榜单..."
+        : "Loading Top10 rankings...";
+    }
+
+    if (topPlayersState === "error") {
+      return locale === "zh"
+        ? "Top10 榜单加载失败"
+        : "Failed to load Top10 rankings";
+    }
+
+    return locale === "zh"
+      ? "当前职业暂无可展示的 Top10 榜单"
+      : "No Top10 rankings available for this job";
+  }, [locale, topPlayersState]);
+
   const toggleLocale = () => {
     setLocale((prev) => (prev === "zh" ? "en" : "zh"));
   };
@@ -280,13 +441,31 @@ const FF14Page = () => {
                       <SkillBreakdownCard
                         text={text}
                         selectedCharacter={selectedCharacter}
-                        selectedDetail={selectedDetail}
+                        selectedDetail={selectedDetailWithTopComparison}
+                        isTopComparisonLoading={topPlayersState === "loading"}
+                        topComparisonStatusTitle={topPlayersStatusTitle}
                       />
-                      <TopPlayersCard
-                        text={text}
-                        selectedCharacter={selectedCharacter}
-                        selectedDetail={selectedDetail}
-                      />
+                      {selectedDetailWithTopComparison &&
+                      topPlayersState === "loaded" ? (
+                        <TopPlayersCard
+                          text={text}
+                          selectedCharacter={selectedCharacter}
+                          selectedDetail={selectedDetailWithTopComparison}
+                        />
+                      ) : (
+                        <aside className={ff14Styles.card}>
+                          <div className="grid gap-2">
+                            <p className="m-0 font-(--font-heading) text-[1rem] text-[#edf3ff]">
+                              {topPlayersStatusTitle}
+                            </p>
+                            <p className="m-0 text-[0.88rem] leading-[1.6] text-[#a8bddc]">
+                              {topPlayersState === "error"
+                                ? topPlayersError
+                                : text.todoHint}
+                            </p>
+                          </div>
+                        </aside>
+                      )}
                     </section>
                   ) : (
                     <section className={ff14Styles.card}>

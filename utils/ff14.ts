@@ -11,8 +11,10 @@ import type {
   ParseTier,
   ParsedReport,
   Role,
+  SkillBenchmark,
   SkillRow,
   SkillTemplate,
+  TopJobComparison,
   TopPlayer,
 } from "@/interfaces/ff14";
 
@@ -28,9 +30,35 @@ interface Ff14ReportFightRef {
 
 interface Ff14ReportFight {
   id: number;
+  boss?: number;
+  difficulty?: number;
   start_time: number;
   end_time: number;
   combatTime: number;
+}
+
+interface Ff14EncounterRankingEntry {
+  name: string;
+  serverName?: string;
+  regionName?: string;
+  hidden?: boolean;
+  duration?: number;
+  total?: number;
+  rDPS?: number;
+  reportID?: string;
+  fightID?: number;
+  startTime?: number;
+}
+
+interface Ff14EncounterRankingReference extends Ff14EncounterRankingEntry {
+  reportID: string;
+  fightID: number;
+}
+
+interface Ff14EncounterRankingsResponse {
+  page?: number;
+  hasMorePages?: boolean;
+  rankings?: Ff14EncounterRankingEntry[];
 }
 
 interface Ff14ReportFriendly {
@@ -76,6 +104,21 @@ interface Ff14TableResponse<TEntry = Ff14TableEntry> {
   entries?: TEntry[];
   combatTime?: number;
   totalTime?: number;
+}
+
+interface Ff14CharacterParseEntry {
+  encounterID?: number;
+  spec?: string;
+  difficulty?: number;
+  reportID?: string;
+  fightID?: number;
+  startTime?: number;
+}
+
+interface Ff14ReferenceAbilityRow {
+  abilityKey: string;
+  casts: number;
+  damage: number;
 }
 
 const FFLOGS_JOB_MAP: Record<string, Job> = {
@@ -126,6 +169,30 @@ const JOB_ROLE_MAP: Record<Job, Role> = {
   PCT: "Caster",
 };
 
+const JOB_TO_FFLOGS_SPEC_ID: Record<Job, number> = {
+  AST: 1,
+  BRD: 2,
+  BLM: 3,
+  DRK: 4,
+  DRG: 5,
+  MCH: 6,
+  MNK: 7,
+  NIN: 8,
+  PLD: 9,
+  SCH: 10,
+  SMN: 11,
+  WAR: 12,
+  WHM: 13,
+  RDM: 14,
+  SAM: 15,
+  DNC: 16,
+  GNB: 17,
+  RPR: 18,
+  SGE: 19,
+  VPR: 20,
+  PCT: 21,
+};
+
 const FALLBACK_SKILL_TEMPLATES: SkillTemplate[] = [
   {
     skill: "Burst Window",
@@ -164,6 +231,8 @@ const FALLBACK_SKILL_TEMPLATES: SkillTemplate[] = [
   },
 ];
 
+const TOP_REFERENCE_LIMIT = 10;
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
@@ -192,10 +261,11 @@ const getParseTier = (score: number): ParseTier => {
 };
 
 const getEstimatedScore = (job: Job, rdps: number, activePct: number) => {
-  const baseline = JOB_BASE_RDPS[job] || Math.max(rdps, 1);
-  const normalizedRdps = baseline > 0 ? (rdps / baseline) * 100 : 100;
+  const baseline = Math.max(JOB_BASE_RDPS[job] ?? 17000, 1);
+  const rdpsScore = clamp((rdps / baseline) * 100, 0, 99);
+  const uptimeBonus = clamp((activePct - 75) * 0.8, 0, 12);
 
-  return clamp(Math.round(normalizedRdps * 0.8 + activePct * 0.2 - 5), 35, 99);
+  return clamp(Math.round(rdpsScore * 0.88 + uptimeBonus), 1, 99);
 };
 
 const getSkillTemplates = (character: CharacterSummary): SkillTemplate[] => {
@@ -239,34 +309,6 @@ const fetchFf14Data = async <T>(path: string, signal?: AbortSignal) => {
   return payload.data;
 };
 
-const loadSelectedFight = async (
-  report: ParsedReport,
-  signal?: AbortSignal
-) => {
-  const fightsData = await fetchFf14Data<Ff14ReportFightsResponse>(
-    `/api/ff14_logs/report/fights?code=${encodeURIComponent(report.reportId)}`,
-    signal
-  );
-
-  const fightId = Number(report.fightId);
-
-  if (!Number.isFinite(fightId)) {
-    throw new Error("战斗 ID 无效");
-  }
-
-  const selectedFight = fightsData.fights.find((fight) => fight.id === fightId);
-
-  if (!selectedFight) {
-    throw new Error("未找到对应战斗记录");
-  }
-
-  return {
-    fightsData,
-    selectedFight,
-    fightId,
-  };
-};
-
 const buildReportTableQuery = (
   reportId: string,
   fight: Pick<Ff14ReportFight, "start_time" | "end_time">,
@@ -308,6 +350,9 @@ const loadReportTable = async <TEntry>(
 const getAbilityKey = (entry: Pick<Ff14AbilityTableEntry, "guid" | "name">) =>
   typeof entry.guid === "number" ? `guid:${entry.guid}` : `name:${entry.name}`;
 
+const normalizeComparableText = (value?: string) =>
+  (value ?? "").trim().toLowerCase();
+
 const getTotalHits = (entry?: Partial<Ff14AbilityTableEntry>) =>
   (entry?.hitCount ?? 0) +
   (entry?.tickCount ?? 0) +
@@ -317,22 +362,90 @@ const getTotalHits = (entry?: Partial<Ff14AbilityTableEntry>) =>
 const getTotalCrits = (entry?: Partial<Ff14AbilityTableEntry>) =>
   (entry?.critHitCount ?? 0) + (entry?.critTickCount ?? 0);
 
-const buildMockTop10Benchmark = (
-  template: SkillTemplate | undefined,
-  damage: number,
-  casts: number
-) => ({
-  top10Casts: Math.max(
-    template?.top10Casts ?? 0,
-    casts,
-    Math.round(casts * 1.06)
-  ),
-  top10Damage: Math.max(
-    template?.top10Damage ?? 0,
-    damage,
-    Math.round(damage * 1.08)
-  ),
+const hasValidReferenceLog = (reference: {
+  reportID?: string;
+  fightID?: number;
+}): reference is { reportID: string; fightID: number } =>
+  typeof reference.reportID === "string" &&
+  reference.reportID.trim() !== "" &&
+  typeof reference.fightID === "number" &&
+  Number.isFinite(reference.fightID);
+
+const buildTopPlayerFromRankingEntry = (
+  entry: Pick<
+    Ff14EncounterRankingEntry,
+    "name" | "serverName" | "regionName" | "rDPS" | "total" | "duration"
+  >,
+  rank: number
+): TopPlayer => ({
+  rank,
+  name: entry.name,
+  server: entry.serverName ?? entry.regionName ?? "-",
+  rdps: roundAmount(entry.rDPS ?? entry.total),
+  killTimeSec: Math.max(1, Math.round((entry.duration ?? 0) / 1000)),
 });
+
+const buildReferenceAbilityRows = (
+  damageEntries: Ff14AbilityTableEntry[],
+  castEntries: Ff14AbilityTableEntry[]
+): Ff14ReferenceAbilityRow[] => {
+  const castEntryByKey = new Map<string, Ff14AbilityTableEntry>();
+
+  castEntries.forEach((entry) => {
+    castEntryByKey.set(getAbilityKey(entry), entry);
+  });
+
+  return damageEntries
+    .filter((entry) => roundAmount(entry.total) > 0 && entry.name.trim() !== "")
+    .map((entry) => {
+      const abilityKey = getAbilityKey(entry);
+      const castEntry = castEntryByKey.get(abilityKey);
+
+      return {
+        abilityKey,
+        casts: Math.max(roundAmount(castEntry?.total ?? entry.uses), 0),
+        damage: roundAmount(entry.totalADPS ?? entry.total),
+      };
+    });
+};
+
+const aggregateSkillBenchmarks = (
+  referenceRowsList: Ff14ReferenceAbilityRow[][],
+  sampleSize: number
+): Record<string, SkillBenchmark> => {
+  if (sampleSize <= 0) {
+    return {};
+  }
+
+  const aggregateByAbilityKey: Record<
+    string,
+    { totalCasts: number; totalDamage: number }
+  > = {};
+
+  referenceRowsList.forEach((rows) => {
+    rows.forEach((row) => {
+      const aggregate =
+        aggregateByAbilityKey[row.abilityKey] ??
+        (aggregateByAbilityKey[row.abilityKey] = {
+          totalCasts: 0,
+          totalDamage: 0,
+        });
+
+      aggregate.totalCasts += row.casts;
+      aggregate.totalDamage += row.damage;
+    });
+  });
+
+  return Object.fromEntries(
+    Object.entries(aggregateByAbilityKey).map(([abilityKey, aggregate]) => [
+      abilityKey,
+      {
+        top10Casts: Math.round(aggregate.totalCasts / sampleSize),
+        top10Damage: Math.round(aggregate.totalDamage / sampleSize),
+      },
+    ])
+  );
+};
 
 const buildRealSkillRows = (
   character: CharacterSummary,
@@ -345,13 +458,11 @@ const buildRealSkillRows = (
     castEntryByKey.set(getAbilityKey(entry), entry);
   });
 
-  const templates = getSkillTemplates(character);
-
   return damageEntries
     .filter((entry) => roundAmount(entry.total) > 0 && entry.name.trim() !== "")
     .sort((left, right) => roundAmount(right.total) - roundAmount(left.total))
     .slice(0, 10)
-    .map((entry, index) => {
+    .map((entry) => {
       const castEntry = castEntryByKey.get(getAbilityKey(entry));
       const casts = Math.max(roundAmount(castEntry?.total ?? entry.uses), 0);
       const critDenominator = getTotalHits(entry);
@@ -363,20 +474,16 @@ const buildRealSkillRows = (
             )
           : 0;
       const damage = roundAmount(entry.totalADPS ?? entry.total);
-      const top10Benchmark = buildMockTop10Benchmark(
-        templates[index],
-        damage,
-        casts
-      );
 
       return {
+        abilityKey: getAbilityKey(entry),
         skill: entry.name,
         casts,
         hits: Math.max(getTotalHits(entry), casts),
         damage,
-        top10Damage: top10Benchmark.top10Damage,
+        top10Damage: null,
         critRate,
-        top10Casts: top10Benchmark.top10Casts,
+        top10Casts: null,
       };
     });
 };
@@ -433,10 +540,286 @@ const buildEncounterSummary = (
         totalDamage,
         activePct,
       });
-
       return summary;
     }, [])
     .sort((left, right) => right.adps - left.adps);
+};
+
+const loadReportFight = async (
+  reportId: string,
+  fightId: number,
+  signal?: AbortSignal
+) => {
+  const fightsData = await fetchFf14Data<Ff14ReportFightsResponse>(
+    `/api/ff14_logs/report/fights?code=${encodeURIComponent(reportId)}`,
+    signal
+  );
+
+  if (!Number.isFinite(fightId)) {
+    throw new Error("战斗 ID 无效");
+  }
+
+  const selectedFight = fightsData.fights.find((fight) => fight.id === fightId);
+
+  if (!selectedFight) {
+    throw new Error("未找到对应战斗记录");
+  }
+
+  return {
+    fightsData,
+    selectedFight,
+    fightId,
+  };
+};
+
+const loadSelectedFight = async (report: ParsedReport, signal?: AbortSignal) =>
+  loadReportFight(report.reportId, Number(report.fightId), signal);
+
+const resolveReferenceCharacterId = (
+  fightsData: Ff14ReportFightsResponse,
+  fightId: number,
+  reference: Pick<Ff14EncounterRankingReference, "name" | "serverName">,
+  job: Job
+) => {
+  const encounterFriendlies = fightsData.friendlies.filter((friendly) =>
+    friendly.fights?.some((fight) => fight.id === fightId)
+  );
+  const matchingNameAndJob = encounterFriendlies.filter(
+    (friendly) =>
+      friendly.name === reference.name &&
+      getJobFromFflogsType(friendly.type) === job
+  );
+
+  if (!matchingNameAndJob.length) {
+    return null;
+  }
+
+  const exactServerMatch = matchingNameAndJob.find(
+    (friendly) =>
+      normalizeComparableText(friendly.server) ===
+      normalizeComparableText(reference.serverName)
+  );
+
+  return exactServerMatch?.id ?? matchingNameAndJob[0]?.id ?? null;
+};
+
+const loadEncounterRankingReferences = async (
+  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
+  job: Job,
+  signal?: AbortSignal
+): Promise<Ff14EncounterRankingReference[]> => {
+  const encounterId = selectedFight.boss;
+  const specId = JOB_TO_FFLOGS_SPEC_ID[job];
+
+  if (!encounterId) {
+    throw new Error("当前战斗缺少有效的 Boss 信息");
+  }
+
+  const rankingReferences: Ff14EncounterRankingReference[] = [];
+  let page = 1;
+  let hasMorePages = true;
+
+  while (rankingReferences.length < TOP_REFERENCE_LIMIT && hasMorePages) {
+    const query = new URLSearchParams({
+      encounterID: String(encounterId),
+      spec: String(specId),
+      page: String(page),
+    });
+
+    if (selectedFight.difficulty) {
+      query.set("difficulty", String(selectedFight.difficulty));
+    }
+
+    const rankingsData = await fetchFf14Data<Ff14EncounterRankingsResponse>(
+      `/api/ff14_logs/rankings/encounter?${query.toString()}`,
+      signal
+    );
+
+    const visibleRankings = (rankingsData.rankings ?? []).filter(
+      (entry): entry is Ff14EncounterRankingReference =>
+        !entry.hidden && entry.name.trim() !== "" && hasValidReferenceLog(entry)
+    );
+
+    visibleRankings.forEach((entry) => {
+      if (rankingReferences.length >= TOP_REFERENCE_LIMIT) {
+        return;
+      }
+
+      rankingReferences.push(entry);
+    });
+
+    hasMorePages = Boolean(rankingsData.hasMorePages);
+    page += 1;
+  }
+
+  if (!rankingReferences.length) {
+    throw new Error("未获取到可展示的 Top10 榜单数据");
+  }
+
+  return rankingReferences;
+};
+
+const loadCharacterParsesForReference = async (
+  reference: Pick<
+    Ff14EncounterRankingEntry,
+    "name" | "serverName" | "regionName"
+  >,
+  signal?: AbortSignal
+) => {
+  const characterName = reference.name.trim();
+  const serverName = reference.serverName?.trim();
+  const serverRegion = reference.regionName?.trim();
+
+  if (!characterName || !serverName || !serverRegion) {
+    return [] as Ff14CharacterParseEntry[];
+  }
+
+  const query = new URLSearchParams({
+    characterName,
+    serverName,
+    serverRegion,
+  });
+
+  return fetchFf14Data<Ff14CharacterParseEntry[]>(
+    `/api/ff14_logs/parses/character?${query.toString()}`,
+    signal
+  );
+};
+
+const resolveReferenceFromCharacterParses = async (
+  reference: Ff14EncounterRankingReference,
+  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
+  job: Job,
+  signal?: AbortSignal
+): Promise<Ff14EncounterRankingReference> => {
+  const encounterId = selectedFight.boss;
+
+  if (!encounterId) {
+    return reference;
+  }
+
+  try {
+    const parses = await loadCharacterParsesForReference(reference, signal);
+    const matchingParses = parses.filter(
+      (
+        entry
+      ): entry is Ff14CharacterParseEntry & {
+        reportID: string;
+        fightID: number;
+      } =>
+        entry.encounterID === encounterId &&
+        getJobFromFflogsType(entry.spec ?? "") === job &&
+        hasValidReferenceLog(entry)
+    );
+
+    if (!matchingParses.length) {
+      return reference;
+    }
+
+    const sameDifficultyParses =
+      typeof selectedFight.difficulty === "number"
+        ? matchingParses.filter(
+            (entry) => entry.difficulty === selectedFight.difficulty
+          )
+        : matchingParses;
+    const candidateParses = sameDifficultyParses.length
+      ? sameDifficultyParses
+      : matchingParses;
+    const latestParse = [...candidateParses].sort(
+      (left, right) => (right.startTime ?? 0) - (left.startTime ?? 0)
+    )[0];
+
+    if (!latestParse) {
+      return reference;
+    }
+
+    return {
+      ...reference,
+      reportID: latestParse.reportID,
+      fightID: latestParse.fightID,
+    };
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
+    return reference;
+  }
+};
+
+const loadReferenceSkillRows = async (
+  reference: Ff14EncounterRankingReference,
+  job: Job,
+  signal?: AbortSignal
+) => {
+  const { fightsData, selectedFight } = await loadReportFight(
+    reference.reportID,
+    reference.fightID,
+    signal
+  );
+  const sourceId = resolveReferenceCharacterId(
+    fightsData,
+    reference.fightID,
+    reference,
+    job
+  );
+
+  if (!sourceId) {
+    throw new Error(`未在参考日志中定位到角色 ${reference.name}`);
+  }
+
+  const [damageDoneData, castsData] = await Promise.all([
+    loadReportTable<Ff14AbilityTableEntry>(
+      reference.reportID,
+      selectedFight,
+      "damage-done",
+      signal,
+      { sourceid: sourceId }
+    ),
+    loadReportTable<Ff14AbilityTableEntry>(
+      reference.reportID,
+      selectedFight,
+      "casts",
+      signal,
+      { sourceid: sourceId }
+    ),
+  ]);
+
+  return buildReferenceAbilityRows(
+    damageDoneData.entries ?? [],
+    castsData.entries ?? []
+  );
+};
+
+const loadReferenceSkillRowsWithFallback = async (
+  reference: Ff14EncounterRankingReference,
+  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
+  job: Job,
+  signal?: AbortSignal
+) => {
+  const resolvedReference = await resolveReferenceFromCharacterParses(
+    reference,
+    selectedFight,
+    job,
+    signal
+  );
+
+  try {
+    return await loadReferenceSkillRows(resolvedReference, job, signal);
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
+    if (
+      resolvedReference.reportID === reference.reportID &&
+      resolvedReference.fightID === reference.fightID
+    ) {
+      throw error;
+    }
+
+    return loadReferenceSkillRows(reference, job, signal);
+  }
 };
 
 const loadCharacterDetailForFight = async (
@@ -504,7 +887,7 @@ const loadCharacterDetailForFight = async (
       1
     ),
     skillRows,
-    topPlayers: buildTopPlayers(character.job),
+    topPlayers: [],
   };
 };
 
@@ -607,6 +990,46 @@ export const loadEncounterData = async (
   };
 };
 
+export const loadEncounterTopPlayers = async (
+  report: ParsedReport,
+  job: Job,
+  signal?: AbortSignal
+): Promise<TopPlayer[]> =>
+  (await loadEncounterTopComparison(report, job, signal)).topPlayers;
+
+export const loadEncounterTopComparison = async (
+  report: ParsedReport,
+  job: Job,
+  signal?: AbortSignal
+): Promise<TopJobComparison> => {
+  const { selectedFight } = await loadSelectedFight(report, signal);
+  const rankingReferences = await loadEncounterRankingReferences(
+    selectedFight,
+    job,
+    signal
+  );
+  const topPlayers = rankingReferences.map((entry, index) =>
+    buildTopPlayerFromRankingEntry(entry, index + 1)
+  );
+  const referenceResults = await Promise.allSettled(
+    rankingReferences.map((reference) =>
+      loadReferenceSkillRowsWithFallback(reference, selectedFight, job, signal)
+    )
+  );
+  const successfulReferenceRows = referenceResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
+  );
+
+  return {
+    topPlayers,
+    benchmarksByAbilityKey: aggregateSkillBenchmarks(
+      successfulReferenceRows,
+      successfulReferenceRows.length
+    ),
+    sampleSize: successfulReferenceRows.length,
+  };
+};
+
 export const parseFflogsReport = (input: string): ParsedReport | null => {
   const value = input.trim();
   if (!value) {
@@ -680,6 +1103,7 @@ export const buildCharacterDetail = (
         : 0;
 
     return {
+      abilityKey: `name:${template.skill}`,
       skill: template.skill,
       casts,
       hits,

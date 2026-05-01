@@ -644,7 +644,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "报告ID",
     fightPrefix: "战斗ID",
     todoHint:
-      "战斗汇总与技能明细会通过 FFLogs V1 接口实时加载，Top10 对比暂时仍保留原型估算。",
+      "战斗汇总、技能明细、技能表中的 Top10 基准以及右侧 Top10 榜单都会通过 FFLogs V1 接口实时加载。",
     examplePrefix: "示例：",
     encounterSummaryTitle: "2. 战斗汇总",
     totalRdpsLabel: "团队总 rDPS",
@@ -681,7 +681,7 @@ export const TEXT: Record<Locale, StaticText> = {
       "下一步可加入时间轴标记（2分钟团队增益、爆发药、机制停手），定位技能缺失发生在何时。",
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
-      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总与技能明细。Top10 对比暂时仍保留原型估算。",
+      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总、技能明细、技能表 Top10 基准与右侧 Top10 榜单。",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "切换战斗汇总显示模式",
@@ -704,7 +704,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "Report",
     fightPrefix: "Fight",
     todoHint:
-      "Encounter summary and skill breakdown load from FFLogs V1 live data. Top 10 comparisons still use prototype estimates for now.",
+      "Encounter summary, skill breakdown, the skill-table Top 10 benchmarks, and the right-side Top 10 ranking all load from FFLogs V1 live data.",
     examplePrefix: "Example:",
     encounterSummaryTitle: "2. Encounter Summary",
     totalRdpsLabel: "Total rDPS",

@@ -108,13 +108,19 @@ export interface SkillTemplate {
 }
 
 export interface SkillRow {
+  abilityKey: string;
   skill: string;
   casts: number;
   hits: number;
   damage: number;
-  top10Damage: number;
+  top10Damage: number | null;
   critRate: number;
+  top10Casts: number | null;
+}
+
+export interface SkillBenchmark {
   top10Casts: number;
+  top10Damage: number;
 }
 
 export interface TopPlayer {
@@ -131,4 +137,10 @@ export interface CharacterDetail {
   dotUptime: number;
   skillRows: SkillRow[];
   topPlayers: TopPlayer[];
+}
+
+export interface TopJobComparison {
+  topPlayers: TopPlayer[];
+  benchmarksByAbilityKey: Record<string, SkillBenchmark>;
+  sampleSize: number;
 }
