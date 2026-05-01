@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Plus, Trophy } from "lucide-react";
-import { useMemo, useState, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ff14Styles, jobColorMap } from "@/constants/ff14";
 import type {
@@ -99,6 +99,8 @@ const TopPlayersCard = ({
   const [zoomIndex, setZoomIndex] = useState(1);
   const [mobileCompareActorId, setMobileCompareActorId] = useState("");
   const [tooltip, setTooltip] = useState<TimelineTooltipState | null>(null);
+  const desktopTimelineRef = useRef<HTMLDivElement | null>(null);
+  const mobileTimelineRef = useRef<HTMLDivElement | null>(null);
   const timelineTracks = useMemo(
     () => sortTimelineTracks(topComparison.timelineTracks),
     [topComparison.timelineTracks]
@@ -167,22 +169,48 @@ const TopPlayersCard = ({
     );
   };
 
-  const handleTimelineWheel = (wheelEvent: WheelEvent<HTMLDivElement>) => {
-    if (Math.abs(wheelEvent.deltaY) <= Math.abs(wheelEvent.deltaX)) {
+  useEffect(() => {
+    if (!hasTimelineEvents) {
       return;
     }
 
-    wheelEvent.preventDefault();
+    const handleTimelineWheel = (wheelEvent: globalThis.WheelEvent) => {
+      if (Math.abs(wheelEvent.deltaY) <= Math.abs(wheelEvent.deltaX)) {
+        return;
+      }
 
-    if (wheelEvent.deltaY < 0) {
-      stepZoom(1);
-      return;
-    }
+      wheelEvent.preventDefault();
 
-    if (wheelEvent.deltaY > 0) {
-      stepZoom(-1);
-    }
-  };
+      setZoomIndex((prev) => {
+        if (wheelEvent.deltaY < 0) {
+          return Math.min(prev + 1, ZOOM_LEVELS.length - 1);
+        }
+
+        if (wheelEvent.deltaY > 0) {
+          return Math.max(prev - 1, 0);
+        }
+
+        return prev;
+      });
+    };
+
+    const timelineContainers = [
+      desktopTimelineRef.current,
+      mobileTimelineRef.current,
+    ].filter((element): element is HTMLDivElement => Boolean(element));
+
+    timelineContainers.forEach((element) => {
+      element.addEventListener("wheel", handleTimelineWheel, {
+        passive: false,
+      });
+    });
+
+    return () => {
+      timelineContainers.forEach((element) => {
+        element.removeEventListener("wheel", handleTimelineWheel);
+      });
+    };
+  }, [hasTimelineEvents]);
 
   const clearTooltip = () => {
     setTooltip(null);
@@ -360,8 +388,8 @@ const TopPlayersCard = ({
 
       {hasTimelineEvents ? (
         <div
-          className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden"
-          onWheel={handleTimelineWheel}
+          ref={desktopTimelineRef}
+          className="mt-4 overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden"
         >
           <div className="min-w-max">
             <div className="flex">
@@ -508,8 +536,8 @@ const TopPlayersCard = ({
           ) : null}
 
           <div
-            className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            onWheel={handleTimelineWheel}
+            ref={mobileTimelineRef}
+            className="overflow-x-auto overscroll-none rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
           >
             <div
               className="min-w-full"
