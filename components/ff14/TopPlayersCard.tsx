@@ -940,24 +940,6 @@ const TopPlayersCard = ({
                       />
                     ) : null}
 
-                    <div className="pointer-events-none absolute left-3 top-2 z-1 flex min-w-0 max-w-[calc(100%-24px)] items-center gap-2">
-                      <span className="truncate text-[0.8rem] font-semibold text-[#edf4ff] drop-shadow-[0_1px_6px_rgba(5,10,20,0.65)]">
-                        {track.name}
-                      </span>
-                      <span className="shrink-0 text-[0.68rem] text-[#bfd6fb] drop-shadow-[0_1px_6px_rgba(5,10,20,0.65)]">
-                        {formatNumber(track.rdps)} rDPS
-                      </span>
-                      {track.isSelectedCharacter ? (
-                        <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.28)] bg-[rgba(34,58,99,0.6)] px-2 py-0.5 text-[0.64rem] text-[#dce9ff]">
-                          {text.timelineSelfLabel}
-                        </span>
-                      ) : track.rank ? (
-                        <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.2)] bg-[rgba(13,22,39,0.72)] px-2 py-0.5 text-[0.64rem] text-[#bfd6fb]">
-                          #{track.rank}
-                        </span>
-                      ) : null}
-                    </div>
-
                     {track.events.map((event, index) => {
                       const size = Math.min(
                         Math.max(Math.round(pxPerSecond * 1.45), 14),
