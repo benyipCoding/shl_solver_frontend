@@ -62,6 +62,7 @@ const EncounterSummaryCard = ({
               <th className="w-60">{text.tablePlayer}</th>
               <th className="min-w-65">{text.tableAmount}</th>
               <th className="text-center">{text.tableActive}</th>
+              <th className="text-right">{text.tableDps}</th>
               <th className="text-right">{text.tableRdps}</th>
               <th className="text-right">{text.tableAdps}</th>
             </tr>
@@ -140,6 +141,9 @@ const EncounterSummaryCard = ({
                   </td>
                   <td className="text-center font-(--font-heading) text-[0.88rem] tracking-[0.02em] text-[#9beee2]">
                     {activePct.toFixed(1)}%
+                  </td>
+                  <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em] text-[#cfe4ff]">
+                    {formatNumber(member.dps)}
                   </td>
                   <td className="text-right font-(--font-heading) text-[0.88rem] tracking-[0.02em]">
                     {formatNumber(member.rdps)}
@@ -233,6 +237,10 @@ const EncounterSummaryCard = ({
 
                 {showMobileSummaryValues && (
                   <div className={ff14Styles.summaryMobileStats}>
+                    <div className={ff14Styles.summaryMobileStat}>
+                      <span>{text.tableDps}</span>
+                      <strong>{formatNumber(member.dps)}</strong>
+                    </div>
                     <div className={ff14Styles.summaryMobileStat}>
                       <span>{text.tableRdps}</span>
                       <strong>{formatNumber(member.rdps)}</strong>

@@ -80,6 +80,7 @@ interface Ff14TableEntry {
   type: string;
   total: number;
   activeTime: number;
+  totalDPS?: number;
   totalRDPS?: number;
   totalADPS?: number;
 }
@@ -514,6 +515,9 @@ const buildEncounterSummary = (
       }
 
       const totalDamage = Math.round(entry.total ?? 0);
+      const dps = Math.round(
+        ((entry.totalDPS ?? entry.total ?? 0) * 1000) / encounterDuration
+      );
       const rdps = Math.round(
         ((entry.totalRDPS ?? entry.total ?? 0) * 1000) / encounterDuration
       );
@@ -532,6 +536,7 @@ const buildEncounterSummary = (
         server: serverMap.get(entry.id) ?? "-",
         role: JOB_ROLE_MAP[job],
         job,
+        dps,
         rdps,
         adps,
         deaths: 0,
@@ -542,7 +547,7 @@ const buildEncounterSummary = (
       });
       return summary;
     }, [])
-    .sort((left, right) => right.adps - left.adps);
+    .sort((left, right) => right.dps - left.dps);
 };
 
 const loadReportFight = async (

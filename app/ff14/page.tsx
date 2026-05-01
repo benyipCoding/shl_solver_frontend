@@ -34,9 +34,15 @@ type TopComparisonRequestState = {
   loadingKeys: Record<string, boolean>;
 };
 
+type ActivePanel = "summary" | "detail";
+
 const FF14Page = () => {
   const [reportUrl, setReportUrl] = useState("");
   const [locale, setLocale] = useState<Locale>("zh");
+  const [activePanel, setActivePanel] = useState<ActivePanel>("summary");
+  const [detailViewReportKey, setDetailViewReportKey] = useState<string | null>(
+    null
+  );
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>("");
   const [showMobileSummaryValues, setShowMobileSummaryValues] = useState(false);
   const [encounterRequest, setEncounterRequest] =
@@ -89,7 +95,7 @@ const FF14Page = () => {
   }, [encounterRequest, reportKey]);
 
   const sortedSummary = useMemo(
-    () => [...summary].sort((left, right) => right.adps - left.adps),
+    () => [...summary].sort((left, right) => right.dps - left.dps),
     [summary]
   );
 
@@ -399,6 +405,21 @@ const FF14Page = () => {
     setLocale((prev) => (prev === "zh" ? "en" : "zh"));
   };
 
+  const handleSelectCharacter = (characterId: string) => {
+    setSelectedCharacterId(characterId);
+    setDetailViewReportKey(reportKey);
+    setActivePanel("detail");
+  };
+
+  const handleBackToSummary = () => {
+    setActivePanel("summary");
+  };
+
+  const shouldShowDetailView =
+    activePanel === "detail" &&
+    detailViewReportKey === reportKey &&
+    Boolean(selectedCharacter);
+
   return (
     <main
       className={`${ff14Styles.page} ${headingFont.variable} ${bodyFont.variable}`}
@@ -422,53 +443,57 @@ const FF14Page = () => {
         {hasValidReport ? (
           <>
             {summaryState === "loaded" && sortedSummary.length ? (
-              <>
-                <EncounterSummaryCard
-                  text={text}
-                  summary={sortedSummary}
-                  selectedCharacterId={activeSelectedCharacterId}
-                  showMobileSummaryValues={showMobileSummaryValues}
-                  raidTotals={raidTotals}
-                  onSelectCharacter={setSelectedCharacterId}
-                  onToggleMobileSummaryValues={() => {
-                    setShowMobileSummaryValues((prev) => !prev);
-                  }}
-                />
-
-                {selectedCharacter ? (
-                  selectedDetail ? (
-                    <section className={ff14Styles.detailGrid}>
-                      <SkillBreakdownCard
+              shouldShowDetailView && selectedCharacter ? (
+                selectedDetail ? (
+                  <section className={ff14Styles.detailGrid}>
+                    <SkillBreakdownCard
+                      text={text}
+                      selectedCharacter={selectedCharacter}
+                      selectedDetail={selectedDetailWithTopComparison!}
+                      isTopComparisonLoading={topPlayersState === "loading"}
+                      topComparisonStatusTitle={topPlayersStatusTitle}
+                      onBackToSummary={handleBackToSummary}
+                    />
+                    {selectedDetailWithTopComparison &&
+                    topPlayersState === "loaded" ? (
+                      <TopPlayersCard
                         text={text}
                         selectedCharacter={selectedCharacter}
                         selectedDetail={selectedDetailWithTopComparison}
-                        isTopComparisonLoading={topPlayersState === "loading"}
-                        topComparisonStatusTitle={topPlayersStatusTitle}
                       />
-                      {selectedDetailWithTopComparison &&
-                      topPlayersState === "loaded" ? (
-                        <TopPlayersCard
-                          text={text}
-                          selectedCharacter={selectedCharacter}
-                          selectedDetail={selectedDetailWithTopComparison}
-                        />
-                      ) : (
-                        <aside className={ff14Styles.card}>
-                          <div className="grid gap-2">
-                            <p className="m-0 font-(--font-heading) text-[1rem] text-[#edf3ff]">
-                              {topPlayersStatusTitle}
-                            </p>
-                            <p className="m-0 text-[0.88rem] leading-[1.6] text-[#a8bddc]">
-                              {topPlayersState === "error"
-                                ? topPlayersError
-                                : text.todoHint}
-                            </p>
-                          </div>
-                        </aside>
-                      )}
-                    </section>
-                  ) : (
+                    ) : (
+                      <aside className={ff14Styles.card}>
+                        <div className="grid gap-2">
+                          <p className="m-0 font-(--font-heading) text-[1rem] text-[#edf3ff]">
+                            {topPlayersStatusTitle}
+                          </p>
+                          <p className="m-0 text-[0.88rem] leading-[1.6] text-[#a8bddc]">
+                            {topPlayersState === "error"
+                              ? topPlayersError
+                              : text.todoHint}
+                          </p>
+                        </div>
+                      </aside>
+                    )}
+                  </section>
+                ) : (
+                  <section className={ff14Styles.detailGrid}>
                     <section className={ff14Styles.card}>
+                      <div className={ff14Styles.cardHeader}>
+                        <h2>
+                          {text.skillBreakdownTitle}: {selectedCharacter.name} (
+                          {selectedCharacter.job})
+                        </h2>
+                        <div className={ff14Styles.headerControls}>
+                          <button
+                            type="button"
+                            className={ff14Styles.detailBackButton}
+                            onClick={handleBackToSummary}
+                          >
+                            {text.backToSummary}
+                          </button>
+                        </div>
+                      </div>
                       <div className="grid gap-2">
                         <p className="m-0 font-(--font-heading) text-[1rem] text-[#edf3ff]">
                           {detailStatusTitle}
@@ -480,9 +505,21 @@ const FF14Page = () => {
                         </p>
                       </div>
                     </section>
-                  )
-                ) : null}
-              </>
+                  </section>
+                )
+              ) : (
+                <EncounterSummaryCard
+                  text={text}
+                  summary={sortedSummary}
+                  selectedCharacterId={activeSelectedCharacterId}
+                  showMobileSummaryValues={showMobileSummaryValues}
+                  raidTotals={raidTotals}
+                  onSelectCharacter={handleSelectCharacter}
+                  onToggleMobileSummaryValues={() => {
+                    setShowMobileSummaryValues((prev) => !prev);
+                  }}
+                />
+              )
             ) : (
               <section className={ff14Styles.card}>
                 <div className="grid gap-2">

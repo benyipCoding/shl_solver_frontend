@@ -71,6 +71,7 @@ export interface StaticText {
   coachingDesc2: string;
   emptyTitle: string;
   emptyDesc: string;
+  backToSummary: string;
   switchZh: string;
   switchEn: string;
   summaryViewSwitchAria: string;
@@ -90,6 +91,7 @@ export interface CharacterSummary {
   server: string;
   role: Role;
   job: Job;
+  dps: number;
   rdps: number;
   adps: number;
   deaths: number;

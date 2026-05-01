@@ -63,6 +63,8 @@ export const ff14Styles = {
     "flex flex-wrap gap-2.5 text-[0.85rem] text-[#c5d8f3] max-[560px]:gap-1.5 max-[560px]:text-[0.76rem]",
   summaryViewSwitch:
     "hidden rounded-full border border-[rgba(126,173,249,0.42)] bg-[rgba(34,58,99,0.45)] px-2.5 py-1 text-[0.72rem] text-[#d6e7ff] transition-colors hover:border-[rgba(165,204,255,0.72)] hover:bg-[rgba(49,76,124,0.48)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(114,178,255,0.35)] max-[760px]:inline-flex",
+  detailBackButton:
+    "inline-flex items-center gap-1.5 rounded-full border border-[rgba(126,173,249,0.42)] bg-[rgba(34,58,99,0.45)] px-3 py-1.5 text-[0.74rem] text-[#d6e7ff] transition-colors hover:border-[rgba(165,204,255,0.72)] hover:bg-[rgba(49,76,124,0.48)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(114,178,255,0.35)]",
   tableWrap:
     "overflow-x-auto rounded-[14px] border border-[rgba(124,156,210,0.22)] max-[760px]:hidden",
   summaryMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
@@ -82,7 +84,7 @@ export const ff14Styles = {
   summaryMobileTrack:
     "h-[11px] flex-1 overflow-hidden rounded bg-[rgba(10,18,33,0.8)] border border-[rgba(255,255,255,0.06)]",
   summaryMobileFill: "h-full rounded transition-all duration-500",
-  summaryMobileStats: "grid grid-cols-2 gap-1.5",
+  summaryMobileStats: "grid grid-cols-3 gap-1.5",
   summaryMobileStat:
     "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
   summaryMobileHint: "m-0 text-[0.72rem] text-[#8ea8cd]",
@@ -192,6 +194,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Tonberry",
     role: "Melee",
     job: "SAM",
+    dps: 16740,
     rdps: 16432,
     adps: 16990,
     deaths: 1,
@@ -204,6 +207,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Tonberry",
     role: "Melee",
     job: "NIN",
+    dps: 18018,
     rdps: 17751,
     adps: 18344,
     deaths: 0,
@@ -216,6 +220,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Kujata",
     role: "Melee",
     job: "DRG",
+    dps: 17311,
     rdps: 17020,
     adps: 17610,
     deaths: 0,
@@ -228,6 +233,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Aegis",
     role: "Melee",
     job: "RPR",
+    dps: 17044,
     rdps: 16811,
     adps: 17239,
     deaths: 0,
@@ -240,6 +246,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Ifrit",
     role: "Tank",
     job: "PLD",
+    dps: 11628,
     rdps: 11235,
     adps: 12120,
     deaths: 0,
@@ -252,6 +259,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Unicorn",
     role: "Healer",
     job: "WHM",
+    dps: 7844,
     rdps: 7340,
     adps: 8410,
     deaths: 0,
@@ -264,6 +272,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Durandal",
     role: "Healer",
     job: "SGE",
+    dps: 7702,
     rdps: 7112,
     adps: 8288,
     deaths: 0,
@@ -276,6 +285,7 @@ export const MOCK_SUMMARY: CharacterSummary[] = [
     server: "Ridill",
     role: "Caster",
     job: "BLM",
+    dps: 18684,
     rdps: 18508,
     adps: 18832,
     deaths: 1,
@@ -682,6 +692,7 @@ export const TEXT: Record<Locale, StaticText> = {
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
       "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总、技能明细、技能表 Top10 基准与右侧 Top10 榜单。",
+    backToSummary: "返回战斗汇总",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "切换战斗汇总显示模式",
@@ -742,6 +753,7 @@ export const TEXT: Record<Locale, StaticText> = {
     emptyTitle: "Paste a valid FFLogs fight link to begin",
     emptyDesc:
       "Paste a valid FFLogs fight URL and this page will load the live encounter summary. Skill breakdown and Top 10 comparison still use prototype estimation.",
+    backToSummary: "Back to summary",
     switchZh: "中",
     switchEn: "EN",
     summaryViewSwitchAria: "Toggle encounter summary view mode",

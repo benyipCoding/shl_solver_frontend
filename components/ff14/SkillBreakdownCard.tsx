@@ -1,4 +1,4 @@
-import { Activity, Crosshair, Gauge, Trophy } from "lucide-react";
+import { Activity, ArrowLeft, Crosshair, Gauge, Trophy } from "lucide-react";
 
 import { ff14Styles } from "@/constants/ff14";
 import type {
@@ -14,6 +14,7 @@ interface SkillBreakdownCardProps {
   selectedDetail: CharacterDetail;
   isTopComparisonLoading: boolean;
   topComparisonStatusTitle: string;
+  onBackToSummary: () => void;
 }
 
 const SkillBreakdownCard = ({
@@ -22,6 +23,7 @@ const SkillBreakdownCard = ({
   selectedDetail,
   isTopComparisonLoading,
   topComparisonStatusTitle,
+  onBackToSummary,
 }: SkillBreakdownCardProps) => {
   const sortedSkillRows = [...selectedDetail.skillRows].sort(
     (left, right) => right.damage - left.damage
@@ -54,6 +56,16 @@ const SkillBreakdownCard = ({
           {text.skillBreakdownTitle}: {selectedCharacter.name} (
           {selectedCharacter.job})
         </h2>
+        <div className={ff14Styles.headerControls}>
+          <button
+            type="button"
+            className={ff14Styles.detailBackButton}
+            onClick={onBackToSummary}
+          >
+            <ArrowLeft size={14} />
+            {text.backToSummary}
+          </button>
+        </div>
       </div>
 
       <div className={ff14Styles.metricGrid}>
