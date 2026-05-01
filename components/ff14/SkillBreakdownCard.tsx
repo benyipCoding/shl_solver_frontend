@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Activity, ArrowLeft, Crosshair, Gauge, Trophy } from "lucide-react";
 
 import { ff14Styles } from "@/constants/ff14";
@@ -134,9 +135,29 @@ const SkillBreakdownCard = ({
             return (
               <div key={skill.skill} className={ff14Styles.skillRow}>
                 <div className={ff14Styles.skillIdentityCell}>
-                  <span className={ff14Styles.skillIconPlaceholder} aria-hidden>
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
+                  {skill.abilityIconUrl ? (
+                    <span
+                      className={`${ff14Styles.skillIconPlaceholder} overflow-hidden bg-[rgba(10,18,33,0.92)] p-0`}
+                      aria-hidden
+                    >
+                      <Image
+                        src={skill.abilityIconUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        decoding="async"
+                        loading="lazy"
+                        width={44}
+                        height={44}
+                      />
+                    </span>
+                  ) : (
+                    <span
+                      className={ff14Styles.skillIconPlaceholder}
+                      aria-hidden
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                  )}
                   <div className={ff14Styles.skillIdentityCopy}>
                     <p className={ff14Styles.skillName}>{skill.skill}</p>
                     <p className={ff14Styles.skillSubline}>
@@ -209,12 +230,29 @@ const SkillBreakdownCard = ({
               <div className={ff14Styles.skillMobileCard}>
                 <div className={ff14Styles.skillMobileHeader}>
                   <div className={ff14Styles.skillMobileIdentity}>
-                    <span
-                      className={ff14Styles.skillIconPlaceholder}
-                      aria-hidden
-                    >
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
+                    {skill.abilityIconUrl ? (
+                      <span
+                        className={`${ff14Styles.skillIconPlaceholder} overflow-hidden bg-[rgba(10,18,33,0.92)] p-0`}
+                        aria-hidden
+                      >
+                        <Image
+                          src={skill.abilityIconUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          decoding="async"
+                          loading="lazy"
+                          width={44}
+                          height={44}
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        className={ff14Styles.skillIconPlaceholder}
+                        aria-hidden
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                    )}
                     <div>
                       <p className={ff14Styles.skillMobileName}>
                         {skill.skill}

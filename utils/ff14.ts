@@ -90,6 +90,7 @@ interface Ff14TableEntry {
 interface Ff14AbilityTableEntry {
   name: string;
   guid?: number;
+  abilityIcon?: string;
   type?: number | string;
   total: number;
   totalADPS?: number;
@@ -112,6 +113,7 @@ interface Ff14TableResponse<TEntry = Ff14TableEntry> {
 interface Ff14EventAbility {
   name?: string;
   guid?: number;
+  abilityIcon?: string;
   type?: number | string;
 }
 
@@ -252,6 +254,8 @@ const FALLBACK_SKILL_TEMPLATES: SkillTemplate[] = [
 ];
 
 const TOP_REFERENCE_LIMIT = 10;
+const FFLOGS_ABILITY_ICON_BASE_URL =
+  "https://assets.rpglogs.com/img/ff/abilities/";
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -260,6 +264,24 @@ const toFixedNumber = (value: number, digits: number) =>
   Number(value.toFixed(digits));
 
 const roundAmount = (value?: number) => Math.round(value ?? 0);
+
+const toAbilityIconUrl = (iconPath?: string | null) => {
+  const trimmedPath = iconPath?.trim();
+
+  if (!trimmedPath) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmedPath)) {
+    return trimmedPath;
+  }
+
+  if (trimmedPath.startsWith("abilities/")) {
+    return `https://assets.rpglogs.com/img/ff/${trimmedPath}`;
+  }
+
+  return `${FFLOGS_ABILITY_ICON_BASE_URL}${trimmedPath}`;
+};
 
 const getJobFromFflogsType = (type: string): Job | null =>
   FFLOGS_JOB_MAP[type] ?? null;
@@ -464,6 +486,7 @@ const buildTimelineEvent = (
   return {
     id: `${abilityKey}:${entry.timestamp}:${index}`,
     abilityKey,
+    abilityIconUrl: toAbilityIconUrl(entry.ability?.abilityIcon),
     skill: abilityName,
     timestampMs: entry.timestamp,
     relativeMs: Math.max(entry.timestamp - fightStartTime, 0),
@@ -626,6 +649,9 @@ const buildRealSkillRows = (
 
       return {
         abilityKey: getAbilityKey(entry),
+        abilityIconUrl: toAbilityIconUrl(
+          entry.abilityIcon ?? castEntry?.abilityIcon
+        ),
         skill: entry.name,
         casts,
         hits: Math.max(getTotalHits(entry), casts),
@@ -1408,6 +1434,7 @@ export const buildCharacterDetail = (
 
     return {
       abilityKey: `name:${template.skill}`,
+      abilityIconUrl: null,
       skill: template.skill,
       casts,
       hits,

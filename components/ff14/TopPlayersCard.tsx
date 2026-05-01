@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Minus, Plus, Trophy } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -26,7 +27,7 @@ type TimelineTooltipState = {
   top: number;
 };
 
-const ZOOM_LEVELS = [4, 6, 8, 10, 14, 20] as const;
+const ZOOM_LEVELS = [4, 6, 8, 10, 14, 20, 30, 40, 60] as const;
 const EVENT_COLORS = [
   "#7ed7ff",
   "#ffbe7a",
@@ -287,18 +288,21 @@ const TopPlayersCard = ({
     track: TimelineTrack;
   }) => {
     const timeLabel = formatTimelineTime(event.relativeMs);
+    const hasAbilityIcon = Boolean(event.abilityIconUrl);
 
     return (
       <button
         key={event.id}
         type="button"
-        className="absolute cursor-help rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
+        className="absolute cursor-help overflow-hidden rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
         style={{
           left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
           top: `${topOffset}px`,
           width: `${size}px`,
           height: `${size}px`,
-          backgroundColor: getAbilityColor(event.abilityKey),
+          backgroundColor: hasAbilityIcon
+            ? "rgba(9,16,30,0.92)"
+            : getAbilityColor(event.abilityKey),
         }}
         onMouseEnter={(mouseEvent) => {
           showTooltipFromPointer(
@@ -329,7 +333,19 @@ const TopPlayersCard = ({
         }}
         onBlur={clearTooltip}
         aria-label={`${track.name} ${timeLabel} ${event.skill}`}
-      />
+      >
+        {event.abilityIconUrl ? (
+          <Image
+            src={event.abilityIconUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            decoding="async"
+            loading="lazy"
+            width={size}
+            height={size}
+          />
+        ) : null}
+      </button>
     );
   };
 
@@ -480,8 +496,8 @@ const TopPlayersCard = ({
 
                     {track.events.map((event, index) => {
                       const size = Math.min(
-                        Math.max(Math.round(pxPerSecond * 1.3), 12),
-                        16
+                        Math.max(Math.round(pxPerSecond * 1.35), 13),
+                        22
                       );
                       const topOffset = 10 + (index % 2) * 18;
 
@@ -618,8 +634,8 @@ const TopPlayersCard = ({
 
                     {track.events.map((event, index) => {
                       const size = Math.min(
-                        Math.max(Math.round(pxPerSecond * 1.2), 12),
-                        15
+                        Math.max(Math.round(pxPerSecond * 1.25), 13),
+                        20
                       );
                       const topOffset = 9 + (index % 2) * 18;
 

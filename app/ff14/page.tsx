@@ -459,7 +459,7 @@ const FF14Page = () => {
                       <TopPlayersCard
                         text={text}
                         selectedCharacter={selectedCharacter}
-                        topComparison={cachedTopComparison}
+                        topComparison={cachedTopComparison!}
                       />
                     ) : (
                       <aside className={ff14Styles.card}>

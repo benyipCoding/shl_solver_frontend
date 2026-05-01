@@ -117,6 +117,7 @@ export interface SkillTemplate {
 
 export interface SkillRow {
   abilityKey: string;
+  abilityIconUrl: string | null;
   skill: string;
   casts: number;
   hits: number;
@@ -142,6 +143,7 @@ export interface TopPlayer {
 export interface TimelineEvent {
   id: string;
   abilityKey: string;
+  abilityIconUrl: string | null;
   skill: string;
   timestampMs: number;
   relativeMs: number;
