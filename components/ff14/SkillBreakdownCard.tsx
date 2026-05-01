@@ -184,7 +184,9 @@ const SkillBreakdownCard = ({
                   <div className={ff14Styles.skillAmountMeta}>
                     <strong>{damageShare.toFixed(2)}%</strong>
                     <span>
-                      {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                      {skill.rdps > 0
+                        ? `${formatNumber(skill.rdps)} rDPS`
+                        : "-"}
                     </span>
                   </div>
                   <div className={ff14Styles.skillAmountTrack}>
@@ -293,7 +295,9 @@ const SkillBreakdownCard = ({
                       </p>
                       <p className={ff14Styles.skillMobileSubline}>
                         {damageShare.toFixed(2)}% ·{" "}
-                        {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                        {skill.rdps > 0
+                          ? `${formatNumber(skill.rdps)} rDPS`
+                          : "-"}
                       </p>
                     </div>
                   </div>

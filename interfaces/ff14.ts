@@ -126,6 +126,7 @@ export interface SkillRow {
   casts: number;
   hits: number;
   damage: number;
+  rdps: number;
   top10Hits: number | null;
   top10Damage: number | null;
   critRate: number;

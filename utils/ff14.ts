@@ -93,6 +93,7 @@ interface Ff14AbilityTableEntry {
   abilityIcon?: string;
   type?: number | string;
   total: number;
+  totalRDPS?: number;
   totalADPS?: number;
   uses?: number;
   hitCount?: number;
@@ -839,7 +840,8 @@ const aggregateSkillBenchmarks = (
 const buildRealSkillRows = (
   character: CharacterSummary,
   damageEntries: Ff14AbilityTableEntry[],
-  castEntries: Ff14AbilityTableEntry[]
+  castEntries: Ff14AbilityTableEntry[],
+  encounterDuration: number
 ): SkillRow[] => {
   const castEntryByKey = new Map<string, Ff14AbilityTableEntry>();
 
@@ -862,6 +864,10 @@ const buildRealSkillRows = (
             )
           : 0;
       const damage = roundAmount(entry.totalADPS ?? entry.total);
+      const rdps = Math.round(
+        ((entry.totalRDPS ?? entry.total ?? 0) * 1000) /
+          Math.max(encounterDuration, 1)
+      );
 
       return {
         abilityKey: getAbilityKey(entry),
@@ -872,6 +878,7 @@ const buildRealSkillRows = (
         casts,
         hits: Math.max(getTotalHits(entry), casts),
         damage,
+        rdps,
         top10Hits: null,
         top10Damage: null,
         critRate,
@@ -1180,18 +1187,23 @@ const loadCharacterDetailForFight = async (
 
   const damageEntries = damageDoneData.entries ?? [];
   const castEntries = castsData.entries ?? [];
-  const skillRows = buildRealSkillRows(character, damageEntries, castEntries);
-
-  if (!skillRows.length) {
-    throw new Error("未获取到技能明细数据");
-  }
-
   const encounterDuration = Math.max(
     damageDoneData.combatTime ??
       castsData.combatTime ??
       selectedFight.combatTime,
     1
   );
+  const skillRows = buildRealSkillRows(
+    character,
+    damageEntries,
+    castEntries,
+    encounterDuration
+  );
+
+  if (!skillRows.length) {
+    throw new Error("未获取到技能明细数据");
+  }
+
   const totalDamage = Math.max(
     skillRows.reduce((sum, skill) => sum + skill.damage, 0),
     1
@@ -1507,12 +1519,21 @@ export const buildCharacterDetail = (
       casts,
       hits,
       damage,
+      rdps: 0,
       top10Hits: Math.round(template.top10Casts * template.hitRate),
       top10Damage: template.top10Damage,
       critRate,
       top10Casts: template.top10Casts,
     };
   });
+  const totalSkillDamage = Math.max(
+    skillRows.reduce((sum, row) => sum + row.damage, 0),
+    1
+  );
+  const skillRowsWithRdps = skillRows.map((row) => ({
+    ...row,
+    rdps: Math.round((row.damage / totalSkillDamage) * character.rdps),
+  }));
 
   return {
     burstWindowScore: Math.min(
@@ -1524,7 +1545,7 @@ export const buildCharacterDetail = (
       Math.max(88, (character.activePct ?? 92) + performanceScore * 0.04)
     ),
     dotUptime: Math.min(99.5, Math.max(70, 72 + performanceScore * 0.18)),
-    skillRows,
+    skillRows: skillRowsWithRdps,
     topPlayers: buildTopPlayers(character.job),
   };
 };
