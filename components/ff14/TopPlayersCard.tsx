@@ -517,10 +517,10 @@ const TopPlayersCard = ({
       setTooltip((currentTooltip) => {
         const nextTooltip = {
           actor,
-          left: nextPosition.left - 340,
+          left: nextPosition.left - Math.floor(window.innerWidth / 6),
           skill,
           time,
-          top: nextPosition.top - 60,
+          top: nextPosition.top - Math.floor(window.innerWidth / 35),
         };
 
         if (
