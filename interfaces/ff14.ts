@@ -66,6 +66,12 @@ export interface StaticText {
   crit: string;
   top10Title: string;
   killLabel: string;
+  timelineHint: string;
+  timelineScale: string;
+  timelineSampleLabel: string;
+  timelineSelfLabel: string;
+  timelineEmpty: string;
+  timelineMobileHint: string;
   coachingTitle: string;
   coachingDesc1: string;
   coachingDesc2: string;
@@ -133,6 +139,26 @@ export interface TopPlayer {
   killTimeSec: number;
 }
 
+export interface TimelineEvent {
+  id: string;
+  abilityKey: string;
+  skill: string;
+  timestampMs: number;
+  relativeMs: number;
+}
+
+export interface TimelineTrack {
+  actorId: string;
+  rank: number | null;
+  name: string;
+  server: string;
+  rdps: number;
+  killTimeSec: number;
+  combatTimeMs: number;
+  isSelectedCharacter: boolean;
+  events: TimelineEvent[];
+}
+
 export interface CharacterDetail {
   burstWindowScore: number;
   gcdUptime: number;
@@ -145,4 +171,6 @@ export interface TopJobComparison {
   topPlayers: TopPlayer[];
   benchmarksByAbilityKey: Record<string, SkillBenchmark>;
   sampleSize: number;
+  timelineTracks: TimelineTrack[];
+  maxDurationMs: number;
 }

@@ -654,7 +654,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "报告ID",
     fightPrefix: "战斗ID",
     todoHint:
-      "战斗汇总、技能明细、技能表中的 Top10 基准以及右侧 Top10 榜单都会通过 FFLogs V1 接口实时加载。",
+      "战斗汇总、技能明细、技能表中的 Top10 基准以及第4模块的时间轴对比都会通过 FFLogs V1 接口实时加载。",
     examplePrefix: "示例：",
     encounterSummaryTitle: "2. 战斗汇总",
     totalRdpsLabel: "团队总 rDPS",
@@ -684,14 +684,22 @@ export const TEXT: Record<Locale, StaticText> = {
     crit: "暴击率",
     top10Title: "4. 同职业 Top 10",
     killLabel: "击杀",
+    timelineHint:
+      "横向滚动查看每次施法的落点，放大后可直接比对 opener、2 分钟爆发和机制停手造成的错位。",
+    timelineScale: "缩放",
+    timelineSampleLabel: "有效参考样本",
+    timelineSelfLabel: "你",
+    timelineEmpty: "当前时间轴事件不足，暂时无法绘制可比较的轨道。",
+    timelineMobileHint:
+      "时间轴对比为桌面优先设计；请在较宽屏幕下横向滚动并使用缩放查看技能落点。",
     coachingTitle: "复盘建议",
     coachingDesc1:
-      "优先关注与你同职业 Top 10 均值差距最大的负向技能，通常这是最直接的提升点。",
+      "先看你与 Top 10 在 opener 和 2 分钟窗口的错位，再回头检查技能次数差距。",
     coachingDesc2:
-      "下一步可加入时间轴标记（2分钟团队增益、爆发药、机制停手），定位技能缺失发生在何时。",
+      "如果发现某一串技能整体右移，优先检查起手、资源预留和机制停手，而不只是单个技能少打一发。",
     emptyTitle: "请先粘贴有效的 FFLogs 战斗链接",
     emptyDesc:
-      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总、技能明细、技能表 Top10 基准与右侧 Top10 榜单。",
+      "输入有效 FFLogs 战斗链接后，这里会自动加载真实战斗汇总、技能明细、技能表 Top10 基准与同职业时间轴。",
     backToSummary: "返回战斗汇总",
     switchZh: "中",
     switchEn: "EN",
@@ -715,7 +723,7 @@ export const TEXT: Record<Locale, StaticText> = {
     reportPrefix: "Report",
     fightPrefix: "Fight",
     todoHint:
-      "Encounter summary, skill breakdown, the skill-table Top 10 benchmarks, and the right-side Top 10 ranking all load from FFLogs V1 live data.",
+      "Encounter summary, skill breakdown, the skill-table Top 10 benchmarks, and the timeline comparison in module 4 all load from FFLogs V1 live data.",
     examplePrefix: "Example:",
     encounterSummaryTitle: "2. Encounter Summary",
     totalRdpsLabel: "Total rDPS",
@@ -745,14 +753,23 @@ export const TEXT: Record<Locale, StaticText> = {
     crit: "Crit",
     top10Title: "4. Same Job Top 10",
     killLabel: "kill",
+    timelineHint:
+      "Scroll horizontally to inspect each cast point, then zoom in to compare opener alignment, two-minute burst windows, and downtime gaps.",
+    timelineScale: "Scale",
+    timelineSampleLabel: "Reference logs",
+    timelineSelfLabel: "You",
+    timelineEmpty:
+      "The timeline does not have enough cast events yet to draw a useful comparison track.",
+    timelineMobileHint:
+      "This timeline is desktop-first. Use a wider screen to scroll horizontally and zoom into cast timing.",
     coachingTitle: "Coaching Snapshot",
     coachingDesc1:
-      "Compare your cast counts against Top 10 averages and prioritize the largest negative deltas first.",
+      "Check opener and two-minute alignment first, then use cast-count deltas to confirm which buttons fell behind.",
     coachingDesc2:
-      "Next step: surface timeline markers (2-minute buffs, potion windows, forced downtime) for each skill.",
+      "If an entire sequence drifts to the right, investigate opener setup, resource banking, and forced downtime before blaming one missing cast.",
     emptyTitle: "Paste a valid FFLogs fight link to begin",
     emptyDesc:
-      "Paste a valid FFLogs fight URL and this page will load the live encounter summary. Skill breakdown and Top 10 comparison still use prototype estimation.",
+      "Paste a valid FFLogs fight URL and this page will load the live encounter summary, skill breakdown, Top 10 benchmarks, and same-job timelines.",
     backToSummary: "Back to summary",
     switchZh: "中",
     switchEn: "EN",

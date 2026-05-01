@@ -1,24 +1,273 @@
-import { Trophy } from "lucide-react";
+"use client";
 
-import { ff14Styles } from "@/constants/ff14";
+import { Minus, Plus, Trophy } from "lucide-react";
+import { useMemo, useState } from "react";
+
+import { ff14Styles, jobColorMap } from "@/constants/ff14";
 import type {
-  CharacterDetail,
   CharacterSummary,
   StaticText,
+  TimelineTrack,
+  TopJobComparison,
 } from "@/interfaces/ff14";
 import { formatNumber } from "@/utils/ff14";
 
 interface TopPlayersCardProps {
   text: StaticText;
   selectedCharacter: CharacterSummary;
-  selectedDetail: CharacterDetail;
+  topComparison: TopJobComparison;
 }
+
+type TimelineTooltipState = {
+  actor: string;
+  left: number;
+  skill: string;
+  time: string;
+  top: number;
+};
+
+const ZOOM_LEVELS = [4, 6, 8, 10] as const;
+const EVENT_COLORS = [
+  "#7ed7ff",
+  "#ffbe7a",
+  "#8df0ba",
+  "#f39aff",
+  "#f5e17c",
+  "#9cb6ff",
+  "#ff8f8f",
+  "#87f2dd",
+] as const;
+const LEFT_COLUMN_WIDTH = 196;
+const AXIS_HEIGHT = 46;
+const TRACK_HEIGHT = 54;
+const MOBILE_TRACK_HEIGHT = 52;
+const TOOLTIP_WIDTH = 228;
+
+const formatTimelineTime = (valueMs: number) => {
+  const totalSeconds = Math.max(Math.floor(valueMs / 1000), 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const getAbilityColor = (abilityKey: string) => {
+  let hash = 0;
+
+  for (let index = 0; index < abilityKey.length; index += 1) {
+    hash = (hash * 31 + abilityKey.charCodeAt(index)) >>> 0;
+  }
+
+  return EVENT_COLORS[hash % EVENT_COLORS.length];
+};
+
+const sortTimelineTracks = (tracks: TimelineTrack[]) =>
+  [...tracks].sort((left, right) => {
+    if (left.isSelectedCharacter) {
+      return -1;
+    }
+
+    if (right.isSelectedCharacter) {
+      return 1;
+    }
+
+    return (
+      (left.rank ?? Number.MAX_SAFE_INTEGER) -
+      (right.rank ?? Number.MAX_SAFE_INTEGER)
+    );
+  });
+
+const buildTrackBackgroundStyle = (
+  pxPerSecond: number,
+  tickStepSec: number
+) => ({
+  backgroundImage:
+    "linear-gradient(to right, rgba(143,177,230,0.08) 1px, transparent 1px), linear-gradient(to right, rgba(143,177,230,0.15) 1px, transparent 1px)",
+  backgroundSize: `${Math.max(pxPerSecond * 2, 8)}px 100%, ${tickStepSec * pxPerSecond}px 100%`,
+});
 
 const TopPlayersCard = ({
   text,
   selectedCharacter,
-  selectedDetail,
+  topComparison,
 }: TopPlayersCardProps) => {
+  const [zoomIndex, setZoomIndex] = useState(1);
+  const [mobileCompareActorId, setMobileCompareActorId] = useState("");
+  const [tooltip, setTooltip] = useState<TimelineTooltipState | null>(null);
+  const timelineTracks = useMemo(
+    () => sortTimelineTracks(topComparison.timelineTracks),
+    [topComparison.timelineTracks]
+  );
+  const selectedTimelineTrack = useMemo(
+    () =>
+      timelineTracks.find((track) => track.isSelectedCharacter) ??
+      timelineTracks[0] ??
+      null,
+    [timelineTracks]
+  );
+  const referenceTimelineTracks = useMemo(
+    () => timelineTracks.filter((track) => !track.isSelectedCharacter),
+    [timelineTracks]
+  );
+  const activeMobileCompareTrack = useMemo(
+    () =>
+      referenceTimelineTracks.find(
+        (track) => track.actorId === mobileCompareActorId
+      ) ??
+      referenceTimelineTracks[0] ??
+      null,
+    [mobileCompareActorId, referenceTimelineTracks]
+  );
+  const mobileTimelineTracks = useMemo(
+    () =>
+      [selectedTimelineTrack, activeMobileCompareTrack].filter(
+        (track): track is TimelineTrack => Boolean(track)
+      ),
+    [activeMobileCompareTrack, selectedTimelineTrack]
+  );
+  const pxPerSecond = ZOOM_LEVELS[zoomIndex];
+  const tickStepSec = pxPerSecond >= 8 ? 5 : 10;
+  const timelineWidth = Math.max(
+    Math.ceil(topComparison.maxDurationMs / 1000) * pxPerSecond + 32,
+    860
+  );
+  const timelineTicks = useMemo(() => {
+    const totalSeconds = Math.max(
+      Math.ceil(topComparison.maxDurationMs / 1000),
+      1
+    );
+    const nextTicks: number[] = [];
+
+    for (let second = 0; second <= totalSeconds; second += tickStepSec) {
+      nextTicks.push(second);
+    }
+
+    if (nextTicks[nextTicks.length - 1] !== totalSeconds) {
+      nextTicks.push(totalSeconds);
+    }
+
+    return nextTicks;
+  }, [tickStepSec, topComparison.maxDurationMs]);
+  const hasTimelineEvents = timelineTracks.some(
+    (track) => track.events.length > 0
+  );
+  const accentColor = jobColorMap[selectedCharacter.job] ?? "#8bc5ff";
+
+  const clearTooltip = () => {
+    setTooltip(null);
+  };
+
+  const clampTooltipPosition = (left: number, top: number) => {
+    if (typeof window === "undefined") {
+      return { left, top };
+    }
+
+    return {
+      left: Math.min(
+        Math.max(left, 12),
+        window.innerWidth - TOOLTIP_WIDTH - 12
+      ),
+      top: Math.min(Math.max(top, 12), window.innerHeight - 76),
+    };
+  };
+
+  const showTooltipFromPointer = (
+    skill: string,
+    time: string,
+    actor: string,
+    clientX: number,
+    clientY: number
+  ) => {
+    const nextPosition = clampTooltipPosition(clientX + 14, clientY - 18);
+
+    setTooltip({
+      actor,
+      left: nextPosition.left,
+      skill,
+      time,
+      top: nextPosition.top,
+    });
+  };
+
+  const showTooltipFromElement = (
+    skill: string,
+    time: string,
+    actor: string,
+    element: HTMLButtonElement
+  ) => {
+    const rect = element.getBoundingClientRect();
+    const nextPosition = clampTooltipPosition(
+      rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
+      rect.top - 54
+    );
+
+    setTooltip({
+      actor,
+      left: nextPosition.left,
+      skill,
+      time,
+      top: nextPosition.top,
+    });
+  };
+
+  const renderEventMarker = ({
+    event,
+    size,
+    topOffset,
+    track,
+  }: {
+    event: TimelineTrack["events"][number];
+    size: number;
+    topOffset: number;
+    track: TimelineTrack;
+  }) => {
+    const timeLabel = formatTimelineTime(event.relativeMs);
+
+    return (
+      <button
+        key={event.id}
+        type="button"
+        className="absolute cursor-help rounded-sm border border-[rgba(255,255,255,0.16)] shadow-[0_0_12px_rgba(6,12,23,0.32)] transition-transform hover:scale-[1.08] focus-visible:scale-[1.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(255,255,255,0.35)]"
+        style={{
+          left: `${Math.max((event.relativeMs / 1000) * pxPerSecond - size / 2, 0)}px`,
+          top: `${topOffset}px`,
+          width: `${size}px`,
+          height: `${size}px`,
+          backgroundColor: getAbilityColor(event.abilityKey),
+        }}
+        onMouseEnter={(mouseEvent) => {
+          showTooltipFromPointer(
+            event.skill,
+            timeLabel,
+            track.name,
+            mouseEvent.clientX,
+            mouseEvent.clientY
+          );
+        }}
+        onMouseMove={(mouseEvent) => {
+          showTooltipFromPointer(
+            event.skill,
+            timeLabel,
+            track.name,
+            mouseEvent.clientX,
+            mouseEvent.clientY
+          );
+        }}
+        onMouseLeave={clearTooltip}
+        onFocus={(focusEvent) => {
+          showTooltipFromElement(
+            event.skill,
+            timeLabel,
+            track.name,
+            focusEvent.currentTarget
+          );
+        }}
+        onBlur={clearTooltip}
+        aria-label={`${track.name} ${timeLabel} ${event.skill}`}
+      />
+    );
+  };
+
   return (
     <aside className={ff14Styles.card}>
       <div className={ff14Styles.cardHeader}>
@@ -26,34 +275,293 @@ const TopPlayersCard = ({
           <Trophy size={18} />
           {text.top10Title} ({selectedCharacter.job})
         </h2>
+
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            className={ff14Styles.detailBackButton}
+            onClick={() => setZoomIndex((prev) => Math.max(prev - 1, 0))}
+            disabled={zoomIndex === 0}
+            aria-label={text.timelineScale}
+          >
+            <Minus size={14} />
+          </button>
+          <span className="rounded-full border border-[rgba(126,173,249,0.36)] bg-[rgba(24,40,70,0.6)] px-3 py-1 text-[0.76rem] text-[#dce9ff]">
+            {text.timelineScale} {pxPerSecond}px/s
+          </span>
+          <button
+            type="button"
+            className={ff14Styles.detailBackButton}
+            onClick={() =>
+              setZoomIndex((prev) => Math.min(prev + 1, ZOOM_LEVELS.length - 1))
+            }
+            disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+            aria-label={text.timelineScale}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
 
-      <ul className={ff14Styles.rankList}>
-        {selectedDetail.topPlayers.map((player) => (
-          <li
-            key={`${selectedCharacter.job}-${player.rank}`}
-            className={ff14Styles.rankItem}
-          >
-            <div>
-              <p className={ff14Styles.rankName}>
-                #{player.rank} {player.name}
-              </p>
-              <p className={ff14Styles.rankMeta}>
-                {player.server} | {text.killLabel} {player.killTimeSec}s
-              </p>
+      <p className="m-0 max-w-[78ch] text-[0.84rem] leading-[1.7] text-[#9fb9df]">
+        {text.timelineHint}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-[rgba(126,173,249,0.34)] bg-[rgba(28,47,82,0.45)] px-3 py-1 text-[0.76rem] text-[#dce9ff]">
+          {text.timelineSampleLabel} {topComparison.sampleSize}/
+          {topComparison.topPlayers.length || 10}
+        </span>
+        <span className="rounded-full border border-[rgba(126,173,249,0.24)] bg-[rgba(19,31,54,0.4)] px-3 py-1 text-[0.76rem] text-[#9fb9df]">
+          {text.timelineSelfLabel} + Top 10
+        </span>
+      </div>
+
+      {!hasTimelineEvents ? (
+        <div className="mt-4 rounded-2xl border border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] px-4 py-3 text-[0.84rem] leading-[1.6] text-[#b9cdea]">
+          {text.timelineEmpty}
+        </div>
+      ) : null}
+
+      {hasTimelineEvents ? (
+        <div className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden">
+          <div className="min-w-max">
+            <div className="flex">
+              <div
+                className="sticky left-0 z-5 shrink-0 border-r border-[rgba(105,130,170,0.28)] bg-[linear-gradient(180deg,rgba(13,22,39,0.97),rgba(11,18,31,0.97))] backdrop-blur-sm"
+                style={{ width: `${LEFT_COLUMN_WIDTH}px` }}
+              >
+                <div
+                  className="border-b border-[rgba(105,130,170,0.28)] px-4 py-3 text-[0.72rem] font-semibold uppercase tracking-[0.06em] text-[#9fb9df]"
+                  style={{ height: `${AXIS_HEIGHT}px` }}
+                >
+                  {text.tablePlayer}
+                </div>
+
+                {timelineTracks.map((track) => (
+                  <div
+                    key={`meta-${track.actorId}`}
+                    className={`border-b border-[rgba(105,130,170,0.18)] px-4 py-1 last:border-b-0 ${
+                      track.isSelectedCharacter
+                        ? "bg-[rgba(52,84,138,0.16)]"
+                        : "bg-[rgba(12,22,39,0.52)]"
+                    }`}
+                    style={{ height: `${TRACK_HEIGHT}px` }}
+                  >
+                    <div className="min-w-0">
+                      <p className="m-0 truncate text-[0.92rem] font-semibold text-[#edf4ff]">
+                        {track.name}
+                      </p>
+                      <p className="m-0 mt-1 truncate text-[0.74rem] text-[#89a3cb]">
+                        {formatNumber(track.rdps)} rDPS
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="shrink-0" style={{ width: `${timelineWidth}px` }}>
+                <div
+                  className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
+                  style={{ height: `${AXIS_HEIGHT}px` }}
+                >
+                  {timelineTicks.map((tick) => (
+                    <div
+                      key={`tick-${tick}`}
+                      className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
+                      style={{ left: `${tick * pxPerSecond}px` }}
+                    >
+                      <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
+                        {formatTimelineTime(tick * 1000)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {timelineTracks.map((track) => (
+                  <div
+                    key={track.actorId}
+                    className={`relative overflow-hidden border-b border-[rgba(105,130,170,0.18)] last:border-b-0 ${
+                      track.isSelectedCharacter
+                        ? "bg-[rgba(52,84,138,0.12)]"
+                        : "bg-[rgba(10,19,35,0.36)]"
+                    }`}
+                    style={{
+                      height: `${TRACK_HEIGHT}px`,
+                      ...buildTrackBackgroundStyle(pxPerSecond, tickStepSec),
+                    }}
+                  >
+                    {track.isSelectedCharacter ? (
+                      <div
+                        className="absolute inset-y-0 left-0 w-0.5"
+                        style={{ backgroundColor: accentColor }}
+                        aria-hidden
+                      />
+                    ) : null}
+
+                    {track.events.map((event, index) => {
+                      const size = Math.min(
+                        Math.max(Math.round(pxPerSecond * 1.3), 12),
+                        16
+                      );
+                      const topOffset = 10 + (index % 2) * 18;
+
+                      return renderEventMarker({
+                        event,
+                        size,
+                        topOffset,
+                        track,
+                      });
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
-            <span className={ff14Styles.rankValue}>
-              {formatNumber(player.rdps)}
-            </span>
-          </li>
-        ))}
-      </ul>
+          </div>
+        </div>
+      ) : null}
+
+      {hasTimelineEvents ? (
+        <div className="mt-4 hidden gap-3 max-[920px]:grid">
+          <div className="rounded-2xl border border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] px-4 py-3 text-[0.82rem] leading-[1.6] text-[#b9cdea]">
+            {text.timelineMobileHint}
+          </div>
+
+          {referenceTimelineTracks.length ? (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {referenceTimelineTracks.map((track) => {
+                const isActive =
+                  activeMobileCompareTrack?.actorId === track.actorId;
+
+                return (
+                  <button
+                    key={`mobile-select-${track.actorId}`}
+                    type="button"
+                    className={`min-w-33 rounded-2xl border px-3 py-2 text-left transition-colors ${
+                      isActive
+                        ? "border-[rgba(144,191,255,0.6)] bg-[rgba(48,79,136,0.28)] text-[#edf4ff]"
+                        : "border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] text-[#9fb9df]"
+                    }`}
+                    onClick={() => setMobileCompareActorId(track.actorId)}
+                  >
+                    <span className="block truncate text-[0.8rem] font-semibold">
+                      {track.name}
+                    </span>
+                    <span className="mt-1 block text-[0.7rem] opacity-80">
+                      {formatNumber(track.rdps)} rDPS
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div
+              className="min-w-full"
+              style={{
+                width: `${Math.max(Math.round(topComparison.maxDurationMs / 1000) * pxPerSecond + 32, 560)}px`,
+              }}
+            >
+              <div
+                className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
+                style={{ height: `${AXIS_HEIGHT}px` }}
+              >
+                {timelineTicks.map((tick) => (
+                  <div
+                    key={`mobile-tick-${tick}`}
+                    className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
+                    style={{ left: `${tick * pxPerSecond}px` }}
+                  >
+                    <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
+                      {formatTimelineTime(tick * 1000)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {mobileTimelineTracks.map((track) => (
+                <div
+                  key={`mobile-track-${track.actorId}`}
+                  className="border-b border-[rgba(105,130,170,0.18)] px-3 py-3 last:border-b-0"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="m-0 truncate text-[0.9rem] font-semibold text-[#edf4ff]">
+                        {track.name}
+                      </p>
+                      <p className="m-0 mt-1 truncate text-[0.72rem] text-[#89a3cb]">
+                        {formatNumber(track.rdps)} rDPS
+                      </p>
+                    </div>
+
+                    {track.isSelectedCharacter ? (
+                      <span className="shrink-0 rounded-full border border-[rgba(126,173,249,0.28)] bg-[rgba(34,58,99,0.38)] px-2.5 py-1 text-[0.68rem] text-[#dce9ff]">
+                        {text.timelineSelfLabel}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div
+                    className={`relative overflow-hidden rounded-xl border ${
+                      track.isSelectedCharacter
+                        ? "border-[rgba(126,173,249,0.32)] bg-[rgba(52,84,138,0.14)]"
+                        : "border-[rgba(105,130,170,0.2)] bg-[rgba(10,19,35,0.4)]"
+                    }`}
+                    style={{
+                      height: `${MOBILE_TRACK_HEIGHT}px`,
+                      ...buildTrackBackgroundStyle(pxPerSecond, tickStepSec),
+                    }}
+                  >
+                    {track.isSelectedCharacter ? (
+                      <div
+                        className="absolute inset-y-0 left-0 w-0.5"
+                        style={{ backgroundColor: accentColor }}
+                        aria-hidden
+                      />
+                    ) : null}
+
+                    {track.events.map((event, index) => {
+                      const size = Math.min(
+                        Math.max(Math.round(pxPerSecond * 1.2), 12),
+                        15
+                      );
+                      const topOffset = 9 + (index % 2) * 18;
+
+                      return renderEventMarker({
+                        event,
+                        size,
+                        topOffset,
+                        track,
+                      });
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className={ff14Styles.coachingBox}>
         <h3>{text.coachingTitle}</h3>
         <p>{text.coachingDesc1}</p>
         <p>{text.coachingDesc2}</p>
       </div>
+
+      {tooltip ? (
+        <div
+          className="pointer-events-none fixed z-50 w-57 rounded-xl border border-[rgba(143,177,230,0.35)] bg-[rgba(9,16,30,0.96)] px-3 py-2 shadow-[0_18px_36px_rgba(6,12,23,0.48)]"
+          style={{ left: `${tooltip.left}px`, top: `${tooltip.top}px` }}
+        >
+          <p className="m-0 truncate text-[0.82rem] font-semibold text-[#f3f8ff]">
+            {tooltip.skill}
+          </p>
+          <p className="m-0 mt-1 text-[0.72rem] text-[#a9c2e6]">
+            {tooltip.actor} · {tooltip.time}
+          </p>
+        </div>
+      ) : null}
     </aside>
   );
 };

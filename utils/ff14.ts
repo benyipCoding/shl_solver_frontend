@@ -14,6 +14,8 @@ import type {
   SkillBenchmark,
   SkillRow,
   SkillTemplate,
+  TimelineEvent,
+  TimelineTrack,
   TopJobComparison,
   TopPlayer,
 } from "@/interfaces/ff14";
@@ -105,6 +107,23 @@ interface Ff14TableResponse<TEntry = Ff14TableEntry> {
   entries?: TEntry[];
   combatTime?: number;
   totalTime?: number;
+}
+
+interface Ff14EventAbility {
+  name?: string;
+  guid?: number;
+  type?: number | string;
+}
+
+interface Ff14EventEntry {
+  timestamp?: number;
+  type?: string;
+  ability?: Ff14EventAbility;
+}
+
+interface Ff14EventResponse<TEvent = Ff14EventEntry> {
+  events?: TEvent[];
+  nextPageTimestamp?: number;
 }
 
 interface Ff14CharacterParseEntry {
@@ -348,6 +367,22 @@ const loadReportTable = async <TEntry>(
     signal
   );
 
+const loadReportEvents = async <TEvent>(
+  reportId: string,
+  fight: Pick<Ff14ReportFight, "start_time" | "end_time">,
+  view: string,
+  signal?: AbortSignal,
+  extraParams?: Record<string, string | number | undefined>
+) =>
+  fetchFf14Data<Ff14EventResponse<TEvent>>(
+    `/api/ff14_logs/report/events?view=${encodeURIComponent(view)}&${buildReportTableQuery(
+      reportId,
+      fight,
+      extraParams
+    )}`,
+    signal
+  );
+
 const getAbilityKey = (entry: Pick<Ff14AbilityTableEntry, "guid" | "name">) =>
   typeof entry.guid === "number" ? `guid:${entry.guid}` : `name:${entry.name}`;
 
@@ -409,6 +444,120 @@ const buildReferenceAbilityRows = (
       };
     });
 };
+
+const buildTimelineEvent = (
+  entry: Ff14EventEntry,
+  fightStartTime: number,
+  index: number
+): TimelineEvent | null => {
+  const abilityName = entry.ability?.name?.trim();
+
+  if (!abilityName || typeof entry.timestamp !== "number") {
+    return null;
+  }
+
+  const abilityKey = getAbilityKey({
+    guid: entry.ability?.guid,
+    name: abilityName,
+  });
+
+  return {
+    id: `${abilityKey}:${entry.timestamp}:${index}`,
+    abilityKey,
+    skill: abilityName,
+    timestampMs: entry.timestamp,
+    relativeMs: Math.max(entry.timestamp - fightStartTime, 0),
+  };
+};
+
+const loadCharacterTimelineEvents = async (
+  reportId: string,
+  selectedFight: Pick<Ff14ReportFight, "start_time" | "end_time">,
+  sourceId: number,
+  signal?: AbortSignal
+) => {
+  const timelineEvents: TimelineEvent[] = [];
+  const seenEventKeys = new Set<string>();
+  let nextStartTime = selectedFight.start_time;
+
+  while (nextStartTime < selectedFight.end_time) {
+    const payload = await loadReportEvents<Ff14EventEntry>(
+      reportId,
+      {
+        start_time: nextStartTime,
+        end_time: selectedFight.end_time,
+      },
+      "casts",
+      signal,
+      { sourceid: sourceId }
+    );
+
+    (payload.events ?? []).forEach((entry, index) => {
+      const timelineEvent = buildTimelineEvent(
+        entry,
+        selectedFight.start_time,
+        index
+      );
+
+      if (!timelineEvent) {
+        return;
+      }
+
+      const eventKey = `${timelineEvent.timestampMs}:${timelineEvent.abilityKey}`;
+
+      if (seenEventKeys.has(eventKey)) {
+        return;
+      }
+
+      seenEventKeys.add(eventKey);
+      timelineEvents.push(timelineEvent);
+    });
+
+    const cursor = payload.nextPageTimestamp;
+
+    if (!cursor || cursor <= nextStartTime) {
+      break;
+    }
+
+    nextStartTime = cursor;
+  }
+
+  return timelineEvents.sort(
+    (left, right) => left.relativeMs - right.relativeMs
+  );
+};
+
+const buildTimelineTrack = ({
+  actorId,
+  rank,
+  name,
+  server,
+  rdps,
+  killTimeSec,
+  combatTimeMs,
+  isSelectedCharacter,
+  events,
+}: {
+  actorId: string;
+  rank: number | null;
+  name: string;
+  server: string;
+  rdps: number;
+  killTimeSec: number;
+  combatTimeMs: number;
+  isSelectedCharacter: boolean;
+  events: TimelineEvent[];
+}): TimelineTrack => ({
+  actorId,
+  rank,
+  name,
+  server,
+  rdps,
+  killTimeSec,
+  combatTimeMs: Math.max(combatTimeMs, 1),
+  isSelectedCharacter,
+  events,
+});
 
 const aggregateSkillBenchmarks = (
   referenceRowsList: Ff14ReferenceAbilityRow[][],
@@ -826,6 +975,86 @@ const loadReferenceSkillRowsWithFallback = async (
   }
 };
 
+const loadReferenceTimelineTrack = async (
+  reference: Ff14EncounterRankingReference,
+  job: Job,
+  rank: number,
+  signal?: AbortSignal
+) => {
+  const { fightsData, selectedFight } = await loadReportFight(
+    reference.reportID,
+    reference.fightID,
+    signal
+  );
+  const sourceId = resolveReferenceCharacterId(
+    fightsData,
+    reference.fightID,
+    reference,
+    job
+  );
+
+  if (!sourceId) {
+    throw new Error(`未在参考日志中定位到角色 ${reference.name}`);
+  }
+
+  const events = await loadCharacterTimelineEvents(
+    reference.reportID,
+    selectedFight,
+    sourceId,
+    signal
+  );
+  const topPlayer = buildTopPlayerFromRankingEntry(reference, rank);
+
+  return buildTimelineTrack({
+    actorId: `${reference.reportID}:${sourceId}`,
+    rank,
+    name: topPlayer.name,
+    server: topPlayer.server,
+    rdps: topPlayer.rdps,
+    killTimeSec: topPlayer.killTimeSec,
+    combatTimeMs: selectedFight.combatTime,
+    isSelectedCharacter: false,
+    events,
+  });
+};
+
+const loadReferenceTimelineTrackWithFallback = async (
+  reference: Ff14EncounterRankingReference,
+  selectedFight: Pick<Ff14ReportFight, "boss" | "difficulty">,
+  job: Job,
+  rank: number,
+  signal?: AbortSignal
+) => {
+  const resolvedReference = await resolveReferenceFromCharacterParses(
+    reference,
+    selectedFight,
+    job,
+    signal
+  );
+
+  try {
+    return await loadReferenceTimelineTrack(
+      resolvedReference,
+      job,
+      rank,
+      signal
+    );
+  } catch (error) {
+    if (signal?.aborted) {
+      throw error;
+    }
+
+    if (
+      resolvedReference.reportID === reference.reportID &&
+      resolvedReference.fightID === reference.fightID
+    ) {
+      throw error;
+    }
+
+    return loadReferenceTimelineTrack(reference, job, rank, signal);
+  }
+};
+
 const loadCharacterDetailForFight = async (
   reportId: string,
   selectedFight: Ff14ReportFight,
@@ -996,32 +1225,101 @@ export const loadEncounterData = async (
 
 export const loadEncounterTopPlayers = async (
   report: ParsedReport,
-  job: Job,
+  character: CharacterSummary,
   signal?: AbortSignal
 ): Promise<TopPlayer[]> =>
-  (await loadEncounterTopComparison(report, job, signal)).topPlayers;
+  (await loadEncounterTopComparison(report, character, signal)).topPlayers;
 
 export const loadEncounterTopComparison = async (
   report: ParsedReport,
-  job: Job,
+  character: CharacterSummary,
   signal?: AbortSignal
 ): Promise<TopJobComparison> => {
   const { selectedFight } = await loadSelectedFight(report, signal);
   const rankingReferences = await loadEncounterRankingReferences(
     selectedFight,
-    job,
+    character.job,
     signal
   );
   const topPlayers = rankingReferences.map((entry, index) =>
     buildTopPlayerFromRankingEntry(entry, index + 1)
   );
-  const referenceResults = await Promise.allSettled(
-    rankingReferences.map((reference) =>
-      loadReferenceSkillRowsWithFallback(reference, selectedFight, job, signal)
-    )
-  );
+  const [selectedTimelineTrack, referenceResults, referenceTimelineResults] =
+    await Promise.all([
+      loadCharacterTimelineEvents(
+        report.reportId,
+        selectedFight,
+        Number(character.id),
+        signal
+      )
+        .then((events) =>
+          buildTimelineTrack({
+            actorId: character.id,
+            rank: null,
+            name: character.name,
+            server: character.server,
+            rdps: character.rdps,
+            killTimeSec: Math.max(
+              1,
+              Math.round(selectedFight.combatTime / 1000)
+            ),
+            combatTimeMs: selectedFight.combatTime,
+            isSelectedCharacter: true,
+            events,
+          })
+        )
+        .catch(() =>
+          buildTimelineTrack({
+            actorId: character.id,
+            rank: null,
+            name: character.name,
+            server: character.server,
+            rdps: character.rdps,
+            killTimeSec: Math.max(
+              1,
+              Math.round(selectedFight.combatTime / 1000)
+            ),
+            combatTimeMs: selectedFight.combatTime,
+            isSelectedCharacter: true,
+            events: [],
+          })
+        ),
+      Promise.allSettled(
+        rankingReferences.map((reference) =>
+          loadReferenceSkillRowsWithFallback(
+            reference,
+            selectedFight,
+            character.job,
+            signal
+          )
+        )
+      ),
+      Promise.allSettled(
+        rankingReferences.map((reference, index) =>
+          loadReferenceTimelineTrackWithFallback(
+            reference,
+            selectedFight,
+            character.job,
+            index + 1,
+            signal
+          )
+        )
+      ),
+    ]);
   const successfulReferenceRows = referenceResults.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : []
+  );
+  const successfulReferenceTimelineTracks = referenceTimelineResults.flatMap(
+    (result) => (result.status === "fulfilled" ? [result.value] : [])
+  );
+  const timelineTracks = [
+    selectedTimelineTrack,
+    ...successfulReferenceTimelineTracks,
+  ];
+  const maxDurationMs = Math.max(
+    selectedFight.combatTime,
+    ...successfulReferenceTimelineTracks.map((track) => track.combatTimeMs),
+    1
   );
 
   return {
@@ -1031,6 +1329,8 @@ export const loadEncounterTopComparison = async (
       successfulReferenceRows.length
     ),
     sampleSize: successfulReferenceRows.length,
+    timelineTracks,
+    maxDurationMs,
   };
 };
 

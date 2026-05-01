@@ -128,7 +128,7 @@ const FF14Page = () => {
 
   const topPlayersRequestKey =
     reportKey && selectedCharacter
-      ? `${reportKey}:${selectedCharacter.job}`
+      ? `${reportKey}:${selectedCharacter.job}:${selectedCharacter.id}`
       : null;
 
   useEffect(() => {
@@ -217,7 +217,7 @@ const FF14Page = () => {
 
     void loadEncounterTopComparison(
       parsedReport,
-      selectedCharacter.job,
+      selectedCharacter,
       controller.signal
     )
       .then((comparison) => {
@@ -386,19 +386,19 @@ const FF14Page = () => {
   const topPlayersStatusTitle = useMemo(() => {
     if (topPlayersState === "loading") {
       return locale === "zh"
-        ? "正在加载 Top10 榜单..."
-        : "Loading Top10 rankings...";
+        ? "正在加载同职业时间轴与 Top10 基准..."
+        : "Loading same-job timelines and Top10 benchmarks...";
     }
 
     if (topPlayersState === "error") {
       return locale === "zh"
-        ? "Top10 榜单加载失败"
-        : "Failed to load Top10 rankings";
+        ? "同职业时间轴加载失败"
+        : "Failed to load same-job timelines";
     }
 
     return locale === "zh"
-      ? "当前职业暂无可展示的 Top10 榜单"
-      : "No Top10 rankings available for this job";
+      ? "当前职业暂无可展示的时间轴样本"
+      : "No same-job timeline samples available for this job";
   }, [locale, topPlayersState]);
 
   const toggleLocale = () => {
@@ -459,7 +459,7 @@ const FF14Page = () => {
                       <TopPlayersCard
                         text={text}
                         selectedCharacter={selectedCharacter}
-                        selectedDetail={selectedDetailWithTopComparison}
+                        topComparison={cachedTopComparison}
                       />
                     ) : (
                       <aside className={ff14Styles.card}>
