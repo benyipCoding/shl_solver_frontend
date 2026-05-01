@@ -308,7 +308,7 @@ export const parseFflogsReport = (input: string): ParsedReport | null => {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (host !== "fflogs.com") {
+    if (host !== "fflogs.com" && !host.endsWith(".fflogs.com")) {
       return null;
     }
 
