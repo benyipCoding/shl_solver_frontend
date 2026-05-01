@@ -93,10 +93,10 @@ export const ff14Styles = {
   skillPanel:
     "overflow-hidden rounded-[16px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[760px]:hidden",
   skillPanelHeader:
-    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_88px_132px_132px] items-center gap-3 border-b border-[rgba(105,130,170,0.25)] bg-[rgba(25,38,64,0.52)] px-4 py-3 text-[0.72rem] font-semibold uppercase tracking-[0.05em] text-[#9fb9df]",
+    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_76px_104px_88px_88px] items-center gap-3 border-b border-[rgba(105,130,170,0.25)] bg-[rgba(25,38,64,0.52)] px-4 py-3 text-[0.72rem] font-semibold uppercase tracking-[0.05em] text-[#9fb9df]",
   skillRowsDesktop: "grid",
   skillRow:
-    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_88px_132px_132px] items-center gap-3 border-b border-[rgba(105,130,170,0.22)] px-4 py-3 transition-[background-color,box-shadow] duration-200 odd:bg-[rgba(20,32,56,0.34)] even:bg-[rgba(10,19,35,0.38)] hover:bg-[linear-gradient(90deg,rgba(90,145,236,0.2),rgba(90,145,236,0.07))] hover:shadow-[inset_3px_0_0_rgba(154,201,255,0.95)] last:border-b-0",
+    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_76px_104px_88px_88px] items-center gap-3 border-b border-[rgba(105,130,170,0.22)] px-4 py-3 transition-[background-color,box-shadow] duration-200 odd:bg-[rgba(20,32,56,0.34)] even:bg-[rgba(10,19,35,0.38)] hover:bg-[linear-gradient(90deg,rgba(90,145,236,0.2),rgba(90,145,236,0.07))] hover:shadow-[inset_3px_0_0_rgba(154,201,255,0.95)] last:border-b-0",
   skillIdentityCell: "flex min-w-0 items-center gap-3",
   skillIconPlaceholder:
     "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-[rgba(129,172,239,0.42)] bg-[linear-gradient(145deg,rgba(52,84,138,0.85),rgba(23,42,76,0.95))] font-[var(--font-heading)] text-[0.82rem] tracking-[0.08em] text-[#e8f2ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
@@ -677,8 +677,10 @@ export const TEXT: Record<Locale, StaticText> = {
     skillHeader: "技能",
     yourCasts: "你的施放",
     top10Average: "Top10 均值",
+    top10HitsAverage: "Top10 命中均值",
     top10Damage: "Top10 平均伤害",
     delta: "差值",
+    hitDelta: "命中差值",
     totalDamage: "总伤害",
     hits: "命中",
     crit: "暴击率",
@@ -746,8 +748,10 @@ export const TEXT: Record<Locale, StaticText> = {
     skillHeader: "Skill",
     yourCasts: "Your casts",
     top10Average: "Top10 avg",
+    top10HitsAverage: "Top10 avg hits",
     top10Damage: "Top10 avg dmg",
     delta: "Delta",
+    hitDelta: "Hit delta",
     totalDamage: "Total damage",
     hits: "Hits",
     crit: "Crit",

@@ -46,8 +46,8 @@ const SkillBreakdownCard = ({
 
   const formatBenchmarkCasts = (value: number | null) =>
     value === null ? "N/A" : String(value);
-  const formatBenchmarkDamage = (value: number | null) =>
-    value === null ? "N/A" : formatNumber(value);
+  const formatBenchmarkHits = (value: number | null) =>
+    value === null ? "N/A" : String(value);
 
   return (
     <article className={ff14Styles.card}>
@@ -110,19 +110,28 @@ const SkillBreakdownCard = ({
           <span>{text.yourCasts}</span>
           <span>{text.top10Average}</span>
           <span>{text.delta}</span>
+          <span>{text.hits}</span>
+          <span>{text.top10HitsAverage}</span>
+          <span>{text.hitDelta}</span>
           <span>{text.crit}</span>
-          <span>{text.totalDamage}</span>
-          <span>{text.top10Damage}</span>
         </div>
 
         <div className={ff14Styles.skillRowsDesktop}>
           {sortedSkillRows.map((skill, index) => {
-            const delta =
+            const castDelta =
               skill.top10Casts === null ? null : skill.casts - skill.top10Casts;
-            const deltaClassName =
-              delta === null
+            const castDeltaClassName =
+              castDelta === null
                 ? pendingValueClassName
-                : delta >= 0
+                : castDelta >= 0
+                  ? ff14Styles.deltaGood
+                  : ff14Styles.deltaBad;
+            const hitDelta =
+              skill.top10Hits === null ? null : skill.hits - skill.top10Hits;
+            const hitDeltaClassName =
+              hitDelta === null
+                ? pendingValueClassName
+                : hitDelta >= 0
                   ? ff14Styles.deltaGood
                   : ff14Styles.deltaBad;
             const damageShare =
@@ -190,21 +199,34 @@ const SkillBreakdownCard = ({
                 >
                   {formatBenchmarkCasts(skill.top10Casts)}
                 </span>
-                <span className={`${ff14Styles.deltaText} ${deltaClassName}`}>
-                  {delta === null ? "N/A" : delta > 0 ? `+${delta}` : delta}
+                <span
+                  className={`${ff14Styles.deltaText} ${castDeltaClassName}`}
+                >
+                  {castDelta === null
+                    ? "N/A"
+                    : castDelta > 0
+                      ? `+${castDelta}`
+                      : castDelta}
+                </span>
+                <span className={ff14Styles.skillStatValue}>{skill.hits}</span>
+                <span
+                  className={`${ff14Styles.skillStatValue} ${
+                    skill.top10Hits === null ? pendingValueClassName : ""
+                  }`}
+                >
+                  {formatBenchmarkHits(skill.top10Hits)}
+                </span>
+                <span
+                  className={`${ff14Styles.deltaText} ${hitDeltaClassName}`}
+                >
+                  {hitDelta === null
+                    ? "N/A"
+                    : hitDelta > 0
+                      ? `+${hitDelta}`
+                      : hitDelta}
                 </span>
                 <span className={ff14Styles.skillStatValue}>
                   {skill.critRate > 0 ? `${skill.critRate.toFixed(1)}%` : "-"}
-                </span>
-                <span className={ff14Styles.skillDamageValue}>
-                  {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
-                </span>
-                <span
-                  className={`${ff14Styles.skillStatValue} ${
-                    skill.top10Damage === null ? pendingValueClassName : ""
-                  }`}
-                >
-                  {formatBenchmarkDamage(skill.top10Damage)}
                 </span>
               </div>
             );
@@ -214,12 +236,20 @@ const SkillBreakdownCard = ({
 
       <ul className={ff14Styles.skillMobileList}>
         {sortedSkillRows.map((skill, index) => {
-          const delta =
+          const castDelta =
             skill.top10Casts === null ? null : skill.casts - skill.top10Casts;
-          const deltaClassName =
-            delta === null
+          const castDeltaClassName =
+            castDelta === null
               ? pendingMobileDeltaClassName
-              : delta >= 0
+              : castDelta >= 0
+                ? ff14Styles.skillMobileDeltaGood
+                : ff14Styles.skillMobileDeltaBad;
+          const hitDelta =
+            skill.top10Hits === null ? null : skill.hits - skill.top10Hits;
+          const hitDeltaClassName =
+            hitDelta === null
+              ? pendingMobileDeltaClassName
+              : hitDelta >= 0
                 ? ff14Styles.skillMobileDeltaGood
                 : ff14Styles.skillMobileDeltaBad;
           const damageShare =
@@ -264,10 +294,14 @@ const SkillBreakdownCard = ({
                     </div>
                   </div>
                   <span
-                    className={`${ff14Styles.skillMobileDelta} ${deltaClassName}`}
+                    className={`${ff14Styles.skillMobileDelta} ${castDeltaClassName}`}
                   >
                     {text.delta}{" "}
-                    {delta === null ? "N/A" : delta > 0 ? `+${delta}` : delta}
+                    {castDelta === null
+                      ? "N/A"
+                      : castDelta > 0
+                        ? `+${castDelta}`
+                        : castDelta}
                   </span>
                 </div>
 
@@ -287,9 +321,27 @@ const SkillBreakdownCard = ({
                     </strong>
                   </div>
                   <div className={ff14Styles.skillMobileMetric}>
-                    <span>{text.totalDamage}</span>
-                    <strong>
-                      {skill.damage > 0 ? formatNumber(skill.damage) : "-"}
+                    <span>{text.hits}</span>
+                    <strong>{skill.hits}</strong>
+                  </div>
+                  <div className={ff14Styles.skillMobileMetric}>
+                    <span>{text.top10HitsAverage}</span>
+                    <strong
+                      className={
+                        skill.top10Hits === null ? pendingValueClassName : ""
+                      }
+                    >
+                      {formatBenchmarkHits(skill.top10Hits)}
+                    </strong>
+                  </div>
+                  <div className={ff14Styles.skillMobileMetric}>
+                    <span>{text.hitDelta}</span>
+                    <strong className={hitDeltaClassName}>
+                      {hitDelta === null
+                        ? "N/A"
+                        : hitDelta > 0
+                          ? `+${hitDelta}`
+                          : hitDelta}
                     </strong>
                   </div>
                   <div className={ff14Styles.skillMobileMetric}>
@@ -298,16 +350,6 @@ const SkillBreakdownCard = ({
                       {skill.critRate > 0
                         ? `${skill.critRate.toFixed(1)}%`
                         : "-"}
-                    </strong>
-                  </div>
-                  <div className={ff14Styles.skillMobileMetric}>
-                    <span>{text.top10Damage}</span>
-                    <strong
-                      className={
-                        skill.top10Damage === null ? pendingValueClassName : ""
-                      }
-                    >
-                      {formatBenchmarkDamage(skill.top10Damage)}
                     </strong>
                   </div>
                 </div>

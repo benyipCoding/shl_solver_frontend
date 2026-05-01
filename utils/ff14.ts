@@ -140,6 +140,7 @@ interface Ff14CharacterParseEntry {
 interface Ff14ReferenceAbilityRow {
   abilityKey: string;
   casts: number;
+  hits: number;
   damage: number;
 }
 
@@ -462,6 +463,11 @@ const buildReferenceAbilityRows = (
       return {
         abilityKey,
         casts: Math.max(roundAmount(castEntry?.total ?? entry.uses), 0),
+        hits: Math.max(
+          getTotalHits(entry),
+          roundAmount(castEntry?.total ?? entry.uses),
+          0
+        ),
         damage: roundAmount(entry.totalADPS ?? entry.total),
       };
     });
@@ -592,7 +598,7 @@ const aggregateSkillBenchmarks = (
 
   const aggregateByAbilityKey: Record<
     string,
-    { totalCasts: number; totalDamage: number }
+    { totalCasts: number; totalDamage: number; totalHits: number }
   > = {};
 
   referenceRowsList.forEach((rows) => {
@@ -602,10 +608,12 @@ const aggregateSkillBenchmarks = (
         (aggregateByAbilityKey[row.abilityKey] = {
           totalCasts: 0,
           totalDamage: 0,
+          totalHits: 0,
         });
 
       aggregate.totalCasts += row.casts;
       aggregate.totalDamage += row.damage;
+      aggregate.totalHits += row.hits;
     });
   });
 
@@ -614,6 +622,7 @@ const aggregateSkillBenchmarks = (
       abilityKey,
       {
         top10Casts: Math.round(aggregate.totalCasts / sampleSize),
+        top10Hits: Math.round(aggregate.totalHits / sampleSize),
         top10Damage: Math.round(aggregate.totalDamage / sampleSize),
       },
     ])
@@ -656,6 +665,7 @@ const buildRealSkillRows = (
         casts,
         hits: Math.max(getTotalHits(entry), casts),
         damage,
+        top10Hits: null,
         top10Damage: null,
         critRate,
         top10Casts: null,
@@ -1439,6 +1449,7 @@ export const buildCharacterDetail = (
       casts,
       hits,
       damage,
+      top10Hits: Math.round(template.top10Casts * template.hitRate),
       top10Damage: template.top10Damage,
       critRate,
       top10Casts: template.top10Casts,

@@ -312,6 +312,7 @@ const FF14Page = () => {
             return {
               ...row,
               top10Casts: benchmark.top10Casts,
+              top10Hits: benchmark.top10Hits,
               top10Damage: benchmark.top10Damage,
             };
           }),
