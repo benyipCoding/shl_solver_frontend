@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Plus, Trophy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type WheelEvent } from "react";
 
 import { ff14Styles, jobColorMap } from "@/constants/ff14";
 import type {
@@ -26,7 +26,7 @@ type TimelineTooltipState = {
   top: number;
 };
 
-const ZOOM_LEVELS = [4, 6, 8, 10] as const;
+const ZOOM_LEVELS = [4, 6, 8, 10, 14, 20] as const;
 const EVENT_COLORS = [
   "#7ed7ff",
   "#ffbe7a",
@@ -42,6 +42,10 @@ const AXIS_HEIGHT = 46;
 const TRACK_HEIGHT = 54;
 const MOBILE_TRACK_HEIGHT = 52;
 const TOOLTIP_WIDTH = 228;
+const TOOLTIP_HEIGHT = 56;
+const TOOLTIP_POINTER_OFFSET_X = 10;
+const TOOLTIP_POINTER_OFFSET_Y = 8;
+const TOOLTIP_ELEMENT_OFFSET_Y = 8;
 
 const formatTimelineTime = (valueMs: number) => {
   const totalSeconds = Math.max(Math.floor(valueMs / 1000), 0);
@@ -79,11 +83,12 @@ const sortTimelineTracks = (tracks: TimelineTrack[]) =>
 
 const buildTrackBackgroundStyle = (
   pxPerSecond: number,
-  tickStepSec: number
+  gridStepSec: number,
+  accentGridStepSec: number
 ) => ({
   backgroundImage:
     "linear-gradient(to right, rgba(143,177,230,0.08) 1px, transparent 1px), linear-gradient(to right, rgba(143,177,230,0.15) 1px, transparent 1px)",
-  backgroundSize: `${Math.max(pxPerSecond * 2, 8)}px 100%, ${tickStepSec * pxPerSecond}px 100%`,
+  backgroundSize: `${Math.max(gridStepSec * pxPerSecond, 8)}px 100%, ${Math.max(accentGridStepSec * pxPerSecond, 8)}px 100%`,
 });
 
 const TopPlayersCard = ({
@@ -126,7 +131,9 @@ const TopPlayersCard = ({
     [activeMobileCompareTrack, selectedTimelineTrack]
   );
   const pxPerSecond = ZOOM_LEVELS[zoomIndex];
-  const tickStepSec = pxPerSecond >= 8 ? 5 : 10;
+  const tickStepSec =
+    pxPerSecond >= 20 ? 1 : pxPerSecond >= 14 ? 2 : pxPerSecond >= 8 ? 5 : 10;
+  const tickLabelStepSec = tickStepSec === 1 ? 5 : tickStepSec;
   const timelineWidth = Math.max(
     Math.ceil(topComparison.maxDurationMs / 1000) * pxPerSecond + 32,
     860
@@ -148,10 +155,34 @@ const TopPlayersCard = ({
 
     return nextTicks;
   }, [tickStepSec, topComparison.maxDurationMs]);
+  const lastTimelineTick = timelineTicks[timelineTicks.length - 1] ?? 0;
   const hasTimelineEvents = timelineTracks.some(
     (track) => track.events.length > 0
   );
   const accentColor = jobColorMap[selectedCharacter.job] ?? "#8bc5ff";
+
+  const stepZoom = (direction: -1 | 1) => {
+    setZoomIndex((prev) =>
+      Math.min(Math.max(prev + direction, 0), ZOOM_LEVELS.length - 1)
+    );
+  };
+
+  const handleTimelineWheel = (wheelEvent: WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(wheelEvent.deltaY) <= Math.abs(wheelEvent.deltaX)) {
+      return;
+    }
+
+    wheelEvent.preventDefault();
+
+    if (wheelEvent.deltaY < 0) {
+      stepZoom(1);
+      return;
+    }
+
+    if (wheelEvent.deltaY > 0) {
+      stepZoom(-1);
+    }
+  };
 
   const clearTooltip = () => {
     setTooltip(null);
@@ -167,7 +198,10 @@ const TopPlayersCard = ({
         Math.max(left, 12),
         window.innerWidth - TOOLTIP_WIDTH - 12
       ),
-      top: Math.min(Math.max(top, 12), window.innerHeight - 76),
+      top: Math.min(
+        Math.max(top, 12),
+        window.innerHeight - TOOLTIP_HEIGHT - 12
+      ),
     };
   };
 
@@ -178,14 +212,17 @@ const TopPlayersCard = ({
     clientX: number,
     clientY: number
   ) => {
-    const nextPosition = clampTooltipPosition(clientX + 14, clientY - 18);
+    const nextPosition = clampTooltipPosition(
+      clientX + TOOLTIP_POINTER_OFFSET_X,
+      clientY + TOOLTIP_POINTER_OFFSET_Y
+    );
 
     setTooltip({
       actor,
-      left: nextPosition.left,
+      left: nextPosition.left - 340,
       skill,
       time,
-      top: nextPosition.top,
+      top: nextPosition.top - 60,
     });
   };
 
@@ -198,7 +235,7 @@ const TopPlayersCard = ({
     const rect = element.getBoundingClientRect();
     const nextPosition = clampTooltipPosition(
       rect.left + rect.width / 2 - TOOLTIP_WIDTH / 2,
-      rect.top - 54
+      rect.top - TOOLTIP_HEIGHT - TOOLTIP_ELEMENT_OFFSET_Y
     );
 
     setTooltip({
@@ -280,7 +317,7 @@ const TopPlayersCard = ({
           <button
             type="button"
             className={ff14Styles.detailBackButton}
-            onClick={() => setZoomIndex((prev) => Math.max(prev - 1, 0))}
+            onClick={() => stepZoom(-1)}
             disabled={zoomIndex === 0}
             aria-label={text.timelineScale}
           >
@@ -292,9 +329,7 @@ const TopPlayersCard = ({
           <button
             type="button"
             className={ff14Styles.detailBackButton}
-            onClick={() =>
-              setZoomIndex((prev) => Math.min(prev + 1, ZOOM_LEVELS.length - 1))
-            }
+            onClick={() => stepZoom(1)}
             disabled={zoomIndex === ZOOM_LEVELS.length - 1}
             aria-label={text.timelineScale}
           >
@@ -324,7 +359,10 @@ const TopPlayersCard = ({
       ) : null}
 
       {hasTimelineEvents ? (
-        <div className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden">
+        <div
+          className="mt-4 overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[920px]:hidden"
+          onWheel={handleTimelineWheel}
+        >
           <div className="min-w-max">
             <div className="flex">
               <div
@@ -365,17 +403,26 @@ const TopPlayersCard = ({
                   className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
                   style={{ height: `${AXIS_HEIGHT}px` }}
                 >
-                  {timelineTicks.map((tick) => (
-                    <div
-                      key={`tick-${tick}`}
-                      className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
-                      style={{ left: `${tick * pxPerSecond}px` }}
-                    >
-                      <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
-                        {formatTimelineTime(tick * 1000)}
-                      </span>
-                    </div>
-                  ))}
+                  {timelineTicks.map((tick) => {
+                    const shouldShowTickLabel =
+                      tick === 0 ||
+                      tick === lastTimelineTick ||
+                      tick % tickLabelStepSec === 0;
+
+                    return (
+                      <div
+                        key={`tick-${tick}`}
+                        className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
+                        style={{ left: `${tick * pxPerSecond}px` }}
+                      >
+                        {shouldShowTickLabel ? (
+                          <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
+                            {formatTimelineTime(tick * 1000)}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {timelineTracks.map((track) => (
@@ -388,7 +435,11 @@ const TopPlayersCard = ({
                     }`}
                     style={{
                       height: `${TRACK_HEIGHT}px`,
-                      ...buildTrackBackgroundStyle(pxPerSecond, tickStepSec),
+                      ...buildTrackBackgroundStyle(
+                        pxPerSecond,
+                        tickStepSec,
+                        tickLabelStepSec
+                      ),
                     }}
                   >
                     {track.isSelectedCharacter ? (
@@ -456,7 +507,10 @@ const TopPlayersCard = ({
             </div>
           ) : null}
 
-          <div className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div
+            className="overflow-x-auto rounded-[18px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+            onWheel={handleTimelineWheel}
+          >
             <div
               className="min-w-full"
               style={{
@@ -467,17 +521,26 @@ const TopPlayersCard = ({
                 className="relative overflow-hidden border-b border-[rgba(105,130,170,0.28)] bg-[rgba(25,38,64,0.52)]"
                 style={{ height: `${AXIS_HEIGHT}px` }}
               >
-                {timelineTicks.map((tick) => (
-                  <div
-                    key={`mobile-tick-${tick}`}
-                    className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
-                    style={{ left: `${tick * pxPerSecond}px` }}
-                  >
-                    <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
-                      {formatTimelineTime(tick * 1000)}
-                    </span>
-                  </div>
-                ))}
+                {timelineTicks.map((tick) => {
+                  const shouldShowTickLabel =
+                    tick === 0 ||
+                    tick === lastTimelineTick ||
+                    tick % tickLabelStepSec === 0;
+
+                  return (
+                    <div
+                      key={`mobile-tick-${tick}`}
+                      className="absolute inset-y-0 border-l border-[rgba(143,177,230,0.24)]"
+                      style={{ left: `${tick * pxPerSecond}px` }}
+                    >
+                      {shouldShowTickLabel ? (
+                        <span className="absolute left-2 top-2 text-[0.72rem] font-semibold tracking-[0.05em] text-[#dce9ff]">
+                          {formatTimelineTime(tick * 1000)}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
 
               {mobileTimelineTracks.map((track) => (
@@ -510,7 +573,11 @@ const TopPlayersCard = ({
                     }`}
                     style={{
                       height: `${MOBILE_TRACK_HEIGHT}px`,
-                      ...buildTrackBackgroundStyle(pxPerSecond, tickStepSec),
+                      ...buildTrackBackgroundStyle(
+                        pxPerSecond,
+                        tickStepSec,
+                        tickLabelStepSec
+                      ),
                     }}
                   >
                     {track.isSelectedCharacter ? (
@@ -543,11 +610,11 @@ const TopPlayersCard = ({
         </div>
       ) : null}
 
-      <div className={ff14Styles.coachingBox}>
+      {/* <div className={ff14Styles.coachingBox}>
         <h3>{text.coachingTitle}</h3>
         <p>{text.coachingDesc1}</p>
         <p>{text.coachingDesc2}</p>
-      </div>
+      </div> */}
 
       {tooltip ? (
         <div
