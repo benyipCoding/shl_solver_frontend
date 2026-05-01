@@ -67,7 +67,7 @@ const FF14Page = () => {
   }, [reportKey, summaryRequest]);
 
   const sortedSummary = useMemo(
-    () => [...summary].sort((left, right) => right.rdps - left.rdps),
+    () => [...summary].sort((left, right) => right.adps - left.adps),
     [summary]
   );
 

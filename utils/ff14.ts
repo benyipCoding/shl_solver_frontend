@@ -296,7 +296,7 @@ export const loadEncounterSummary = async (
 
       return summary;
     }, [])
-    .sort((left, right) => right.rdps - left.rdps);
+    .sort((left, right) => right.adps - left.adps);
 };
 
 export const parseFflogsReport = (input: string): ParsedReport | null => {
