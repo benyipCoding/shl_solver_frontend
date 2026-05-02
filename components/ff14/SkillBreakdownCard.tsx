@@ -193,10 +193,12 @@ const SkillBreakdownCard = ({
     skill,
     castDelta,
     hitDelta,
+    rdpsDelta,
   }: {
     skill: CharacterDetail["skillRows"][number];
     castDelta: number | null;
     hitDelta: number | null;
+    rdpsDelta: number | null;
   }) => {
     if (!canEvaluateHighlights) {
       return null;
@@ -216,7 +218,12 @@ const SkillBreakdownCard = ({
       };
     }
 
-    if (castDelta !== null && castDelta < 0) {
+    if (
+      castDelta !== null &&
+      castDelta < 0 &&
+      rdpsDelta !== null &&
+      rdpsDelta < 0
+    ) {
       return {
         kind: "missingCast" as SkillHighlightKind,
         reason: text.highlightTooltipMissingCast,
@@ -282,7 +289,12 @@ const SkillBreakdownCard = ({
       skill.damage > 0 ? (skill.damage / totalDamage) * 100 : 0;
     const barWidth =
       skill.damage > 0 ? Math.max((skill.damage / maxDamage) * 100, 6) : 0;
-    const highlight = resolveHighlight({ skill, castDelta, hitDelta });
+    const highlight = resolveHighlight({
+      skill,
+      castDelta,
+      hitDelta,
+      rdpsDelta,
+    });
 
     return {
       skill,

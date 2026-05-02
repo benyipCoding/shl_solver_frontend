@@ -686,13 +686,13 @@ export const TEXT: Record<Locale, StaticText> = {
     top10RdpsDelta: "rDPS 均值差",
     highlightLegendCastHitMismatch: "施放没落后，但命中收益偏低",
     highlightLegendUnexpectedCast: "Top10 基本不打，却有施放",
-    highlightLegendMissingCast: "该打未打，施放次数落后",
+    highlightLegendMissingCast: "该打未打，施放与 rDPS 均落后",
     highlightTooltipCastHitMismatch:
       "施放差值大于命中差值：技能安排接近 Top10，但单次施放命中目标数偏少，优先检查站位、目标覆盖或技能落点。",
     highlightTooltipUnexpectedCast:
       "Top10 施放均值为 0 或 N/A，但你仍有施放：该技能通常不该占用 GCD，建议改成更高收益的技能循环。",
     highlightTooltipMissingCast:
-      "施放差值为负数：Top10 会打而你少打了，优先检查循环断档、资源溢出或机制停手后的补回。",
+      "施放差值与 rDPS 均值差同时为负数：Top10 这项技能既打得更多，收益也更高，优先检查循环断档、资源溢出或机制停手后的补回。",
     totalDamage: "总伤害",
     hits: "命中",
     crit: "暴击率",
@@ -770,13 +770,13 @@ export const TEXT: Record<Locale, StaticText> = {
     top10RdpsDelta: "rDPS delta",
     highlightLegendCastHitMismatch: "Cast count held, hit value lost",
     highlightLegendUnexpectedCast: "Top10 skips it, but you cast it",
-    highlightLegendMissingCast: "Top10 casts more than you",
+    highlightLegendMissingCast: "Top10 casts more and gains more rDPS",
     highlightTooltipCastHitMismatch:
       "Cast delta is higher than hit delta: your button plan is close to Top10, but each cast is converting into fewer hits. Check positioning, target coverage, or placement.",
     highlightTooltipUnexpectedCast:
       "Top10 cast average is 0 or N/A, but you still used the skill: it is usually not worth a GCD here, so replace it with a higher-value action.",
     highlightTooltipMissingCast:
-      "Cast delta is negative: Top10 players use this skill more often, so inspect rotation gaps, resource drift, or delayed recovery after mechanics.",
+      "Both cast delta and rDPS delta are negative: Top10 players use this skill more often and also gain more value from it, so inspect rotation gaps, resource drift, or delayed recovery after mechanics.",
     totalDamage: "Total damage",
     hits: "Hits",
     crit: "Crit",
