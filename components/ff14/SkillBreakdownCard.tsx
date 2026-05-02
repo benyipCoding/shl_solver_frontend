@@ -14,25 +14,25 @@ import { formatNumber } from "@/utils/ff14";
 const skillHighlightStyles = {
   castHitMismatch: {
     rowClassName:
-      "!bg-[linear-gradient(90deg,rgba(95,217,255,0.17),rgba(95,217,255,0.05))] !shadow-[inset_4px_0_0_rgba(114,224,255,0.96)] hover:!bg-[linear-gradient(90deg,rgba(95,217,255,0.22),rgba(95,217,255,0.07))]",
+      "!bg-[linear-gradient(90deg,rgba(255,146,43,0.22),rgba(255,146,43,0.06))] !shadow-[inset_4px_0_0_rgba(255,138,31,0.98)] hover:!bg-[linear-gradient(90deg,rgba(255,170,72,0.34),rgba(255,170,72,0.12))]",
     mobileCardClassName:
-      "!border-[rgba(114,224,255,0.5)] !bg-[linear-gradient(135deg,rgba(12,46,63,0.82),rgba(15,31,54,0.94))] !shadow-[inset_4px_0_0_rgba(114,224,255,0.96)]",
+      "!border-[rgba(255,150,58,0.56)] !bg-[linear-gradient(135deg,rgba(82,38,8,0.86),rgba(28,22,46,0.96))] !shadow-[inset_4px_0_0_rgba(255,138,31,0.98)]",
     legendClassName:
-      "border-[rgba(114,224,255,0.38)] bg-[rgba(18,75,101,0.28)] text-[#d8f8ff]",
+      "border-[rgba(255,150,58,0.4)] bg-[rgba(110,56,14,0.28)] text-[#fff0d4]",
     tooltipClassName:
-      "border-[rgba(114,224,255,0.44)] bg-[rgba(7,31,44,0.96)] text-[#ddf8ff]",
-    dotClassName: "bg-[#72dcff]",
+      "border-[rgba(255,150,58,0.46)] bg-[rgba(47,22,6,0.97)] text-[#fff1da]",
+    dotClassName: "bg-[#ff9a3a]",
   },
   unexpectedCast: {
     rowClassName:
-      "!bg-[linear-gradient(90deg,rgba(255,193,94,0.18),rgba(255,193,94,0.05))] !shadow-[inset_4px_0_0_rgba(255,196,104,0.96)] hover:!bg-[linear-gradient(90deg,rgba(255,193,94,0.23),rgba(255,193,94,0.08))]",
+      "!bg-[linear-gradient(90deg,rgba(255,219,92,0.2),rgba(255,219,92,0.05))] !shadow-[inset_4px_0_0_rgba(255,224,110,0.96)] hover:!bg-[linear-gradient(90deg,rgba(255,232,130,0.31),rgba(255,232,130,0.1))]",
     mobileCardClassName:
-      "!border-[rgba(255,196,104,0.48)] !bg-[linear-gradient(135deg,rgba(70,45,12,0.82),rgba(18,28,50,0.94))] !shadow-[inset_4px_0_0_rgba(255,196,104,0.96)]",
+      "!border-[rgba(255,224,110,0.5)] !bg-[linear-gradient(135deg,rgba(78,66,10,0.84),rgba(25,28,48,0.95))] !shadow-[inset_4px_0_0_rgba(255,224,110,0.96)]",
     legendClassName:
-      "border-[rgba(255,196,104,0.38)] bg-[rgba(102,73,20,0.28)] text-[#ffebc0]",
+      "border-[rgba(255,224,110,0.4)] bg-[rgba(109,88,16,0.28)] text-[#fff4c8]",
     tooltipClassName:
-      "border-[rgba(255,196,104,0.44)] bg-[rgba(46,31,8,0.96)] text-[#fff1cf]",
-    dotClassName: "bg-[#ffc468]",
+      "border-[rgba(255,224,110,0.44)] bg-[rgba(51,39,7,0.96)] text-[#fff6d7]",
+    dotClassName: "bg-[#ffde64]",
   },
   missingCast: {
     rowClassName:
