@@ -414,12 +414,13 @@ const SkillBreakdownCard = ({
               barWidth,
               highlight,
             } = row;
+            const skillRowKey = skill.abilityKey || `${skill.skill}:${index}`;
             const highlightStyles =
               highlight === null ? null : skillHighlightStyles[highlight.kind];
 
             return (
               <div
-                key={skill.skill}
+                key={skillRowKey}
                 className={`${ff14Styles.skillRow} ${
                   highlightStyles ? highlightStyles.rowClassName : ""
                 }`}
@@ -549,11 +550,12 @@ const SkillBreakdownCard = ({
             damageShare,
             highlight,
           } = row;
+          const skillRowKey = skill.abilityKey || `${skill.skill}:${index}`;
           const highlightStyles =
             highlight === null ? null : skillHighlightStyles[highlight.kind];
 
           return (
-            <li key={`mobile-${skill.skill}`}>
+            <li key={`mobile-${skillRowKey}`}>
               <div
                 className={`${ff14Styles.skillMobileCard} ${
                   highlightStyles ? highlightStyles.mobileCardClassName : ""
