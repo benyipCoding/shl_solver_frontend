@@ -138,6 +138,7 @@ interface Ff14ReferenceAbilityRow {
   casts: number;
   hits: number;
   damage: number;
+  rdps: number;
 }
 
 interface PendingTimelineCast {
@@ -450,7 +451,8 @@ const buildTopPlayerFromRankingEntry = (
 
 const buildReferenceAbilityRows = (
   damageEntries: Ff14AbilityTableEntry[],
-  castEntries: Ff14AbilityTableEntry[]
+  castEntries: Ff14AbilityTableEntry[],
+  encounterDuration: number
 ): Ff14ReferenceAbilityRow[] => {
   const castEntryByKey = new Map<string, Ff14AbilityTableEntry>();
 
@@ -473,6 +475,10 @@ const buildReferenceAbilityRows = (
           0
         ),
         damage: roundAmount(entry.totalADPS ?? entry.total),
+        rdps: Math.round(
+          ((entry.totalRDPS ?? entry.total ?? 0) * 1000) /
+            Math.max(encounterDuration, 1)
+        ),
       };
     });
 };
@@ -807,7 +813,12 @@ const aggregateSkillBenchmarks = (
 
   const aggregateByAbilityKey: Record<
     string,
-    { totalCasts: number; totalDamage: number; totalHits: number }
+    {
+      totalCasts: number;
+      totalDamage: number;
+      totalHits: number;
+      totalRdps: number;
+    }
   > = {};
 
   referenceRowsList.forEach((rows) => {
@@ -818,11 +829,13 @@ const aggregateSkillBenchmarks = (
           totalCasts: 0,
           totalDamage: 0,
           totalHits: 0,
+          totalRdps: 0,
         });
 
       aggregate.totalCasts += row.casts;
       aggregate.totalDamage += row.damage;
       aggregate.totalHits += row.hits;
+      aggregate.totalRdps += row.rdps;
     });
   });
 
@@ -833,6 +846,7 @@ const aggregateSkillBenchmarks = (
         top10Casts: Math.round(aggregate.totalCasts / sampleSize),
         top10Hits: Math.round(aggregate.totalHits / sampleSize),
         top10Damage: Math.round(aggregate.totalDamage / sampleSize),
+        top10Rdps: Math.round(aggregate.totalRdps / sampleSize),
       },
     ])
   );
@@ -882,6 +896,7 @@ const buildRealSkillRows = (
         rdps,
         top10Hits: null,
         top10Damage: null,
+        top10Rdps: null,
         critRate,
         top10Casts: null,
       };
@@ -1111,10 +1126,17 @@ const loadReferenceSkillRows = async (
       { sourceid: sourceId }
     ),
   ]);
+  const effectiveEncounterDuration = Math.max(
+    (damageDoneData.combatTime ??
+      castsData.combatTime ??
+      selectedFight.combatTime) - (damageDoneData.damageDowntime ?? 0),
+    1
+  );
 
   return buildReferenceAbilityRows(
     damageDoneData.entries ?? [],
-    castsData.entries ?? []
+    castsData.entries ?? [],
+    effectiveEncounterDuration
   );
 };
 
@@ -1540,6 +1562,7 @@ export const buildCharacterDetail = (
       rdps: 0,
       top10Hits: Math.round(template.top10Casts * template.hitRate),
       top10Damage: template.top10Damage,
+      top10Rdps: null,
       critRate,
       top10Casts: template.top10Casts,
     };

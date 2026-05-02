@@ -317,6 +317,7 @@ const FF14Page = () => {
               top10Casts: benchmark.top10Casts,
               top10Hits: benchmark.top10Hits,
               top10Damage: benchmark.top10Damage,
+              top10Rdps: benchmark.top10Rdps,
             };
           }),
           topPlayers: cachedTopComparison.topPlayers,
@@ -461,6 +462,7 @@ const FF14Page = () => {
                       text={text}
                       selectedCharacter={selectedCharacter}
                       selectedDetail={selectedDetailWithTopComparison!}
+                      hasTopComparisonData={topPlayersState === "loaded"}
                       isTopComparisonLoading={topPlayersState === "loading"}
                       topComparisonStatusTitle={topPlayersStatusTitle}
                       onBackToSummary={handleBackToSummary}

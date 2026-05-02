@@ -93,10 +93,10 @@ export const ff14Styles = {
   skillPanel:
     "overflow-hidden rounded-[16px] border border-[rgba(124,156,210,0.22)] bg-[linear-gradient(180deg,rgba(9,16,30,0.88),rgba(14,23,39,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] max-[760px]:hidden",
   skillPanelHeader:
-    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_76px_104px_88px_88px] items-center gap-3 border-b border-[rgba(105,130,170,0.25)] bg-[rgba(25,38,64,0.52)] px-4 py-3 text-[0.72rem] font-semibold uppercase tracking-[0.05em] text-[#9fb9df]",
+    "grid grid-cols-[minmax(200px,1.28fr)_minmax(180px,1.1fr)_84px_96px_88px_72px_96px_88px_108px] items-center gap-2.5 border-b border-[rgba(105,130,170,0.25)] bg-[rgba(25,38,64,0.52)] px-3.5 py-3 text-[0.73rem] font-semibold uppercase tracking-[0.04em] text-[#9fb9df]",
   skillRowsDesktop: "grid",
   skillRow:
-    "grid grid-cols-[minmax(220px,1.45fr)_minmax(220px,1.5fr)_88px_96px_88px_76px_104px_88px_88px] items-center gap-3 border-b border-[rgba(105,130,170,0.22)] px-4 py-3 transition-[background-color,box-shadow] duration-200 odd:bg-[rgba(20,32,56,0.34)] even:bg-[rgba(10,19,35,0.38)] hover:bg-[linear-gradient(90deg,rgba(90,145,236,0.2),rgba(90,145,236,0.07))] hover:shadow-[inset_3px_0_0_rgba(154,201,255,0.95)] last:border-b-0",
+    "grid grid-cols-[minmax(200px,1.28fr)_minmax(180px,1.1fr)_84px_96px_88px_72px_96px_88px_108px] items-center gap-2.5 border-b border-[rgba(105,130,170,0.22)] px-3.5 py-3.5 transition-[background-color,box-shadow] duration-200 odd:bg-[rgba(20,32,56,0.34)] even:bg-[rgba(10,19,35,0.38)] hover:bg-[linear-gradient(90deg,rgba(90,145,236,0.2),rgba(90,145,236,0.07))] hover:shadow-[inset_3px_0_0_rgba(154,201,255,0.95)] last:border-b-0",
   skillIdentityCell: "flex min-w-0 items-center gap-3",
   skillIconPlaceholder:
     "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] border border-[rgba(129,172,239,0.42)] bg-[linear-gradient(145deg,rgba(52,84,138,0.85),rgba(23,42,76,0.95))] font-[var(--font-heading)] text-[0.82rem] tracking-[0.08em] text-[#e8f2ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
@@ -105,12 +105,12 @@ export const ff14Styles = {
   skillSubline: "m-0 mt-1 text-[0.74rem] text-[#8ea8cd]",
   skillAmountCell: "grid gap-2",
   skillAmountMeta:
-    "flex items-center justify-between gap-3 text-[0.8rem] [&>strong]:font-[var(--font-heading)] [&>strong]:text-[#eaf3ff] [&>span]:text-[#8ea8cd]",
+    "flex items-center justify-between gap-3 text-[0.84rem] [&>strong]:text-[0.98rem] [&>strong]:font-[var(--font-heading)] [&>strong]:text-[#eaf3ff] [&>span]:text-[#8ea8cd]",
   skillAmountTrack:
     "h-3 overflow-hidden rounded-full border border-[rgba(113,145,196,0.22)] bg-[rgba(6,13,25,0.82)]",
   skillAmountFill:
     "block h-full rounded-full bg-[linear-gradient(90deg,#38a9c9_0%,#59c2ea_42%,#83dcff_100%)] shadow-[0_0_12px_rgba(89,194,234,0.28)]",
-  skillStatValue: "text-[0.86rem] text-[#dfeaf8]",
+  skillStatValue: "text-[0.95rem] font-semibold text-[#eef5ff]",
   skillDamageValue:
     "text-[0.88rem] font-semibold text-[#c9ec9d] font-[var(--font-heading)]",
   skillMobileList: "m-0 hidden list-none gap-2.5 p-0 max-[760px]:grid",
@@ -121,14 +121,14 @@ export const ff14Styles = {
   skillMobileName: "m-0 text-[0.84rem] font-semibold text-[#e7f2ff]",
   skillMobileSubline: "m-0 mt-0.5 text-[0.72rem] text-[#8ea8cd]",
   skillMobileDelta:
-    "inline-flex rounded-full border px-2 py-0.5 text-[0.72rem] font-semibold",
+    "inline-flex rounded-full border px-2.5 py-0.5 text-[0.76rem] font-semibold",
   skillMobileDeltaGood:
     "border-[rgba(128,243,191,0.4)] bg-[rgba(22,115,75,0.28)] text-[#9ff6c8]",
   skillMobileDeltaBad:
     "border-[rgba(255,154,154,0.45)] bg-[rgba(132,54,54,0.27)] text-[#ffc6c6]",
   skillMobileGrid: "grid grid-cols-2 gap-1.5",
   skillMobileMetric:
-    "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.78rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
+    "rounded-lg border border-[rgba(123,160,224,0.2)] bg-[rgba(16,26,44,0.45)] px-1.5 py-1.5 [&>span]:block [&>span]:text-[0.65rem] [&>span]:text-[#8ea8cd] [&>strong]:mt-1 [&>strong]:block [&>strong]:text-[0.9rem] [&>strong]:font-semibold [&>strong]:text-[#e8f2ff]",
   jobBadge:
     "tiny-icon sprite inline-block h-8 w-8 border border-[#555555] mx-[2px] align-[-6px] object-cover",
   skillTable:
@@ -169,9 +169,9 @@ export const ff14Styles = {
   metricGrid:
     "mb-3.5 grid grid-cols-3 gap-2.5 max-[760px]:mb-2.5 max-[760px]:grid-cols-1",
   metricCard:
-    "grid gap-[7px] rounded-[14px] border border-[rgba(128,168,232,0.25)] bg-[rgba(34,50,80,0.36)] p-[11px] [&>strong]:text-[1.2rem] [&>strong]:leading-none [&>strong]:text-[#f6f9ff]",
+    "grid gap-[7px] rounded-[14px] border border-[rgba(128,168,232,0.25)] bg-[rgba(34,50,80,0.36)] p-[11px] [&>strong]:text-[1.32rem] [&>strong]:leading-none [&>strong]:text-[#f6f9ff]",
   metricLabel: "inline-flex items-center gap-1.5 text-[0.77rem] text-[#a9c2e6]",
-  deltaText: "font-bold",
+  deltaText: "text-[0.95rem] font-bold",
   deltaGood: "text-[#8ef2be]",
   deltaBad: "text-[#ff9f9f]",
   rankList: "m-0 grid list-none gap-2 p-0",
@@ -678,11 +678,21 @@ export const TEXT: Record<Locale, StaticText> = {
     dotUptime: "DOT 覆盖率",
     skillHeader: "技能",
     yourCasts: "你的施放",
-    top10Average: "Top10 均值",
-    top10HitsAverage: "Top10 命中均值",
-    top10Damage: "Top10 平均伤害",
-    delta: "差值",
+    top10Average: "施放均值",
+    top10HitsAverage: "命中均值",
+    top10Damage: "平均伤害",
+    delta: "施放差值",
     hitDelta: "命中差值",
+    top10RdpsDelta: "rDPS 均值差",
+    highlightLegendCastHitMismatch: "施放没落后，但命中收益偏低",
+    highlightLegendUnexpectedCast: "Top10 基本不打，却有施放",
+    highlightLegendMissingCast: "该打未打，施放次数落后",
+    highlightTooltipCastHitMismatch:
+      "施放差值大于命中差值：技能安排接近 Top10，但单次施放命中目标数偏少，优先检查站位、目标覆盖或技能落点。",
+    highlightTooltipUnexpectedCast:
+      "Top10 施放均值为 0 或 N/A，但你仍有施放：该技能通常不该占用 GCD，建议改成更高收益的技能循环。",
+    highlightTooltipMissingCast:
+      "施放差值为负数：Top10 会打而你少打了，优先检查循环断档、资源溢出或机制停手后的补回。",
     totalDamage: "总伤害",
     hits: "命中",
     crit: "暴击率",
@@ -752,11 +762,21 @@ export const TEXT: Record<Locale, StaticText> = {
     dotUptime: "DOT/Uptime",
     skillHeader: "Skill",
     yourCasts: "Your casts",
-    top10Average: "Top10 avg",
+    top10Average: "Top10 cast avg",
     top10HitsAverage: "Top10 avg hits",
     top10Damage: "Top10 avg dmg",
-    delta: "Delta",
+    delta: "Cast delta",
     hitDelta: "Hit delta",
+    top10RdpsDelta: "Top10 rDPS delta",
+    highlightLegendCastHitMismatch: "Cast count held, hit value lost",
+    highlightLegendUnexpectedCast: "Top10 skips it, but you cast it",
+    highlightLegendMissingCast: "Top10 casts more than you",
+    highlightTooltipCastHitMismatch:
+      "Cast delta is higher than hit delta: your button plan is close to Top10, but each cast is converting into fewer hits. Check positioning, target coverage, or placement.",
+    highlightTooltipUnexpectedCast:
+      "Top10 cast average is 0 or N/A, but you still used the skill: it is usually not worth a GCD here, so replace it with a higher-value action.",
+    highlightTooltipMissingCast:
+      "Cast delta is negative: Top10 players use this skill more often, so inspect rotation gaps, resource drift, or delayed recovery after mechanics.",
     totalDamage: "Total damage",
     hits: "Hits",
     crit: "Crit",

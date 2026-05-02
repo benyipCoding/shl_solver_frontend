@@ -64,6 +64,13 @@ export interface StaticText {
   top10Damage: string;
   delta: string;
   hitDelta: string;
+  top10RdpsDelta: string;
+  highlightLegendCastHitMismatch: string;
+  highlightLegendUnexpectedCast: string;
+  highlightLegendMissingCast: string;
+  highlightTooltipCastHitMismatch: string;
+  highlightTooltipUnexpectedCast: string;
+  highlightTooltipMissingCast: string;
   totalDamage: string;
   hits: string;
   crit: string;
@@ -129,6 +136,7 @@ export interface SkillRow {
   rdps: number;
   top10Hits: number | null;
   top10Damage: number | null;
+  top10Rdps: number | null;
   critRate: number;
   top10Casts: number | null;
 }
@@ -137,6 +145,7 @@ export interface SkillBenchmark {
   top10Casts: number;
   top10Hits: number;
   top10Damage: number;
+  top10Rdps: number;
 }
 
 export type TimelineCastState = "completed" | "interrupted";
