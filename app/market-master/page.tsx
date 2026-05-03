@@ -3,6 +3,12 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Settings, Trash } from "lucide-react";
+import {
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  createChart,
+} from "lightweight-charts";
 
 import { AiReviewModal } from "@/components/market-master/AiReviewModal";
 import { IndicatorConfigModal } from "@/components/market-master/IndicatorConfigModal";
@@ -82,7 +88,6 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
 export default function ChartApp() {
-  const [isChartLoaded, setIsChartLoaded] = useState(false);
   const layoutRef = useRef<any>(null);
   const mainColumnRef = useRef<any>(null);
   const chartContainerRef = useRef<any>(null);
@@ -597,22 +602,6 @@ export default function ChartApp() {
   };
 
   useEffect(() => {
-    if (window.LightweightCharts) {
-      setIsChartLoaded(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src =
-      "https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js";
-    script.async = true;
-    script.onload = () => setIsChartLoaded(true);
-    document.head.appendChild(script);
-    return () => {
-      if (document.head.contains(script)) document.head.removeChild(script);
-    };
-  }, []);
-
-  useEffect(() => {
     setIsPlaying(false);
     clearAllSelections();
     setTrades([]);
@@ -725,7 +714,7 @@ export default function ChartApp() {
       draftConfig.emas.forEach((ema) => {
         let series = emaSeriesRefs.current[ema.id];
         if (!series) {
-          series = chartRef.current.addLineSeries({
+          series = chartRef.current.addSeries(LineSeries, {
             color: ema.color,
             lineWidth: ema.lineWidth,
             priceScaleId: "right",
@@ -794,26 +783,23 @@ export default function ChartApp() {
 
   // ================= 1. 初始化主图表与全量交互逻辑 =================
   useEffect(() => {
-    if (!isChartLoaded || !chartContainerRef.current) return;
+    if (!isMounted || !chartContainerRef.current) return;
 
-    const chart = window.LightweightCharts.createChart(
-      chartContainerRef.current,
-      {
-        layout: {
-          background: { type: "solid", color: "#111827" },
-          textColor: "#9ca3af",
-        },
-        grid: {
-          vertLines: { color: "#1f2937" },
-          horzLines: { color: "#1f2937" },
-        },
-        crosshair: { mode: 0 },
-        width: chartContainerRef.current.clientWidth,
-        height: chartContainerRef.current.clientHeight,
-      }
-    );
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: "solid", color: "#111827" },
+        textColor: "#9ca3af",
+      },
+      grid: {
+        vertLines: { color: "#1f2937" },
+        horzLines: { color: "#1f2937" },
+      },
+      crosshair: { mode: 0 },
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+    });
 
-    const series = chart.addCandlestickSeries({
+    const series = chart.addSeries(CandlestickSeries, {
       upColor: "#10b981",
       downColor: "#ef4444",
       borderVisible: false,
@@ -824,7 +810,7 @@ export default function ChartApp() {
     series.setData(fullDataRef.current.slice(0, INITIAL_VISIBLE_COUNT));
 
     indConfig.emas.forEach((ema) => {
-      const emaSeries = chart.addLineSeries({
+      const emaSeries = chart.addSeries(LineSeries, {
         color: ema.color,
         lineWidth: ema.lineWidth,
         priceScaleId: "right",
@@ -1272,7 +1258,7 @@ export default function ChartApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    isChartLoaded,
+    isMounted,
     applyIndicatorSelectionStyles,
     clearAllSelections,
     detachShapeFromMainSeries,
@@ -1283,45 +1269,38 @@ export default function ChartApp() {
 
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
-    if (
-      !indConfig.macd.enabled ||
-      !isChartLoaded ||
-      !subChartContainerRef.current
-    )
+    if (!isMounted || !indConfig.macd.enabled || !subChartContainerRef.current)
       return;
-    const subChart = window.LightweightCharts.createChart(
-      subChartContainerRef.current,
-      {
-        layout: {
-          background: { type: "solid", color: "#111827" },
-          textColor: "#9ca3af",
-        },
-        grid: {
-          vertLines: { color: "#1f2937" },
-          horzLines: { color: "#1f2937" },
-        },
-        crosshair: { mode: 0 },
-        width: subChartContainerRef.current.clientWidth,
-        height: subChartContainerRef.current.clientHeight,
-        timeScale: { visible: true, borderColor: "#374151" },
-        rightPriceScale: { borderColor: "#374151" },
-      }
-    );
+    const subChart = createChart(subChartContainerRef.current, {
+      layout: {
+        background: { type: "solid", color: "#111827" },
+        textColor: "#9ca3af",
+      },
+      grid: {
+        vertLines: { color: "#1f2937" },
+        horzLines: { color: "#1f2937" },
+      },
+      crosshair: { mode: 0 },
+      width: subChartContainerRef.current.clientWidth,
+      height: subChartContainerRef.current.clientHeight,
+      timeScale: { visible: true, borderColor: "#374151" },
+      rightPriceScale: { borderColor: "#374151" },
+    });
 
-    const macdHist = subChart.addHistogramSeries({
+    const macdHist = subChart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       lastValueVisible: false,
       priceLineVisible: false,
       title: "",
     });
-    const macdLine = subChart.addLineSeries({
+    const macdLine = subChart.addSeries(LineSeries, {
       color: indConfig.macd.macdColor,
       lineWidth: indConfig.macd.lineWidth,
       lastValueVisible: false,
       priceLineVisible: false,
       title: "",
     });
-    const signalLine = subChart.addLineSeries({
+    const signalLine = subChart.addSeries(LineSeries, {
       color: indConfig.macd.signalColor,
       lineWidth: indConfig.macd.lineWidth,
       lastValueVisible: false,
@@ -1442,7 +1421,7 @@ export default function ChartApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    isChartLoaded,
+    isMounted,
     indConfig.macd.enabled,
     applyIndicatorSelectionStyles,
     clearAllSelections,
@@ -1925,12 +1904,6 @@ export default function ChartApp() {
           className="flex-1 flex flex-col overflow-hidden min-w-0"
         >
           <div className="flex-1 relative bg-[#111827]">
-            {!isChartLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                加载图表引擎中...
-              </div>
-            )}
-
             {legendData && (
               <div className="absolute top-3 left-4 z-10 flex items-center gap-4 text-xs font-mono pointer-events-none bg-gray-900/60 px-3 py-1.5 rounded border border-gray-700/50 backdrop-blur-sm">
                 <div className="text-gray-400 font-semibold tracking-wider">
