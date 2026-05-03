@@ -19,6 +19,7 @@ export const TradeTerminal = ({
   handlePlaceOrder,
   priceDecimals,
   isMaximized,
+  panelWidth,
 }: any) => {
   if (!isRightPanelOpen && !isMaximized) {
     return (
@@ -34,7 +35,10 @@ export const TradeTerminal = ({
 
   if (isRightPanelOpen && !isMaximized) {
     return (
-      <div className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col shrink-0 z-10">
+      <div
+        className="bg-gray-900 border-l border-gray-800 flex flex-col shrink-0 min-h-0 z-10"
+        style={{ width: panelWidth }}
+      >
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
             交易终端

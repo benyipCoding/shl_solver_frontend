@@ -18,14 +18,14 @@ export const TradeHistory = ({
   handleCloseMarket,
   handleAIReview,
   isMaximized,
+  panelHeight,
 }: any) => {
   if (isMaximized) return null;
 
   return (
     <div
-      className={`bg-gray-900 border-t border-gray-800 flex flex-col shrink-0 transition-all duration-300 ${
-        isBottomPanelOpen ? "h-56" : "h-10"
-      }`}
+      className="bg-gray-900 border-t border-gray-800 flex flex-col shrink-0 min-h-0"
+      style={{ height: isBottomPanelOpen ? panelHeight : 40 }}
     >
       <div
         className="h-10 px-4 border-b border-gray-800 text-sm font-medium text-gray-400 bg-gray-900 flex justify-between items-center shrink-0 cursor-pointer hover:bg-gray-800/80 transition-colors"

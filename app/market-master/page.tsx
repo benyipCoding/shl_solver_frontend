@@ -32,6 +32,13 @@ import {
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
 const SELECTED_LINE_WIDTH_BOOST = 1;
+const RIGHT_PANEL_DEFAULT_WIDTH = 320;
+const RIGHT_PANEL_MIN_WIDTH = 260;
+const MAIN_CONTENT_MIN_WIDTH = 520;
+const BOTTOM_PANEL_DEFAULT_HEIGHT = 224;
+const BOTTOM_PANEL_MIN_HEIGHT = 160;
+const MAIN_CHART_MIN_HEIGHT = 180;
+const MACD_PANEL_HEIGHT = 192;
 
 const createDefaultIndicatorConfig = () => ({
   emas: [
@@ -71,8 +78,13 @@ const getDefaultRiskDistance = (nextSymbol: string) => {
   return { sl: 0.005, tp: 0.01 };
 };
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
 export default function ChartApp() {
   const [isChartLoaded, setIsChartLoaded] = useState(false);
+  const layoutRef = useRef<any>(null);
+  const mainColumnRef = useRef<any>(null);
   const chartContainerRef = useRef<any>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
@@ -110,6 +122,19 @@ export default function ChartApp() {
   const isMaximized = false;
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
+  const [rightPanelWidth, setRightPanelWidth] = useState(
+    RIGHT_PANEL_DEFAULT_WIDTH
+  );
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(
+    BOTTOM_PANEL_DEFAULT_HEIGHT
+  );
+  const resizeStateRef = useRef<any>({
+    direction: null,
+    startX: 0,
+    startY: 0,
+    startWidth: RIGHT_PANEL_DEFAULT_WIDTH,
+    startHeight: BOTTOM_PANEL_DEFAULT_HEIGHT,
+  });
 
   const [symbol, setSymbol] = useState("XAU/USD");
   const [timeframe, setTimeframe] = useState("D1");
@@ -414,6 +439,100 @@ export default function ChartApp() {
   useEffect(() => {
     updateLegend(stateRef.current.lastHoveredTime);
   }, [currentIndex, symbol, timeframe, updateLegend, indConfig]);
+
+  const stopResizeDrag = useCallback(() => {
+    if (!resizeStateRef.current.direction) return;
+    resizeStateRef.current.direction = null;
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+  }, []);
+
+  useEffect(() => {
+    const handleResizeDragMove = (e: MouseEvent) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState.direction) return;
+
+      if (resizeState.direction === "right") {
+        const containerWidth =
+          layoutRef.current?.clientWidth || window.innerWidth;
+        const maxWidth = Math.max(
+          RIGHT_PANEL_MIN_WIDTH,
+          containerWidth - MAIN_CONTENT_MIN_WIDTH
+        );
+        const nextWidth = clamp(
+          resizeState.startWidth + (resizeState.startX - e.clientX),
+          RIGHT_PANEL_MIN_WIDTH,
+          maxWidth
+        );
+        setRightPanelWidth(nextWidth);
+        return;
+      }
+
+      if (resizeState.direction === "bottom") {
+        const containerHeight =
+          mainColumnRef.current?.clientHeight || window.innerHeight;
+        const minTopAreaHeight =
+          MAIN_CHART_MIN_HEIGHT +
+          (indConfigRef.current.macd.enabled ? MACD_PANEL_HEIGHT : 0);
+        const maxHeight = Math.max(
+          BOTTOM_PANEL_MIN_HEIGHT,
+          containerHeight - minTopAreaHeight
+        );
+        const nextHeight = clamp(
+          resizeState.startHeight + (resizeState.startY - e.clientY),
+          BOTTOM_PANEL_MIN_HEIGHT,
+          maxHeight
+        );
+        setBottomPanelHeight(nextHeight);
+      }
+    };
+
+    window.addEventListener("mousemove", handleResizeDragMove);
+    window.addEventListener("mouseup", stopResizeDrag);
+
+    return () => {
+      window.removeEventListener("mousemove", handleResizeDragMove);
+      window.removeEventListener("mouseup", stopResizeDrag);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [stopResizeDrag]);
+
+  const startRightPanelResize = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isRightPanelOpen || isMaximized) return;
+      e.preventDefault();
+      e.stopPropagation();
+      resizeStateRef.current = {
+        direction: "right",
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: rightPanelWidth,
+        startHeight: bottomPanelHeight,
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+    },
+    [bottomPanelHeight, isMaximized, isRightPanelOpen, rightPanelWidth]
+  );
+
+  const startBottomPanelResize = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!isBottomPanelOpen || isMaximized) return;
+      e.preventDefault();
+      e.stopPropagation();
+      resizeStateRef.current = {
+        direction: "bottom",
+        startX: e.clientX,
+        startY: e.clientY,
+        startWidth: rightPanelWidth,
+        startHeight: bottomPanelHeight,
+      };
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "row-resize";
+    },
+    [bottomPanelHeight, isBottomPanelOpen, isMaximized, rightPanelWidth]
+  );
 
   const handleIndDragStart = (e: any) => {
     indDragRef.current = {
@@ -1800,8 +1919,11 @@ export default function ChartApp() {
       />
 
       {/* === 核心布局区域 === */}
-      <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div ref={layoutRef} className="flex-1 flex overflow-hidden relative">
+        <div
+          ref={mainColumnRef}
+          className="flex-1 flex flex-col overflow-hidden min-w-0"
+        >
           <div className="flex-1 relative bg-[#111827]">
             {!isChartLoaded && (
               <div className="absolute inset-0 flex items-center justify-center text-gray-500">
@@ -1919,6 +2041,14 @@ export default function ChartApp() {
             </div>
           )}
 
+          {isBottomPanelOpen && !isMaximized && (
+            <div
+              onMouseDown={startBottomPanelResize}
+              className="h-1.5 shrink-0 cursor-row-resize bg-transparent hover:bg-blue-500/30 active:bg-blue-500/40 transition-colors"
+              title="拖拽调整交易记录高度"
+            />
+          )}
+
           <TradeHistory
             isBottomPanelOpen={isBottomPanelOpen}
             setIsBottomPanelOpen={setIsBottomPanelOpen}
@@ -1929,8 +2059,17 @@ export default function ChartApp() {
             handleCloseMarket={handleCloseMarket}
             handleAIReview={handleAIReview}
             isMaximized={isMaximized}
+            panelHeight={bottomPanelHeight}
           />
         </div>
+
+        {isRightPanelOpen && !isMaximized && (
+          <div
+            onMouseDown={startRightPanelResize}
+            className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-500/30 active:bg-blue-500/40 transition-colors"
+            title="拖拽调整交易终端宽度"
+          />
+        )}
 
         <TradeTerminal
           isRightPanelOpen={isRightPanelOpen}
@@ -1950,6 +2089,7 @@ export default function ChartApp() {
           handlePlaceOrder={handlePlaceOrder}
           priceDecimals={priceDecimals}
           isMaximized={isMaximized}
+          panelWidth={rightPanelWidth}
         />
       </div>
     </div>
