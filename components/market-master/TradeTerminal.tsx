@@ -25,10 +25,10 @@ export const TradeTerminal = ({
     return (
       <button
         onClick={() => setIsRightPanelOpen(true)}
-        className="absolute right-0 top-1/2 -translate-y-1/2 bg-gray-800 border border-gray-700 border-r-0 rounded-l-lg py-4 px-1 text-gray-400 hover:text-white hover:bg-gray-700 shadow-xl z-20"
+        className="cursor-pointer absolute right-0 top-1/2 -translate-y-1/2 bg-gray-800 border border-slate-500 border-r-0 rounded-l-lg py-4 px-2 text-gray-400 hover:text-white hover:bg-gray-700 shadow-xl z-20"
         title="展开交易终端"
       >
-        <PanelRightOpen size={18} />
+        <PanelRightOpen size={22} />
       </button>
     );
   }
@@ -45,10 +45,10 @@ export const TradeTerminal = ({
           </h2>
           <button
             onClick={() => setIsRightPanelOpen(false)}
-            className="text-gray-500 hover:text-white transition-colors"
+            className="text-gray-500 hover:text-white transition-colors cursor-pointer"
             title="收起侧边栏"
           >
-            <PanelRightClose size={18} />
+            <PanelRightClose size={22} />
           </button>
         </div>
 
