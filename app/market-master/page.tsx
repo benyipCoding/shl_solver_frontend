@@ -119,6 +119,8 @@ export default function ChartApp() {
   const [draftConfig, setDraftConfig] = useState(createDefaultIndicatorConfig);
 
   const [isMagnetEnabled, setIsMagnetEnabled] = useState(true);
+  const [isRightPriceAutoScaleEnabled, setIsRightPriceAutoScaleEnabled] =
+    useState(true);
   const magnetRef = useRef(isMagnetEnabled);
   useEffect(() => {
     magnetRef.current = isMagnetEnabled;
@@ -797,6 +799,7 @@ export default function ChartApp() {
       crosshair: { mode: 0 },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
+      rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled },
     });
 
     const series = chart.addSeries(CandlestickSeries, {
@@ -1266,6 +1269,13 @@ export default function ChartApp() {
     setSelectedIndicator,
     setSelectedShape,
   ]);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.applyOptions({
+      rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled },
+    });
+  }, [isRightPriceAutoScaleEnabled]);
 
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
@@ -1885,6 +1895,8 @@ export default function ChartApp() {
         setDrawingTool={setDrawingTool}
         isMagnetEnabled={isMagnetEnabled}
         setIsMagnetEnabled={setIsMagnetEnabled}
+        isRightPriceAutoScaleEnabled={isRightPriceAutoScaleEnabled}
+        setIsRightPriceAutoScaleEnabled={setIsRightPriceAutoScaleEnabled}
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}

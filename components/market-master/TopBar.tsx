@@ -6,6 +6,7 @@ import {
   Square,
   AlignJustify,
   Magnet,
+  ArrowUpDown,
   Sparkles,
   Loader2,
   BarChart2,
@@ -26,6 +27,8 @@ export const TopBar = ({
   setDrawingTool,
   isMagnetEnabled,
   setIsMagnetEnabled,
+  isRightPriceAutoScaleEnabled,
+  setIsRightPriceAutoScaleEnabled,
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
@@ -124,6 +127,23 @@ export const TopBar = ({
             }
           >
             <Magnet size={16} />
+          </button>
+          <button
+            onClick={() =>
+              setIsRightPriceAutoScaleEnabled(!isRightPriceAutoScaleEnabled)
+            }
+            className={`p-1.5 rounded-md flex items-center transition-colors ${
+              isRightPriceAutoScaleEnabled
+                ? "bg-gray-700 text-blue-400"
+                : "hover:bg-gray-700 text-gray-400"
+            }`}
+            title={
+              isRightPriceAutoScaleEnabled
+                ? "关闭右侧价格轴自动缩放"
+                : "开启右侧价格轴自动缩放"
+            }
+          >
+            <ArrowUpDown size={16} />
           </button>
         </div>
 
