@@ -977,13 +977,22 @@ const buildEncounterSummary = (
 
 const loadReportFight = async (
   reportId: string,
-  fightId: number,
+  requestedFightId: number | string,
   signal?: AbortSignal
 ) => {
   const fightsData = await fetchFf14Data<Ff14ReportFightsResponse>(
     `/api/ff14_logs/report/fights?code=${encodeURIComponent(reportId)}`,
     signal
   );
+
+  const normalizedFightId =
+    typeof requestedFightId === "string"
+      ? requestedFightId.trim().toLowerCase()
+      : requestedFightId;
+  const fightId =
+    normalizedFightId === "last"
+      ? (fightsData.fights.at(-1)?.id ?? NaN)
+      : Number(normalizedFightId);
 
   if (!Number.isFinite(fightId)) {
     throw new Error("战斗 ID 无效");
@@ -1003,7 +1012,7 @@ const loadReportFight = async (
 };
 
 const loadSelectedFight = async (report: ParsedReport, signal?: AbortSignal) =>
-  loadReportFight(report.reportId, Number(report.fightId), signal);
+  loadReportFight(report.reportId, report.fightId, signal);
 
 const resolveReferenceCharacterId = (
   fightsData: Ff14ReportFightsResponse,

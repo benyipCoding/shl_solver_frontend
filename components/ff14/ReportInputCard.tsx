@@ -22,6 +22,12 @@ const ReportInputCard = ({
   onToggleLocale,
   onReportUrlChange,
 }: ReportInputCardProps) => {
+  const fightLabel = parsedReport
+    ? /^\d+$/.test(parsedReport.fightId)
+      ? `#${parsedReport.fightId}`
+      : parsedReport.fightId
+    : null;
+
   return (
     <section className={ff14Styles.card}>
       <div className={ff14Styles.cardHeader}>
@@ -89,7 +95,7 @@ const ReportInputCard = ({
               {text.reportPrefix}: {parsedReport.reportId}
             </span>
             <span className={ff14Styles.metaBadge}>
-              {text.fightPrefix}: #{parsedReport.fightId}
+              {text.fightPrefix}: {fightLabel}
             </span>
             <span className={ff14Styles.metaHint}>{text.todoHint}</span>
           </>
