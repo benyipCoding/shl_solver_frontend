@@ -47,10 +47,7 @@ const MAIN_CHART_MIN_HEIGHT = 180;
 const MACD_PANEL_HEIGHT = 192;
 
 const createDefaultIndicatorConfig = () => ({
-  emas: [
-    { id: "ema_1", period: 20, color: "#f59e0b", lineWidth: 2 },
-    { id: "ema_2", period: 60, color: "#3b82f6", lineWidth: 1.5 },
-  ],
+  emas: [],
   macd: {
     enabled: false,
     fast: 12,
@@ -65,6 +62,14 @@ const createDefaultIndicatorConfig = () => ({
       negGrow: "#ffcdd2",
       negFall: "#ef5350",
     },
+  },
+});
+
+const cloneIndicatorConfig = (config) => ({
+  emas: config.emas.map((ema) => ({ ...ema })),
+  macd: {
+    ...config.macd,
+    histColors: { ...config.macd.histColors },
   },
 });
 
@@ -116,7 +121,19 @@ export default function ChartApp() {
 
   const [selectedIndTab, setSelectedIndTab] = useState("EMA");
   const [indConfig, setIndConfig] = useState(createDefaultIndicatorConfig);
-  const [draftConfig, setDraftConfig] = useState(createDefaultIndicatorConfig);
+  const [draftConfig, setDraftConfigState] = useState(
+    createDefaultIndicatorConfig
+  );
+  const setDraftConfig = useCallback((updater) => {
+    setDraftConfigState((prev) => {
+      const nextConfig =
+        typeof updater === "function"
+          ? updater(cloneIndicatorConfig(prev))
+          : updater;
+
+      return cloneIndicatorConfig(nextConfig);
+    });
+  }, []);
 
   const [isMagnetEnabled, setIsMagnetEnabled] = useState(true);
   const [isRightPriceAutoScaleEnabled, setIsRightPriceAutoScaleEnabled] =
@@ -402,46 +419,44 @@ export default function ChartApp() {
     applyIndicatorSelectionStyles();
   }, [indConfig, applyIndicatorSelectionStyles]);
 
-  const updateLegend = useCallback(
-    (hoveredTime: any) => {
-      let index = currentIndexRef.current - 1;
-      const timeToUse = hoveredTime || stateRef.current.lastHoveredTime;
-      if (timeToUse) {
-        const foundIndex = fullDataRef.current.findIndex(
-          (d) => d.time === timeToUse
-        );
-        if (foundIndex !== -1 && foundIndex < currentIndexRef.current)
-          index = foundIndex;
-      }
-      if (index >= 0 && index < fullDataRef.current.length) {
-        const d = fullDataRef.current[index];
-        const m = fullMacdDataRef.current[index];
-        const emasData = indConfig.emas
-          .map((ema) => {
-            const eData = fullEmaDataRef.current[ema.id];
-            return {
-              period: ema.period,
-              color: ema.color,
-              value: eData && eData[index] ? eData[index].value : null,
-            };
-          })
-          .filter((ema) => ema.value !== null);
+  const updateLegend = useCallback((hoveredTime, configOverride = null) => {
+    const activeConfig = configOverride || indConfigRef.current;
+    let index = currentIndexRef.current - 1;
+    const timeToUse = hoveredTime || stateRef.current.lastHoveredTime;
+    if (timeToUse) {
+      const foundIndex = fullDataRef.current.findIndex(
+        (d) => d.time === timeToUse
+      );
+      if (foundIndex !== -1 && foundIndex < currentIndexRef.current)
+        index = foundIndex;
+    }
+    if (index >= 0 && index < fullDataRef.current.length) {
+      const d = fullDataRef.current[index];
+      const m = fullMacdDataRef.current[index];
+      const emasData = activeConfig.emas
+        .map((ema) => {
+          const eData = fullEmaDataRef.current[ema.id];
+          return {
+            period: ema.period,
+            color: ema.color,
+            value: eData && eData[index] ? eData[index].value : null,
+          };
+        })
+        .filter((ema) => ema.value !== null);
 
-        setLegendData({
-          time: d.time,
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
-          emas: emasData,
-          macd: m ? m.macd : null,
-          signal: m ? m.signal : null,
-          hist: m ? m.hist : null,
-        });
-      }
-    },
-    [indConfig]
-  );
+      setLegendData({
+        time: d.time,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+        emas: emasData,
+        macd: m ? m.macd : null,
+        signal: m ? m.signal : null,
+        hist: m ? m.hist : null,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     updateLegend(stateRef.current.lastHoveredTime);
@@ -675,7 +690,8 @@ export default function ChartApp() {
   }, [symbol, timeframe]);
 
   const applyIndicatorConfig = () => {
-    const currentEmaIds = draftConfig.emas.map((e) => e.id);
+    const nextConfig = cloneIndicatorConfig(draftConfig);
+    const currentEmaIds = nextConfig.emas.map((e) => e.id);
     if (
       selectedIndicatorRef.current.kind === "ema" &&
       !currentEmaIds.includes(selectedIndicatorRef.current.id)
@@ -683,7 +699,7 @@ export default function ChartApp() {
       selectedIndicatorRef.current = { kind: null, id: null };
     }
     if (
-      !draftConfig.macd.enabled &&
+      !nextConfig.macd.enabled &&
       (selectedIndicatorRef.current.kind === "macd" ||
         selectedIndicatorRef.current.kind === "signal")
     ) {
@@ -691,18 +707,20 @@ export default function ChartApp() {
     }
 
     const newEmaData = {};
-    draftConfig.emas.forEach((ema) => {
+    nextConfig.emas.forEach((ema) => {
       newEmaData[ema.id] = calculateEMA(fullDataRef.current, ema.period);
     });
     fullEmaDataRef.current = newEmaData;
     fullMacdDataRef.current = calculateMACD(
       fullDataRef.current,
-      draftConfig.macd.fast,
-      draftConfig.macd.slow,
-      draftConfig.macd.signal
+      nextConfig.macd.fast,
+      nextConfig.macd.slow,
+      nextConfig.macd.signal
     );
 
-    setIndConfig(draftConfig);
+    indConfigRef.current = nextConfig;
+    setIndConfig(nextConfig);
+    setDraftConfig(nextConfig);
     setIsIndicatorModalOpen(false);
 
     if (chartRef.current) {
@@ -713,7 +731,7 @@ export default function ChartApp() {
           delete fullEmaDataRef.current[id];
         }
       });
-      draftConfig.emas.forEach((ema) => {
+      nextConfig.emas.forEach((ema) => {
         let series = emaSeriesRefs.current[ema.id];
         if (!series) {
           series = chartRef.current.addSeries(LineSeries, {
@@ -740,17 +758,17 @@ export default function ChartApp() {
       macdSignalSeriesRef.current
     ) {
       macdHistSeriesRef.current.applyOptions({
-        visible: draftConfig.macd.enabled,
+        visible: nextConfig.macd.enabled,
       });
       macdLineSeriesRef.current.applyOptions({
-        visible: draftConfig.macd.enabled,
-        color: draftConfig.macd.macdColor,
-        lineWidth: draftConfig.macd.lineWidth,
+        visible: nextConfig.macd.enabled,
+        color: nextConfig.macd.macdColor,
+        lineWidth: nextConfig.macd.lineWidth,
       });
       macdSignalSeriesRef.current.applyOptions({
-        visible: draftConfig.macd.enabled,
-        color: draftConfig.macd.signalColor,
-        lineWidth: draftConfig.macd.lineWidth,
+        visible: nextConfig.macd.enabled,
+        color: nextConfig.macd.signalColor,
+        lineWidth: nextConfig.macd.lineWidth,
       });
       const currentMacdData = fullMacdDataRef.current.slice(
         0,
@@ -760,7 +778,7 @@ export default function ChartApp() {
         currentMacdData.map((d) => ({
           time: d.time,
           value: d.hist,
-          color: draftConfig.macd.histColors[d.colorType],
+          color: nextConfig.macd.histColors[d.colorType],
         }))
       );
       macdLineSeriesRef.current.setData(
@@ -774,13 +792,13 @@ export default function ChartApp() {
       chartRef.current.priceScale("right").applyOptions({
         scaleMargins: {
           top: 0.1,
-          bottom: draftConfig.macd.enabled ? 0.25 : 0.1,
+          bottom: nextConfig.macd.enabled ? 0.25 : 0.1,
         },
       });
 
-    applyIndicatorSelectionStyles(draftConfig);
+    applyIndicatorSelectionStyles(nextConfig);
 
-    updateLegend(stateRef.current.lastHoveredTime);
+    updateLegend(stateRef.current.lastHoveredTime, nextConfig);
   };
 
   // ================= 1. 初始化主图表与全量交互逻辑 =================
