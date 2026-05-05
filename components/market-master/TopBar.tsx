@@ -205,7 +205,6 @@ export const TopBar = ({
       </div>
 
       <div className="flex items-center gap-6 shrink-0">
-        <UserHeaderActions simpleMode={true} />
         <div className="flex flex-col items-end">
           <span className="text-xs text-gray-500">账户余额</span>
           <span className="font-mono font-bold text-white">
@@ -223,6 +222,7 @@ export const TopBar = ({
             {totalFloatingPnl.toFixed(2)}
           </span>
         </div>
+        <UserHeaderActions simpleMode={true} />
       </div>
     </div>
   );
