@@ -87,6 +87,9 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
   const getMe = async () => {
     try {
       const res = await customFetch("/api/user/me");
+      if (res.status === 401) {
+        return;
+      }
       if (!res.ok) {
         throw new Error(`获取用户信息失败: ${res.statusText}`);
       }

@@ -1,4 +1,5 @@
 import React from "react";
+import UserHeaderActions from "@/components/common/UserHeaderActions";
 import {
   CircleDollarSign,
   MousePointer2,
@@ -41,8 +42,8 @@ export const TopBar = ({
   totalFloatingPnl,
 }: any) => {
   return (
-    <div className="h-16 border-b border-gray-800 flex items-center px-6 justify-between bg-gray-900 shrink-0">
-      <div className="flex items-center gap-4">
+    <div className="h-16 border-b border-gray-800 flex items-center px-6 bg-gray-900 shrink-0 gap-6">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
         <h1 className="text-lg font-bold text-white mr-4 flex items-center gap-2">
           <CircleDollarSign className="text-blue-500" /> 复盘模拟交易
         </h1>
@@ -163,7 +164,7 @@ export const TopBar = ({
 
         <button
           onClick={() => setIsIndicatorModalOpen(true)}
-          className="p-2 ml-auto rounded-lg text-gray-400 hover:text-blue-400 hover:bg-gray-800 transition-colors"
+          className="p-2 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-gray-800 transition-colors"
           title="指标配置中心 (Indicators)"
         >
           <BarChart2 size={18} />
@@ -175,35 +176,36 @@ export const TopBar = ({
         >
           <Trash2 size={18} />
         </button>
+
+        <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700 ml-3 shrink-0">
+          <span className="text-xs text-gray-400 w-24 text-center">
+            K线: {currentIndex} / 500
+          </span>
+          <button
+            onClick={handleNextCandle}
+            disabled={isPlaying || currentIndex >= 500}
+            className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+            title="步进一根 K线"
+          >
+            <StepForward size={16} />
+          </button>
+          <button
+            onClick={() => setIsPlaying(!isPlaying)}
+            disabled={currentIndex >= 500}
+            className={`p-1.5 rounded text-white disabled:opacity-50 ${
+              isPlaying
+                ? "bg-amber-600 hover:bg-amber-500"
+                : "bg-blue-600 hover:bg-blue-500"
+            }`}
+            title={isPlaying ? "暂停播放" : "自动播放"}
+          >
+            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700">
-        <span className="text-xs text-gray-400 w-24 text-center">
-          K线: {currentIndex} / 500
-        </span>
-        <button
-          onClick={handleNextCandle}
-          disabled={isPlaying || currentIndex >= 500}
-          className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-          title="步进一根 K线"
-        >
-          <StepForward size={16} />
-        </button>
-        <button
-          onClick={() => setIsPlaying(!isPlaying)}
-          disabled={currentIndex >= 500}
-          className={`p-1.5 rounded text-white disabled:opacity-50 ${
-            isPlaying
-              ? "bg-amber-600 hover:bg-amber-500"
-              : "bg-blue-600 hover:bg-blue-500"
-          }`}
-          title={isPlaying ? "暂停播放" : "自动播放"}
-        >
-          {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-        </button>
-      </div>
-
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-6 shrink-0">
+        <UserHeaderActions simpleMode={true} />
         <div className="flex flex-col items-end">
           <span className="text-xs text-gray-500">账户余额</span>
           <span className="font-mono font-bold text-white">
