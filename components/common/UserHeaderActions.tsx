@@ -1,7 +1,14 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useCallback, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Image as ImageIcon, LogIn, LogOut, Coins, List } from "lucide-react";
+import {
+  Image as ImageIcon,
+  LogIn,
+  LogOut,
+  Coins,
+  List,
+  ShieldCheck,
+} from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import CreditLogModal from "./CreditLogModal";
@@ -22,7 +29,7 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
   const profileRef = useRef<HTMLDivElement>(null);
   const { customFetch } = useFetch();
 
-  const fetchBalance = async () => {
+  const fetchBalance = useCallback(async () => {
     if (!user) return;
     try {
       const res = await customFetch("/api/user/balance");
@@ -33,13 +40,31 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
     } catch (error) {
       console.error("Error fetching balance:", error);
     }
-  };
+  }, [customFetch, user]);
 
   useEffect(() => {
     if (isProfileOpen && user) {
-      fetchBalance();
+      void fetchBalance();
     }
-  }, [isProfileOpen, user]);
+  }, [fetchBalance, isProfileOpen, user]);
+
+  const getMe = useCallback(async () => {
+    if (user) return;
+    try {
+      const res = await customFetch("/api/user/me");
+      if (res.status === 401) {
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`获取用户信息失败: ${res.statusText}`);
+      }
+      const data = await res.json();
+      login(data.data);
+      return;
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+    }
+  }, [customFetch, login, user]);
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -52,11 +77,11 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    getMe();
+    void getMe();
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [getMe]);
 
   // Generate a consistent color from string
   const getAvatarColor = (str: string) => {
@@ -82,23 +107,6 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
       "bg-rose-500",
     ];
     return colors[Math.abs(hash) % colors.length];
-  };
-
-  const getMe = async () => {
-    try {
-      const res = await customFetch("/api/user/me");
-      if (res.status === 401) {
-        return;
-      }
-      if (!res.ok) {
-        throw new Error(`获取用户信息失败: ${res.statusText}`);
-      }
-      const data = await res.json();
-      login(data.data);
-      return;
-    } catch (error) {
-      console.error("Error fetching user info:", error);
-    }
   };
 
   return (
@@ -171,6 +179,18 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
               </div>
 
               <div className="py-1">
+                {user.is_superuser && (
+                  <button
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      router.push("/cms");
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center transition-colors"
+                  >
+                    <ShieldCheck className="w-4 h-4 mr-2 text-sky-500" />
+                    后台数据管理
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     logout();
