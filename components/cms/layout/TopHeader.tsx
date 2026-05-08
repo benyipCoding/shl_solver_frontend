@@ -40,7 +40,7 @@ export default function TopHeader() {
       {mounted &&
         mobileMenuOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex md:hidden">
+          <div className="fixed inset-0 z-9999 flex md:hidden">
             <div
               className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm"
               onClick={() => setMobileMenuOpen(false)}

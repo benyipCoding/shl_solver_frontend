@@ -18,7 +18,7 @@ export default function Sidebar({ className }: { className?: string }) {
 
   return (
     <aside
-      className={`w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 ${className ?? "hidden md:flex"}`}
+      className={`w-64 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 ${className ?? "hidden md:flex"}`}
     >
       <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
         <ShieldCheck className="h-6 w-6 text-sky-500 mr-3" />

@@ -94,7 +94,7 @@ const LoadingState = () => {
       {Array.from({ length: 5 }).map((_, index) => (
         <div
           key={index}
-          className="h-20 animate-pulse rounded-[24px] bg-slate-100 dark:bg-slate-800"
+          className="h-20 animate-pulse rounded-3xl bg-slate-100 dark:bg-slate-800"
         />
       ))}
     </div>
@@ -198,7 +198,7 @@ export default function AdminTable({
                   key={user.id}
                   type="button"
                   onClick={() => onSelectRow(user.id)}
-                  className={`rounded-[24px] border p-4 text-left transition ${
+                  className={`rounded-3xl border p-4 text-left transition ${
                     selectedDetailId === user.id
                       ? "border-sky-300 bg-sky-50/80 shadow-sm dark:border-sky-500/40 dark:bg-sky-500/10"
                       : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
@@ -274,7 +274,7 @@ export default function AdminTable({
                 key={wallet.user_id}
                 type="button"
                 onClick={() => onSelectRow(wallet.user_id)}
-                className={`rounded-[24px] border p-4 text-left transition ${
+                className={`rounded-3xl border p-4 text-left transition ${
                   selectedDetailId === wallet.user_id
                     ? "border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10"
                     : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
@@ -342,7 +342,7 @@ export default function AdminTable({
                 key={log.id}
                 type="button"
                 onClick={() => onSelectRow(log.id)}
-                className={`rounded-[24px] border p-4 text-left transition ${
+                className={`rounded-3xl border p-4 text-left transition ${
                   selectedDetailId === log.id
                     ? "border-amber-300 bg-amber-50/80 shadow-sm dark:border-amber-500/40 dark:bg-amber-500/10"
                     : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
@@ -395,7 +395,7 @@ export default function AdminTable({
                 key={record.id}
                 type="button"
                 onClick={() => onSelectRow(record.id)}
-                className={`rounded-[24px] border p-4 text-left transition ${
+                className={`rounded-3xl border p-4 text-left transition ${
                   selectedDetailId === record.id
                     ? "border-violet-300 bg-violet-50/80 shadow-sm dark:border-violet-500/40 dark:bg-violet-500/10"
                     : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
