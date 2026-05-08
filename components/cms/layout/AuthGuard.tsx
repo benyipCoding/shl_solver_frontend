@@ -41,10 +41,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         if (!active) return;
 
         if (!currentUser.is_superuser) {
-          setAccessState("denied");
-          setAccessMessage(
-            "当前账号不是超级管理员，无法访问后台数据管理页面。"
-          );
+          router.replace("/");
           return;
         }
 
