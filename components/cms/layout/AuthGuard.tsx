@@ -19,8 +19,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [accessMessage, setAccessMessage] = useState<string | null>(null);
 
   const redirectToAuth = () => {
+    // 根据您的要求，在 CMS 页面未登录或登出时，将 callbackUrl 指向主页 '/'
+    // 避免普通账户登录后直接跳回 /cms 导致鉴权失败循环。
     const params = new URLSearchParams();
-    params.set("callbackUrl", "/cms");
+    params.set("callbackUrl", "/");
     router.replace(`/auth?${params.toString()}`);
   };
 
