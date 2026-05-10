@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { getAdminMe } from "@/components/cms/api";
@@ -37,7 +37,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     let active = true;
 
     const verifyAdmin = async () => {
-      setAccessState("checking");
+      // 移除 setAccessState("checking")，避免在 re-render 重新校验时触发闪屏
       try {
         const currentUser = await getAdminMe(customFetch);
         if (!active) return;
@@ -76,12 +76,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [customFetch, isLoading, router, user]);
 
   if (isLoading || accessState === "checking") {
-    return (
-      <div className="flex flex-col min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <LoaderCircle className="h-10 w-10 animate-spin text-sky-500 mb-4" />
-        <p className="text-slate-500 text-sm">正在验证最高管理员权限...</p>
-      </div>
-    );
+    return null;
   }
 
   if (accessState === "denied") {
