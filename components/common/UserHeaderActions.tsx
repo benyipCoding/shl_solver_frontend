@@ -49,7 +49,8 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
   }, [fetchBalance, isProfileOpen, user]);
 
   const getMe = useCallback(async () => {
-    if (user) return;
+    // 如果已有用户且存在 `is_superuser` 字段，说明是完整的缓存
+    if (user && user.is_superuser !== undefined) return;
     try {
       const res = await customFetch("/api/user/me");
       if (res.status === 401) {

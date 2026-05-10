@@ -48,6 +48,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: userData.id,
         username: userData.username,
         email: userData.email,
+        is_staff: userData.is_staff,
+        is_superuser: userData.is_superuser,
       })
     );
   };
