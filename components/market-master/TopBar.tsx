@@ -1,5 +1,6 @@
 import React from "react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
+import { SymbolSearchSelect } from "@/components/market-master/SymbolSearchSelect";
 import {
   CircleDollarSign,
   MousePointer2,
@@ -22,6 +23,7 @@ export const TopBar = ({
   setSymbol,
   timeframe,
   setTimeframe,
+  timeframeOptions,
   mode,
   setMode,
   drawType,
@@ -34,10 +36,15 @@ export const TopBar = ({
   isAIAnalyzing,
   setIsIndicatorModalOpen,
   clearLines,
+  isBacktestMode,
+  setIsBacktestMode,
   currentIndex,
+  totalCandles,
   handleNextCandle,
   isPlaying,
   setIsPlaying,
+  isDataLoading,
+  dataError,
   balance,
   totalFloatingPnl,
 }: any) => {
@@ -49,25 +56,32 @@ export const TopBar = ({
         </h1>
 
         <div className="flex gap-2">
-          <select
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-md px-2 py-1 outline-none hover:bg-gray-700 transition-colors cursor-pointer"
-          >
-            <option value="XAU/USD">XAU/USD</option>
-            <option value="GBP/USD">GBP/USD</option>
-            <option value="EUR/USD">EUR/USD</option>
-          </select>
+          <SymbolSearchSelect value={symbol} onChange={setSymbol} />
           <select
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value)}
             className="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-md px-2 py-1 outline-none hover:bg-gray-700 transition-colors cursor-pointer"
           >
-            <option value="D1">D1</option>
-            <option value="H4">H4</option>
-            <option value="m30">m30</option>
+            {timeframeOptions.map((option: any) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
+
+        {isDataLoading ? (
+          <div className="text-xs text-blue-400 shrink-0">
+            加载真实行情中...
+          </div>
+        ) : dataError ? (
+          <div
+            className="max-w-56 truncate text-xs text-red-400"
+            title={dataError}
+          >
+            {dataError}
+          </div>
+        ) : null}
 
         <div className="flex bg-gray-800 rounded-lg p-1 gap-1 border border-gray-700 ml-2">
           <button
@@ -150,7 +164,7 @@ export const TopBar = ({
 
         <button
           onClick={handleAIChartAnalysis}
-          disabled={isAIAnalyzing}
+          disabled={isAIAnalyzing || isDataLoading || totalCandles === 0}
           className="flex items-center gap-1.5 ml-3 px-3 py-1.5 rounded-lg bg-linear-to-r from-indigo-600/20 to-purple-600/20 hover:from-indigo-600 hover:to-purple-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.15)] disabled:opacity-50"
           title="AI 自动扫描盘面形态、支撑阻力与趋势"
         >
@@ -177,31 +191,49 @@ export const TopBar = ({
           <Trash2 size={18} />
         </button>
 
-        <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700 ml-3 shrink-0">
-          <span className="text-xs text-gray-400 w-24 text-center">
-            K线: {currentIndex} / 500
-          </span>
-          <button
-            onClick={handleNextCandle}
-            disabled={isPlaying || currentIndex >= 500}
-            className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-            title="步进一根 K线"
-          >
-            <StepForward size={16} />
-          </button>
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            disabled={currentIndex >= 500}
-            className={`p-1.5 rounded text-white disabled:opacity-50 ${
-              isPlaying
-                ? "bg-amber-600 hover:bg-amber-500"
-                : "bg-blue-600 hover:bg-blue-500"
-            }`}
-            title={isPlaying ? "暂停播放" : "自动播放"}
-          >
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </button>
-        </div>
+        <button
+          onClick={() => setIsBacktestMode(!isBacktestMode)}
+          disabled={isDataLoading || totalCandles === 0}
+          className={`ml-3 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+            isBacktestMode
+              ? "border-blue-500/50 bg-blue-600/20 text-blue-200 hover:bg-blue-600/30"
+              : "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
+          }`}
+          title={isBacktestMode ? "退出逐K回测模式" : "开启逐K回测模式"}
+        >
+          <StepForward size={14} />
+          {isBacktestMode ? "退出逐K回测" : "开启逐K回测"}
+        </button>
+
+        {isBacktestMode && (
+          <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700 shrink-0">
+            <span className="text-xs text-gray-400 w-32 text-center">
+              K线: {currentIndex} / {totalCandles.toLocaleString()}
+            </span>
+            <button
+              onClick={handleNextCandle}
+              disabled={
+                isDataLoading || isPlaying || currentIndex >= totalCandles
+              }
+              className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+              title="步进一根 K线"
+            >
+              <StepForward size={16} />
+            </button>
+            <button
+              onClick={() => setIsPlaying(!isPlaying)}
+              disabled={isDataLoading || currentIndex >= totalCandles}
+              className={`p-1.5 rounded text-white disabled:opacity-50 ${
+                isPlaying
+                  ? "bg-amber-600 hover:bg-amber-500"
+                  : "bg-blue-600 hover:bg-blue-500"
+              }`}
+              title={isPlaying ? "暂停播放" : "自动播放"}
+            >
+              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-6 shrink-0">

@@ -16,11 +16,11 @@ import { ShapeConfigModal } from "@/components/market-master/ShapeConfigModal";
 import { TopBar } from "@/components/market-master/TopBar";
 import { TradeHistory } from "@/components/market-master/TradeHistory";
 import { TradeTerminal } from "@/components/market-master/TradeTerminal";
+import { useFetch } from "@/context/FetchContext";
 import {
   ShapePrimitive,
   calculateEMA,
   calculateMACD,
-  generateMockData,
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
 import {
@@ -37,6 +37,7 @@ import {
 // 4. React 主组件
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
+const MAX_CANDLE_COUNT = 5000;
 const SELECTED_LINE_WIDTH_BOOST = 1;
 const RIGHT_PANEL_DEFAULT_WIDTH = 320;
 const RIGHT_PANEL_MIN_WIDTH = 260;
@@ -45,6 +46,17 @@ const BOTTOM_PANEL_DEFAULT_HEIGHT = 224;
 const BOTTOM_PANEL_MIN_HEIGHT = 160;
 const MAIN_CHART_MIN_HEIGHT = 180;
 const MACD_PANEL_HEIGHT = 192;
+
+const TIMEFRAME_OPTIONS = [
+  { value: "m1", label: "M1", interval: "1min" },
+  { value: "m5", label: "M5", interval: "5min" },
+  { value: "m15", label: "M15", interval: "15min" },
+  { value: "m30", label: "M30", interval: "30min" },
+  { value: "H1", label: "H1", interval: "1h" },
+  { value: "H4", label: "H4", interval: "4h" },
+  { value: "D1", label: "D1", interval: "1day" },
+  { value: "W1", label: "W1", interval: "1week" },
+];
 
 const createDefaultIndicatorConfig = () => ({
   emas: [],
@@ -92,7 +104,52 @@ const getDefaultRiskDistance = (nextSymbol: string) => {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
+const getIntervalByTimeframe = (timeframe: string) =>
+  TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.interval ||
+  "1day";
+
+const toUtcEpochSeconds = (dateTimeValue: string) => {
+  if (!dateTimeValue) return null;
+
+  const normalizedValue = dateTimeValue.includes("T")
+    ? dateTimeValue
+    : dateTimeValue.includes(" ")
+      ? dateTimeValue.replace(" ", "T")
+      : `${dateTimeValue}T00:00:00`;
+
+  const utcValue = /[zZ]|[+-]\d{2}:\d{2}$/.test(normalizedValue)
+    ? normalizedValue
+    : `${normalizedValue}Z`;
+
+  const parsedTime = Date.parse(utcValue);
+  if (Number.isNaN(parsedTime)) return null;
+
+  return Math.floor(parsedTime / 1000);
+};
+
+const normalizeCandles = (candles: any[] = []) =>
+  candles
+    .map((candle) => {
+      const time = toUtcEpochSeconds(candle.datetime);
+      const open = Number(candle.open);
+      const high = Number(candle.high);
+      const low = Number(candle.low);
+      const close = Number(candle.close);
+
+      if (
+        time === null ||
+        [open, high, low, close].some((value) => Number.isNaN(value))
+      ) {
+        return null;
+      }
+
+      return { time, open, high, low, close };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.time - right.time);
+
 export default function ChartApp() {
+  const { customFetch } = useFetch();
   const layoutRef = useRef<any>(null);
   const mainColumnRef = useRef<any>(null);
   const chartContainerRef = useRef<any>(null);
@@ -163,33 +220,18 @@ export default function ChartApp() {
   const [symbol, setSymbol] = useState("XAU/USD");
   const [timeframe, setTimeframe] = useState("D1");
   const priceDecimals = symbol === "XAU/USD" ? 2 : 4;
+  const [isBacktestMode, setIsBacktestMode] = useState(false);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [dataError, setDataError] = useState("");
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
-  const initialRawDataRef = useRef<any[]>(
-    generateMockData(symbol, timeframe, 500)
-  );
-  const fullDataRef = useRef<any[]>(initialRawDataRef.current);
+  const fullDataRef = useRef<any[]>([]);
   const fullEmaDataRef = useRef<any>({});
   const fullMacdDataRef = useRef<any[]>([]);
 
-  if (Object.keys(fullEmaDataRef.current).length === 0) {
-    indConfig.emas.forEach((ema) => {
-      fullEmaDataRef.current[ema.id] = calculateEMA(
-        initialRawDataRef.current,
-        ema.period
-      );
-    });
-    fullMacdDataRef.current = calculateMACD(
-      initialRawDataRef.current,
-      12,
-      26,
-      9
-    );
-  }
-
-  const [currentIndex, setCurrentIndex] = useState(INITIAL_VISIBLE_COUNT);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const currentIndexRef = useRef(currentIndex);
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -459,8 +501,104 @@ export default function ChartApp() {
   }, []);
 
   useEffect(() => {
+    if (isDataLoading || currentIndex === 0) {
+      setLegendData(null);
+      return;
+    }
+
     updateLegend(stateRef.current.lastHoveredTime);
-  }, [currentIndex, symbol, timeframe, updateLegend, indConfig]);
+  }, [currentIndex, symbol, timeframe, updateLegend, indConfig, isDataLoading]);
+
+  const focusLatestCandles = useCallback((dataOverride: any[] = []) => {
+    const data = dataOverride.length ? dataOverride : fullDataRef.current;
+    if (!chartRef.current || !data.length) return;
+
+    const visibleCount = Math.min(INITIAL_VISIBLE_COUNT, data.length);
+    const from = data[Math.max(data.length - visibleCount, 0)]?.time;
+    const to = data[data.length - 1]?.time;
+
+    if (from == null || to == null) return;
+
+    const applyRange = () => {
+      if (!chartRef.current) return;
+      chartRef.current.timeScale().setVisibleRange({ from, to });
+      if (subChartRef.current) {
+        subChartRef.current.timeScale().setVisibleRange({ from, to });
+      }
+    };
+
+    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      window.requestAnimationFrame(applyRange);
+      return;
+    }
+
+    applyRange();
+  }, []);
+
+  const syncDisplayedData = useCallback(
+    (
+      dataOverride: any[] = [],
+      nextIndexOverride?: number,
+      nextBacktestMode: boolean = false,
+      shouldFitContent: boolean = false
+    ) => {
+      const data = dataOverride.length ? dataOverride : fullDataRef.current;
+      const activeConfig = indConfigRef.current;
+      const nextIndex = Math.min(
+        Math.max(nextIndexOverride ?? currentIndexRef.current, 0),
+        data.length
+      );
+      const candleData = nextBacktestMode ? data.slice(0, nextIndex) : data;
+
+      if (seriesRef.current) {
+        seriesRef.current.setData(candleData);
+      }
+
+      activeConfig.emas.forEach((ema: any) => {
+        const emaSeries = emaSeriesRefs.current[ema.id];
+        const emaData = fullEmaDataRef.current[ema.id] || [];
+        if (!emaSeries) return;
+        emaSeries.setData(
+          nextBacktestMode ? emaData.slice(0, nextIndex) : emaData
+        );
+      });
+
+      if (
+        macdHistSeriesRef.current &&
+        macdLineSeriesRef.current &&
+        macdSignalSeriesRef.current
+      ) {
+        const macdData = nextBacktestMode
+          ? fullMacdDataRef.current.slice(0, nextIndex)
+          : fullMacdDataRef.current;
+
+        macdHistSeriesRef.current.setData(
+          macdData.map((d) => ({
+            time: d.time,
+            value: d.hist,
+            color: activeConfig.macd.histColors[d.colorType],
+          }))
+        );
+        macdLineSeriesRef.current.setData(
+          macdData.map((d) => ({ time: d.time, value: d.macd }))
+        );
+        macdSignalSeriesRef.current.setData(
+          macdData.map((d) => ({ time: d.time, value: d.signal }))
+        );
+      }
+
+      if (nextBacktestMode) {
+        if (shouldFitContent) {
+          if (chartRef.current) chartRef.current.timeScale().fitContent();
+          if (subChartRef.current) subChartRef.current.timeScale().fitContent();
+        }
+        return;
+      }
+
+      focusLatestCandles(data);
+    },
+    [focusLatestCandles]
+  );
 
   const stopResizeDrag = useCallback(() => {
     if (!resizeStateRef.current.direction) return;
@@ -619,75 +757,139 @@ export default function ChartApp() {
   };
 
   useEffect(() => {
-    setIsPlaying(false);
-    clearAllSelections();
-    setTrades([]);
-    Object.values(orderLinesRef.current).forEach((lines) => {
-      if (lines.entry && seriesRef.current)
-        seriesRef.current.removePriceLine(lines.entry);
-      if (lines.sl && seriesRef.current)
-        seriesRef.current.removePriceLine(lines.sl);
-      if (lines.tp && seriesRef.current)
-        seriesRef.current.removePriceLine(lines.tp);
-    });
-    orderLinesRef.current = {};
-    const { sl, tp } = getDefaultRiskDistance(symbol);
-    setSlDistance(sl);
-    setTpDistance(tp);
+    let cancelled = false;
 
-    const newData = generateMockData(symbol, timeframe, 500);
-    fullDataRef.current = newData;
+    const clearChartData = () => {
+      fullDataRef.current = [];
+      fullEmaDataRef.current = {};
+      fullMacdDataRef.current = [];
+      setCurrentIndex(0);
+      setLegendData(null);
 
-    const newEmaData = {};
-    indConfig.emas.forEach((ema) => {
-      newEmaData[ema.id] = calculateEMA(newData, ema.period);
-    });
-    fullEmaDataRef.current = newEmaData;
-    fullMacdDataRef.current = calculateMACD(
-      newData,
-      indConfig.macd.fast,
-      indConfig.macd.slow,
-      indConfig.macd.signal
-    );
-
-    setCurrentIndex(INITIAL_VISIBLE_COUNT);
-
-    if (seriesRef.current) {
-      seriesRef.current.setData(newData.slice(0, INITIAL_VISIBLE_COUNT));
-      indConfig.emas.forEach((ema) => {
-        if (emaSeriesRefs.current[ema.id])
-          emaSeriesRefs.current[ema.id].setData(
-            fullEmaDataRef.current[ema.id].slice(0, INITIAL_VISIBLE_COUNT)
-          );
-      });
-      if (
-        macdHistSeriesRef.current &&
-        macdLineSeriesRef.current &&
-        macdSignalSeriesRef.current
-      ) {
-        const initialMacd = fullMacdDataRef.current.slice(
-          0,
-          INITIAL_VISIBLE_COUNT
-        );
-        macdHistSeriesRef.current.setData(
-          initialMacd.map((d) => ({
-            time: d.time,
-            value: d.hist,
-            color: indConfig.macd.histColors[d.colorType],
-          }))
-        );
-        macdLineSeriesRef.current.setData(
-          initialMacd.map((d) => ({ time: d.time, value: d.macd }))
-        );
-        macdSignalSeriesRef.current.setData(
-          initialMacd.map((d) => ({ time: d.time, value: d.signal }))
-        );
+      if (seriesRef.current) {
+        seriesRef.current.setData([]);
       }
-      if (chartRef.current) chartRef.current.timeScale().fitContent();
-      if (subChartRef.current) subChartRef.current.timeScale().fitContent();
-    }
+
+      Object.values(emaSeriesRefs.current).forEach((emaSeries: any) => {
+        emaSeries.setData([]);
+      });
+
+      if (macdHistSeriesRef.current) macdHistSeriesRef.current.setData([]);
+      if (macdLineSeriesRef.current) macdLineSeriesRef.current.setData([]);
+      if (macdSignalSeriesRef.current) macdSignalSeriesRef.current.setData([]);
+    };
+
+    const removeOrderLines = () => {
+      Object.values(orderLinesRef.current).forEach((lines: any) => {
+        if (lines.entry && seriesRef.current)
+          seriesRef.current.removePriceLine(lines.entry);
+        if (lines.sl && seriesRef.current)
+          seriesRef.current.removePriceLine(lines.sl);
+        if (lines.tp && seriesRef.current)
+          seriesRef.current.removePriceLine(lines.tp);
+      });
+      orderLinesRef.current = {};
+    };
+
+    const loadMarketData = async () => {
+      setIsPlaying(false);
+      clearAllSelections();
+      setTrades([]);
+      removeOrderLines();
+      setDataError("");
+      setIsDataLoading(true);
+      setLegendData(null);
+
+      const { sl, tp } = getDefaultRiskDistance(symbol);
+      setSlDistance(sl);
+      setTpDistance(tp);
+
+      try {
+        const params = new URLSearchParams({
+          symbol,
+          interval: getIntervalByTimeframe(timeframe),
+          outputsize: String(MAX_CANDLE_COUNT),
+          timezone: "UTC",
+        });
+        const response = await customFetch(
+          `/api/market_master/kline/defaults?${params.toString()}`
+        );
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            payload?.error || payload?.message || "获取 K 线数据失败"
+          );
+        }
+
+        const newData = normalizeCandles(payload?.data?.candles || []);
+        if (!newData.length) {
+          throw new Error("后端未返回可用的 K 线数据");
+        }
+
+        if (cancelled) return;
+
+        fullDataRef.current = newData;
+
+        const activeConfig = indConfigRef.current;
+        const newEmaData = {};
+        activeConfig.emas.forEach((ema) => {
+          newEmaData[ema.id] = calculateEMA(newData, ema.period);
+        });
+        fullEmaDataRef.current = newEmaData;
+        fullMacdDataRef.current = calculateMACD(
+          newData,
+          activeConfig.macd.fast,
+          activeConfig.macd.slow,
+          activeConfig.macd.signal
+        );
+
+        const nextCurrentIndex = isBacktestMode
+          ? Math.min(INITIAL_VISIBLE_COUNT, newData.length)
+          : newData.length;
+        setCurrentIndex(nextCurrentIndex);
+        syncDisplayedData(
+          newData,
+          nextCurrentIndex,
+          isBacktestMode,
+          isBacktestMode
+        );
+      } catch (error: any) {
+        if (cancelled) return;
+
+        clearChartData();
+        setDataError(error?.message || "获取 K 线数据失败");
+      } finally {
+        if (!cancelled) {
+          setIsDataLoading(false);
+        }
+      }
+    };
+
+    void loadMarketData();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe]);
+  }, [clearAllSelections, customFetch, symbol, timeframe, syncDisplayedData]);
+
+  useEffect(() => {
+    if (isDataLoading || !fullDataRef.current.length) return;
+
+    setIsPlaying(false);
+    const nextCurrentIndex = isBacktestMode
+      ? Math.min(INITIAL_VISIBLE_COUNT, fullDataRef.current.length)
+      : fullDataRef.current.length;
+
+    setCurrentIndex(nextCurrentIndex);
+    syncDisplayedData(
+      fullDataRef.current,
+      nextCurrentIndex,
+      isBacktestMode,
+      isBacktestMode
+    );
+  }, [isBacktestMode, isDataLoading, syncDisplayedData]);
 
   const applyIndicatorConfig = () => {
     const nextConfig = cloneIndicatorConfig(draftConfig);
@@ -805,6 +1007,10 @@ export default function ChartApp() {
   useEffect(() => {
     if (!isMounted || !chartContainerRef.current) return;
 
+    const visibleCount =
+      currentIndexRef.current ||
+      Math.min(INITIAL_VISIBLE_COUNT, fullDataRef.current.length);
+
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: "solid", color: "#111827" },
@@ -828,7 +1034,7 @@ export default function ChartApp() {
       wickDownColor: "#ef4444",
       priceLineVisible: false,
     });
-    series.setData(fullDataRef.current.slice(0, INITIAL_VISIBLE_COUNT));
+    series.setData(fullDataRef.current.slice(0, visibleCount));
 
     indConfig.emas.forEach((ema) => {
       const emaSeries = chart.addSeries(LineSeries, {
@@ -840,7 +1046,7 @@ export default function ChartApp() {
         title: "",
       });
       emaSeries.setData(
-        fullEmaDataRef.current[ema.id].slice(0, INITIAL_VISIBLE_COUNT)
+        fullEmaDataRef.current[ema.id]?.slice(0, visibleCount) || []
       );
       emaSeriesRefs.current[ema.id] = emaSeries;
     });
@@ -1299,6 +1505,9 @@ export default function ChartApp() {
   useEffect(() => {
     if (!isMounted || !indConfig.macd.enabled || !subChartContainerRef.current)
       return;
+    const visibleCount =
+      currentIndexRef.current ||
+      Math.min(INITIAL_VISIBLE_COUNT, fullMacdDataRef.current.length);
     const subChart = createChart(subChartContainerRef.current, {
       layout: {
         background: { type: "solid", color: "#111827" },
@@ -1336,10 +1545,7 @@ export default function ChartApp() {
       title: "",
     });
 
-    const currentMacdData = fullMacdDataRef.current.slice(
-      0,
-      currentIndexRef.current
-    );
+    const currentMacdData = fullMacdDataRef.current.slice(0, visibleCount);
     macdHist.setData(
       currentMacdData.map((d) => ({
         time: d.time,
@@ -1541,6 +1747,8 @@ export default function ChartApp() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type) => {
+    if (!fullDataRef.current.length || currentPrice <= 0) return;
+
     const entry = currentPrice;
     const sl = slEnabled
       ? type === "Buy"
@@ -1846,6 +2054,7 @@ export default function ChartApp() {
   };
 
   const formatVal = (val) => (val != null ? val.toFixed(priceDecimals) : "-");
+  const totalCandles = fullDataRef.current.length;
 
   if (!isMounted) return null;
 
@@ -1907,6 +2116,7 @@ export default function ChartApp() {
         setSymbol={setSymbol}
         timeframe={timeframe}
         setTimeframe={setTimeframe}
+        timeframeOptions={TIMEFRAME_OPTIONS}
         mode={mode}
         setMode={setInteractionMode}
         drawType={drawType}
@@ -1919,10 +2129,15 @@ export default function ChartApp() {
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
         clearLines={clearAllLines}
+        isBacktestMode={isBacktestMode}
+        setIsBacktestMode={setIsBacktestMode}
         currentIndex={currentIndex}
+        totalCandles={totalCandles}
         handleNextCandle={handleNextCandle}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
+        isDataLoading={isDataLoading}
+        dataError={dataError}
         balance={balance}
         totalFloatingPnl={totalFloatingPnl}
       />
@@ -1934,6 +2149,16 @@ export default function ChartApp() {
           className="flex-1 flex flex-col overflow-hidden min-w-0"
         >
           <div className="flex-1 relative bg-[#111827]">
+            {isDataLoading && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 text-sm text-blue-200 backdrop-blur-sm">
+                正在加载真实 K 线数据...
+              </div>
+            )}
+            {!isDataLoading && dataError && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 px-6 text-center text-sm text-red-300 backdrop-blur-sm">
+                {dataError}
+              </div>
+            )}
             {legendData && (
               <div className="absolute top-3 left-4 z-10 flex items-center gap-4 text-xs font-mono pointer-events-none bg-gray-900/60 px-3 py-1.5 rounded border border-gray-700/50 backdrop-blur-sm">
                 <div className="text-gray-400 font-semibold tracking-wider">
