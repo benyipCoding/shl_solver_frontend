@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, Suspense } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   LogIn,
@@ -16,15 +17,17 @@ import { FormData, ValidationErrors } from "@/interfaces/auth";
 import ValidatedInput from "@/components/auth/ValidatedInput";
 import toast from "react-hot-toast";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { useAuth } from "@/context/AuthContext";
+
+type AuthMode = "login" | "register" | "forgot";
 
 const AuthContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login } = useAuth();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
-  const [authMode, setAuthMode] = useState<"login" | "register" | "forgot">(
-    "login"
-  ); // 'login', 'register', 'forgot'
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
 
   // Form State
   const [formData, setFormData] = useState<FormData>({
@@ -56,10 +59,54 @@ const AuthContent = () => {
   };
 
   useEffect(() => {
-    if (authMode === "login") {
-      fetchCaptcha();
+    let isMounted = true;
+
+    const loadInitialCaptcha = async () => {
+      try {
+        const res = await fetch("/api/captcha?captchaId=", {
+          method: "GET",
+        });
+        const data = await res.json();
+        if (isMounted && data.image && data.captchaId) {
+          setCaptchaImage(data.image);
+          setCaptchaId(data.captchaId);
+        }
+      } catch (error) {
+        console.error("Failed to fetch captcha", error);
+      }
+    };
+
+    // 首屏默认就是登录态，首张验证码需要在挂载后请求。
+    void loadInitialCaptcha();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const resetForm = () => {
+    setFormData({
+      email: "",
+      password: "",
+      captcha: "",
+      confirmPassword: "",
+    });
+    setErrors({});
+  };
+
+  const switchAuthMode = (nextMode: AuthMode) => {
+    setAuthMode(nextMode);
+    resetForm();
+
+    if (nextMode === "login") {
+      setCaptchaImage("");
+      void fetchCaptcha();
+      return;
     }
-  }, [authMode]);
+
+    setCaptchaImage("");
+    setCaptchaId("");
+  };
 
   // --- Form Validation Logic ---
   const validateField = (name: string, value: string | undefined): string => {
@@ -146,6 +193,14 @@ const AuthContent = () => {
       return;
     }
 
+    const userData = data.data ?? data;
+
+    if (!userData || userData.id == null) {
+      toast.error("登录成功，但未获取到用户信息");
+      return;
+    }
+
+    login(userData);
     toast.success("登录成功！");
     router.push(callbackUrl);
   };
@@ -170,9 +225,8 @@ const AuthContent = () => {
       }
 
       toast.success("注册成功，请使用新账号登录");
-      setAuthMode("login");
-      resetForm();
-    } catch (error) {
+      switchAuthMode("login");
+    } catch {
       toast.error("网络请求失败，请检查网络");
     }
   };
@@ -196,7 +250,7 @@ const AuthContent = () => {
       toast.success(data.message || "重置邮件已发送，请检查您的邮箱");
       // Optional: don't auto switch, let user read message
       // setAuthMode("login")
-    } catch (error) {
+    } catch {
       toast.error("网络请求失败，请检查网络");
     }
   };
@@ -226,20 +280,6 @@ const AuthContent = () => {
     if (authMode === "register") handleRegister();
     if (authMode === "forgot") handleForgotPassword();
   };
-
-  const resetForm = () => {
-    setFormData({
-      email: "",
-      password: "",
-      captcha: "",
-      confirmPassword: "",
-    });
-    setErrors({});
-  };
-
-  useEffect(() => {
-    resetForm();
-  }, [authMode]);
 
   return (
     <div className="h-dvh w-full bg-slate-50 flex items-center justify-center p-4 font-sans selection:bg-blue-100 relative overflow-hidden dark:bg-slate-950 dark:selection:bg-blue-900 transition-colors duration-500">
@@ -342,7 +382,7 @@ const AuthContent = () => {
 
                 <button
                   type="button"
-                  onClick={() => setAuthMode("forgot")}
+                  onClick={() => switchAuthMode("forgot")}
                   className="absolute right-2 -bottom-6 text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
                   忘记密码?
@@ -379,10 +419,13 @@ const AuthContent = () => {
                   onClick={fetchCaptcha}
                 >
                   {captchaImage ? (
-                    <img
+                    <Image
                       src={captchaImage}
                       alt="验证码"
-                      className="w-full h-full object-cover"
+                      fill
+                      sizes="112px"
+                      unoptimized
+                      className="object-cover"
                     />
                   ) : (
                     <div className="flex items-center justify-center w-full h-full">
@@ -408,7 +451,7 @@ const AuthContent = () => {
                 还没有账号？{" "}
                 <button
                   type="button"
-                  onClick={() => setAuthMode("register")}
+                  onClick={() => switchAuthMode("register")}
                   className="text-blue-600 font-bold hover:text-blue-700 transition-colors"
                 >
                   立即注册
@@ -467,7 +510,7 @@ const AuthContent = () => {
                 已有账号？{" "}
                 <button
                   type="button"
-                  onClick={() => setAuthMode("login")}
+                  onClick={() => switchAuthMode("login")}
                   className="text-blue-600 font-bold hover:text-blue-700 transition-colors"
                 >
                   直接登录
@@ -508,7 +551,7 @@ const AuthContent = () => {
                 想起密码了？{" "}
                 <button
                   type="button"
-                  onClick={() => setAuthMode("login")}
+                  onClick={() => switchAuthMode("login")}
                   className="text-blue-600 font-bold hover:text-blue-700 transition-colors"
                 >
                   返回登录

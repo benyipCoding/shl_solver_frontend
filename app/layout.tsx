@@ -4,6 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { FetchProvider } from "@/context/FetchContext";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
+import { PostHogProvider } from "@/components/common/PostHogProvider";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { ReduxProvider } from "@/store/ReduxProvider";
 
@@ -39,7 +40,8 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <style>{`
+            <PostHogProvider>
+              <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
 
         body, .font-sans {
@@ -61,12 +63,13 @@ export default function RootLayout({
           padding-top: env(safe-area-inset-top);
         }
       `}</style>
-            <AuthProvider>
-              <FetchProvider>
-                <Toaster position="top-center" />
-                {children}
-              </FetchProvider>
-            </AuthProvider>
+              <AuthProvider>
+                <FetchProvider>
+                  <Toaster position="top-center" />
+                  {children}
+                </FetchProvider>
+              </AuthProvider>
+            </PostHogProvider>
           </ThemeProvider>
         </ReduxProvider>
       </body>
