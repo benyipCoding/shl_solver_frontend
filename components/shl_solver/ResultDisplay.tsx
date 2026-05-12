@@ -37,11 +37,23 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
 
   const getCodeContent = () => {
     if (!result) return "";
+    let codeStr = "";
     if (result.solutions && result.solutions[selectedLanguage]) {
-      return result.solutions[selectedLanguage];
+      codeStr = result.solutions[selectedLanguage];
+    } else {
+      // Fallback if the legacy structure is returned
+      codeStr = (result as any).code || "";
     }
-    // Fallback if the legacy structure is returned
-    return (result as any).code || "";
+
+    // 前端针对大模型经常不听话使用 sys.stdin 的额外处理
+    if (selectedLanguage === "python") {
+      codeStr = codeStr
+        .replace(/sys\.stdin\.read\(\)\.split\(\)/g, "input().split()")
+        .replace(/sys\.stdin\.readline\(\)/g, "input()")
+        .replace(/import sys\n?/g, "");
+    }
+
+    return codeStr;
   };
 
   const copyToClipboard = (text: string) => {
