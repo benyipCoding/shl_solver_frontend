@@ -8,6 +8,7 @@ import {
   HistogramSeries,
   LineSeries,
   createChart,
+  type Time,
 } from "lightweight-charts";
 
 import { AiReviewModal } from "@/components/market-master/AiReviewModal";
@@ -57,6 +58,54 @@ const TIMEFRAME_OPTIONS = [
   { value: "D1", label: "D1", interval: "1day" },
   { value: "W1", label: "W1", interval: "1week" },
 ];
+
+const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
+
+const padTimePart = (value: number) => String(value).padStart(2, "0");
+
+const toUtcDate = (timeValue: Time) => {
+  if (typeof timeValue === "number") {
+    return new Date(timeValue * 1000);
+  }
+
+  if (typeof timeValue === "string") {
+    const parsedTime = Date.parse(
+      timeValue.includes("T") ? timeValue : `${timeValue}T00:00:00Z`
+    );
+    return Number.isNaN(parsedTime) ? null : new Date(parsedTime);
+  }
+
+  if (
+    timeValue &&
+    typeof timeValue === "object" &&
+    typeof timeValue.year === "number" &&
+    typeof timeValue.month === "number" &&
+    typeof timeValue.day === "number"
+  ) {
+    return new Date(
+      Date.UTC(timeValue.year, timeValue.month - 1, timeValue.day)
+    );
+  }
+
+  return null;
+};
+
+const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
+  const utcDate = toUtcDate(timeValue);
+  if (!utcDate) return "";
+
+  const dateLabel = `${utcDate.getUTCFullYear()}/${padTimePart(
+    utcDate.getUTCMonth() + 1
+  )}/${padTimePart(utcDate.getUTCDate())}`;
+
+  if (!INTRADAY_TIMEFRAMES.has(timeframe)) {
+    return dateLabel;
+  }
+
+  return `${dateLabel} ${padTimePart(utcDate.getUTCHours())}:${padTimePart(
+    utcDate.getUTCMinutes()
+  )}`;
+};
 
 const createDefaultIndicatorConfig = () => ({
   emas: [],
@@ -219,10 +268,15 @@ export default function ChartApp() {
 
   const [symbol, setSymbol] = useState("XAU/USD");
   const [timeframe, setTimeframe] = useState("D1");
+  const timeframeRef = useRef(timeframe);
   const priceDecimals = symbol === "XAU/USD" ? 2 : 4;
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+
+  useEffect(() => {
+    timeframeRef.current = timeframe;
+  }, [timeframe]);
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
@@ -1016,6 +1070,10 @@ export default function ChartApp() {
         background: { type: "solid", color: "#111827" },
         textColor: "#9ca3af",
       },
+      localization: {
+        timeFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
       grid: {
         vertLines: { color: "#1f2937" },
         horzLines: { color: "#1f2937" },
@@ -1023,6 +1081,10 @@ export default function ChartApp() {
       crosshair: { mode: 0 },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
+      timeScale: {
+        tickMarkFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
       rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled },
     });
 
@@ -1084,7 +1146,8 @@ export default function ChartApp() {
       const time = param.time;
       let price = series.coordinateToPrice(param.point.y);
 
-      let dragTime = time || chart.timeScale().coordinateToTime(param.point.x);
+      const dragTime =
+        time || chart.timeScale().coordinateToTime(param.point.x);
       if (magnetRef.current && dragTime && price !== null) {
         const candle = fullDataRef.current.find((d) => d.time === dragTime);
         if (candle) {
@@ -1513,6 +1576,10 @@ export default function ChartApp() {
         background: { type: "solid", color: "#111827" },
         textColor: "#9ca3af",
       },
+      localization: {
+        timeFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
       grid: {
         vertLines: { color: "#1f2937" },
         horzLines: { color: "#1f2937" },
@@ -1520,7 +1587,12 @@ export default function ChartApp() {
       crosshair: { mode: 0 },
       width: subChartContainerRef.current.clientWidth,
       height: subChartContainerRef.current.clientHeight,
-      timeScale: { visible: true, borderColor: "#374151" },
+      timeScale: {
+        visible: true,
+        borderColor: "#374151",
+        tickMarkFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
       rightPriceScale: { borderColor: "#374151" },
     });
 
