@@ -54,7 +54,7 @@ export interface SHLAnalysisPayload {
 }
 
 export interface SHLCodeVerifyPayload {
-  image_data: ImageData;
+  images_data: ImageData[];
   reference_code: string;
   language: string;
 }

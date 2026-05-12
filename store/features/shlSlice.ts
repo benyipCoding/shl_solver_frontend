@@ -14,8 +14,8 @@ interface ShlState {
   error: string | null;
   selectedModel: number | null;
   verification: {
-    image: string | null;
-    imageData: ImageData | null;
+    images: string[];
+    imagesData: ImageData[];
     loading: boolean;
     result: VerificationResult | null;
     error: string | null;
@@ -30,8 +30,8 @@ const initialState: ShlState = {
   error: null,
   selectedModel: null,
   verification: {
-    image: null,
-    imageData: null,
+    images: [],
+    imagesData: [],
     loading: false,
     result: null,
     error: null,
@@ -67,15 +67,22 @@ export const shlSlice = createSlice({
       state.result = action.payload;
     },
     // Verification reducers
-    setVerificationImage: (
+    addVerificationImages: (
       state,
-      action: PayloadAction<{
-        image: string | null;
-        imageData: ImageData | null;
-      }>
+      action: PayloadAction<{ previews: string[]; data: ImageData[] }>
     ) => {
-      state.verification.image = action.payload.image;
-      state.verification.imageData = action.payload.imageData;
+      state.verification.images.push(...action.payload.previews);
+      state.verification.imagesData.push(...action.payload.data);
+    },
+    removeVerificationImage: (state, action: PayloadAction<number>) => {
+      state.verification.images.splice(action.payload, 1);
+      state.verification.imagesData.splice(action.payload, 1);
+    },
+    clearVerificationImages: (state) => {
+      state.verification.images = [];
+      state.verification.imagesData = [];
+      state.verification.result = null;
+      state.verification.error = null;
     },
     setVerificationLoading: (state, action: PayloadAction<boolean>) => {
       state.verification.loading = action.payload;
@@ -107,7 +114,9 @@ export const {
   clearImages,
   setLoading,
   setResult,
-  setVerificationImage,
+  addVerificationImages,
+  removeVerificationImage,
+  clearVerificationImages,
   setVerificationLoading,
   setVerificationResult,
   setVerificationError,

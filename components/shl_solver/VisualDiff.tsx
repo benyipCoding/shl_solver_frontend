@@ -14,7 +14,9 @@ import { compressImage } from "@/utils/helpers";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
-  setVerificationImage,
+  addVerificationImages,
+  removeVerificationImage,
+  clearVerificationImages,
   setVerificationLoading,
   setVerificationResult,
   setVerificationError,
@@ -28,8 +30,8 @@ interface VisualDiffProps {
 const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   const dispatch = useAppDispatch();
   const {
-    image: verificationImage,
-    imageData: verificationImageData,
+    images: verificationImages,
+    imagesData: verificationImagesData,
     loading: verificationLoading,
     result: verificationResult,
     error: verificationError,
@@ -40,7 +42,7 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   const verificationFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleResetVerification = () => {
-    dispatch(resetVerification());
+    dispatch(clearVerificationImages());
     if (verificationFileInputRef.current)
       verificationFileInputRef.current.value = "";
   };
@@ -48,42 +50,57 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   const handleVerificationFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith("image/")) {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      const validFiles = files.filter((f) => f.type.startsWith("image/"));
+      if (validFiles.length > 0) {
         setIsCompressing(true);
         try {
-          const compressedFile = await compressImage(file);
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            if (
-              event.target?.result &&
-              typeof event.target.result === "string"
-            ) {
-              const base64Data = (event.target.result as string).split(",")[1];
-              dispatch(
-                setVerificationImage({
-                  image: event.target.result as string,
-                  imageData: {
-                    mimeType: compressedFile.type,
-                    data: base64Data,
-                  },
-                })
-              );
-              dispatch(setVerificationResult(null));
-              dispatch(setVerificationError(null));
-            }
-            setIsCompressing(false);
-          };
-          reader.onerror = () => {
-            setIsCompressing(false);
-            toast.error("读取文件失败");
-          };
-          reader.readAsDataURL(compressedFile);
+          const previews: string[] = [];
+          const data: ImageData[] = [];
+
+          for (const file of validFiles) {
+            const compressedFile = await compressImage(file);
+            const base64Str = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                if (
+                  event.target?.result &&
+                  typeof event.target.result === "string"
+                ) {
+                  resolve(event.target.result);
+                } else {
+                  reject(new Error("读取失败"));
+                }
+              };
+              reader.onerror = () => reject(new Error("FileReader error"));
+              reader.readAsDataURL(compressedFile);
+            });
+
+            previews.push(base64Str);
+            data.push({
+              mimeType: compressedFile.type,
+              data: base64Str.split(",")[1],
+            });
+          }
+
+          dispatch(
+            addVerificationImages({
+              previews,
+              data,
+            })
+          );
+          dispatch(setVerificationResult(null));
+          dispatch(setVerificationError(null));
         } catch (error) {
           console.error("Compression error:", error);
-          setIsCompressing(false);
           toast.error("图片处理失败");
+        } finally {
+          setIsCompressing(false);
+          // Reset input value so same files can be selected again if needed
+          if (verificationFileInputRef.current) {
+            verificationFileInputRef.current.value = "";
+          }
         }
       } else {
         toast.error("请上传图片文件");
@@ -92,7 +109,13 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   };
 
   const verifyTypedCode = async () => {
-    if (!verificationImageData || !referenceCode || verificationLoading) return;
+    if (
+      !verificationImagesData ||
+      verificationImagesData.length === 0 ||
+      !referenceCode ||
+      verificationLoading
+    )
+      return;
 
     dispatch(setVerificationLoading(true));
     dispatch(setVerificationError(null));
@@ -102,7 +125,7 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
 
     try {
       const payload = {
-        image_data: verificationImageData,
+        images_data: verificationImagesData,
         reference_code: referenceCode,
         language: "python", // 默认 Python，也可以根据需要动态传入
       };
@@ -143,22 +166,27 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
           <ScanSearch className="w-5 h-5 mr-2 text-orange-500" /> 拍照找茬纠错
           (Beta)
         </h4>
-        {verificationImage && !verificationLoading && (
+        {verificationImages.length > 0 && !verificationLoading && (
           <button
             onClick={handleResetVerification}
             className="text-xs text-slate-400 hover:text-red-500 flex items-center font-medium"
           >
-            <Trash2 className="w-3 h-3 mr-1" /> 清除照片
+            <Trash2 className="w-3 h-3 mr-1" /> 清空照片
           </button>
         )}
       </div>
 
       <p className="text-sm text-slate-500 mb-4 leading-relaxed dark:text-slate-400">
-        抄写遇到报错？拍摄一张包含您
+        抄写遇到报错？拍摄包含您
         <span className="font-bold text-slate-700 dark:text-slate-200">
           考试电脑屏幕上所敲代码
         </span>
-        的照片上传，AI 将帮您快速找出拼写或缩进错误。
+        的照片上传，AI
+        将帮您快速找出拼写或缩进错误。支持上传多张照片以覆盖长代码。
+        <span className="mt-1.5 text-amber-600 dark:text-amber-500 font-medium flex items-center">
+          ⚠️
+          注意：多张图片将按显示顺序进行拼接分析，请务必保证图片顺序与代码从上至下的逻辑一致。
+        </span>
       </p>
 
       {/* Hidden Input for Verification */}
@@ -168,10 +196,11 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         onChange={handleVerificationFileChange}
         className="hidden"
         accept="image/*"
+        multiple
       />
 
       {/* Upload/Preview Area */}
-      {!verificationImage ? (
+      {verificationImages.length === 0 ? (
         <div
           onClick={() => verificationFileInputRef.current?.click()}
           className="relative overflow-hidden border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-orange-300 hover:bg-orange-50 transition-all cursor-pointer bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700"
@@ -192,12 +221,34 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 animate-fadeIn dark:bg-slate-800 dark:border-slate-700">
-            <img
-              src={verificationImage}
-              alt="Verification snapshot"
-              className="w-full object-contain max-h-48"
-            />
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {verificationImages.map((img, idx) => (
+              <div
+                key={idx}
+                className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 animate-fadeIn dark:bg-slate-800 dark:border-slate-700 aspect-video"
+              >
+                <img
+                  src={img}
+                  alt={`Verification snapshot ${idx + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  onClick={() => dispatch(removeVerificationImage(idx))}
+                  className="absolute top-1.5 right-1.5 bg-black/50 hover:bg-red-500/80 text-white p-1 rounded-full backdrop-blur-sm transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+
+            {/* Add more button */}
+            <div
+              onClick={() => verificationFileInputRef.current?.click()}
+              className="relative rounded-lg overflow-hidden border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-500 hover:border-orange-400 hover:text-orange-500 hover:bg-orange-50 cursor-pointer transition-all dark:bg-slate-800/50 dark:border-slate-700 aspect-video"
+            >
+              <ImageIcon className="w-6 h-6 mb-1" />
+              <span className="text-xs font-medium">添加照片</span>
+            </div>
           </div>
 
           <button
