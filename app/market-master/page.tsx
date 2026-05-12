@@ -60,6 +60,35 @@ const TIMEFRAME_OPTIONS = [
 ];
 
 const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
+const CONTINUOUS_WEEKEND_ASSET_TYPES = new Set([
+  "digital currency",
+  "cryptocurrency",
+]);
+const TIMEFRAME_DURATION_SECONDS: Record<string, number> = {
+  m1: 60,
+  m5: 5 * 60,
+  m15: 15 * 60,
+  m30: 30 * 60,
+  H1: 60 * 60,
+  H4: 4 * 60 * 60,
+  D1: 24 * 60 * 60,
+  W1: 7 * 24 * 60 * 60,
+};
+const WEEKEND_CLOSE_DAY_UTC = 5;
+const WEEKEND_CLOSE_HOUR_UTC = 22;
+const WEEKEND_REOPEN_HOUR_UTC = 22;
+const WEEKEND_PLACEHOLDER_MAX_RANGE_RATIO = 0.0002;
+const WEEKEND_FULLY_CLOSED_RATIO = 0.75;
+const WEEKEND_PARTIAL_CLOSED_RATIO = 0.5;
+
+type CandleInput = {
+  datetime?: string;
+  open?: number | string | null;
+  high?: number | string | null;
+  low?: number | string | null;
+  close?: number | string | null;
+  [key: string]: unknown;
+};
 
 const padTimePart = (value: number) => String(value).padStart(2, "0");
 
@@ -176,8 +205,111 @@ const toUtcEpochSeconds = (dateTimeValue: string) => {
   return Math.floor(parsedTime / 1000);
 };
 
-const normalizeCandles = (candles: any[] = []) =>
-  candles
+const isContinuousWeekendMarket = (assetType?: string | null) =>
+  CONTINUOUS_WEEKEND_ASSET_TYPES.has(assetType?.trim().toLowerCase() || "");
+
+const isFlatPlaceholderBar = (candle: CandleInput) => {
+  const open = Number(candle.open);
+  const high = Number(candle.high);
+  const low = Number(candle.low);
+  const close = Number(candle.close);
+
+  if ([open, high, low, close].some((value) => Number.isNaN(value))) {
+    return false;
+  }
+
+  const referencePrice = Math.max(
+    Math.abs(open),
+    Math.abs(high),
+    Math.abs(low),
+    Math.abs(close),
+    1
+  );
+
+  return (
+    Math.abs(high - low) / referencePrice <= WEEKEND_PLACEHOLDER_MAX_RANGE_RATIO
+  );
+};
+
+const getClosedSessionEpochs = (
+  candles: CandleInput[],
+  timeframe: string,
+  assetType?: string | null
+) => {
+  if (isContinuousWeekendMarket(assetType)) {
+    return new Set<number>();
+  }
+
+  const durationSeconds = TIMEFRAME_DURATION_SECONDS[timeframe] || 86400;
+  const skipEpochs = new Set<number>();
+
+  let currentBlock: CandleInput[] = [];
+
+  const processBlock = (block: CandleInput[]) => {
+    if (!block.length) return;
+    const tStart = toUtcEpochSeconds(block[0].datetime);
+    const tEnd = toUtcEpochSeconds(block[block.length - 1].datetime);
+    if (tStart !== null && tEnd !== null) {
+      const duration = tEnd - tStart + durationSeconds;
+      // 任何连续平滑K线构成 >= 20小时 的时间段，判定为休市（周末或公众节假日）
+      if (duration >= 20 * 3600) {
+        block.forEach((c) => {
+          const t = toUtcEpochSeconds(c.datetime);
+          if (t !== null) skipEpochs.add(t);
+        });
+      }
+    }
+  };
+
+  const sorted = [...candles].sort((a, b) => {
+    const ta = toUtcEpochSeconds(a.datetime) || 0;
+    const tb = toUtcEpochSeconds(b.datetime) || 0;
+    return ta - tb;
+  });
+
+  for (let i = 0; i < sorted.length; i++) {
+    const t = toUtcEpochSeconds(sorted[i].datetime);
+    if (t === null) continue;
+
+    if (isFlatPlaceholderBar(sorted[i])) {
+      currentBlock.push(sorted[i]);
+    } else {
+      processBlock(currentBlock);
+      currentBlock = [];
+    }
+  }
+  processBlock(currentBlock);
+
+  return skipEpochs;
+};
+
+const normalizeCandles = (
+  candles: CandleInput[] = [],
+  options: {
+    timeframe?: string;
+    assetType?: string | null;
+    shouldFilterNonTrading?: boolean;
+  } = {}
+) => {
+  const skipEpochs =
+    options.shouldFilterNonTrading !== false
+      ? getClosedSessionEpochs(
+          candles,
+          options.timeframe || "",
+          options.assetType
+        )
+      : new Set<number>();
+
+  return [...candles]
+    .sort(
+      (a, b) =>
+        (toUtcEpochSeconds(a.datetime) || 0) -
+        (toUtcEpochSeconds(b.datetime) || 0)
+    )
+    .filter((candle) => {
+      const t = toUtcEpochSeconds(candle.datetime);
+      return t !== null && !skipEpochs.has(t);
+    })
     .map((candle) => {
       const time = toUtcEpochSeconds(candle.datetime);
       const open = Number(candle.open);
@@ -194,8 +326,29 @@ const normalizeCandles = (candles: any[] = []) =>
 
       return { time, open, high, low, close };
     })
-    .filter(Boolean)
-    .sort((left, right) => left.time - right.time);
+    .filter(Boolean) as {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  }[];
+};
+
+const hasResidualWeekendPlaceholderBars = (
+  candles: CandleInput[] = [],
+  options: {
+    timeframe?: string;
+    assetType?: string | null;
+  } = {}
+) => {
+  const skipEpochs = getClosedSessionEpochs(
+    candles,
+    options.timeframe || "",
+    options.assetType
+  );
+  return skipEpochs.size > 0;
+};
 
 export default function ChartApp() {
   const { customFetch } = useFetch();
@@ -864,6 +1017,7 @@ export default function ChartApp() {
           interval: getIntervalByTimeframe(timeframe),
           outputsize: String(MAX_CANDLE_COUNT),
           timezone: "UTC",
+          filter_non_trading: "true",
         });
         const response = await customFetch(
           `/api/market_master/kline/defaults?${params.toString()}`
@@ -876,7 +1030,20 @@ export default function ChartApp() {
           );
         }
 
-        const newData = normalizeCandles(payload?.data?.candles || []);
+        const rawCandles = payload?.data?.candles || [];
+        const assetType = payload?.data?.meta?.asset_type;
+        const shouldApplyFallbackNonTradingFilter =
+          payload?.data?.filtering?.applied !== true ||
+          hasResidualWeekendPlaceholderBars(rawCandles, {
+            timeframe,
+            assetType,
+          });
+
+        const newData = normalizeCandles(rawCandles, {
+          timeframe,
+          assetType,
+          shouldFilterNonTrading: shouldApplyFallbackNonTradingFilter,
+        });
         if (!newData.length) {
           throw new Error("后端未返回可用的 K 线数据");
         }
