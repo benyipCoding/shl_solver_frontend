@@ -843,8 +843,8 @@ const aggregateSkillBenchmarks = (
     Object.entries(aggregateByAbilityKey).map(([abilityKey, aggregate]) => [
       abilityKey,
       {
-        top10Casts: Math.round(aggregate.totalCasts / sampleSize),
-        top10Hits: Math.round(aggregate.totalHits / sampleSize),
+        top10Casts: Math.floor(aggregate.totalCasts / sampleSize),
+        top10Hits: Math.floor(aggregate.totalHits / sampleSize),
         top10Damage: Math.round(aggregate.totalDamage / sampleSize),
         top10Rdps: Math.round(aggregate.totalRdps / sampleSize),
       },
