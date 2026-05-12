@@ -49,8 +49,8 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     if (selectedLanguage === "python") {
       codeStr = codeStr
         .replace(/sys\.stdin\.read\(\)\.split\(\)/g, "input().split()")
-        .replace(/sys\.stdin\.readline\(\)/g, "input()")
-        .replace(/import sys\n?/g, "");
+        .replace(/sys\.stdin\.readline\(\)/g, "input()");
+      // .replace(/import sys\n?/g, "");
     }
 
     return codeStr;
