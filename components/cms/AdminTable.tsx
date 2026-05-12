@@ -357,16 +357,9 @@ export default function AdminTable({
                       {formatActionTypeLabel(log.action_type)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      stopPropagation(event);
-                      onSelectRow(log.id);
-                    }}
-                    className={actionButtonClassName}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 text-right shrink-0 pt-1">
+                    {formatDateTime(log.created_at)}
+                  </div>
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
