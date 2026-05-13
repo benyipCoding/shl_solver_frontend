@@ -307,31 +307,6 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       )}
 
-      {!loading && images.length === 0 && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 md:p-5 dark:bg-indigo-900/10 dark:border-indigo-900/30">
-          <h4 className="font-semibold text-indigo-900 mb-3 flex items-center text-sm md:text-base dark:text-indigo-300">
-            <BookOpen className="w-4 h-4 mr-2" /> 使用技巧
-          </h4>
-          <ul className="space-y-2 text-xs md:text-sm text-indigo-800 dark:text-indigo-300/80">
-            <li className="flex items-start">
-              <span className="mr-2">•</span>{" "}
-              <span className="font-semibold">多页题目：</span>
-              题目太长可分段截图，依次上传。
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>{" "}
-              <span className="font-semibold">顺序重要：</span>AI
-              会按上传顺序理解上下文。
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>{" "}
-              <span className="font-semibold">移动端：</span>
-              支持直接拍照或从相册选择。
-            </li>
-          </ul>
-        </div>
-      )}
-
       {/* Image Preview Modal */}
       {previewImage && (
         <div

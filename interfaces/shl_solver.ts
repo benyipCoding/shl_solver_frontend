@@ -63,6 +63,7 @@ export interface TaskStatusResponse<T> {
 export interface SHLAnalysisPayload {
   images_data: ImageData[];
   llmId: number;
+  test_case_image?: ImageData | null;
 }
 
 export interface SHLCodeVerifyPayload {

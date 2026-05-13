@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   Cpu,
@@ -20,7 +21,6 @@ import {
 import ImageUploader from "@/components/shl_solver/ImageUploader";
 import ResultDisplay from "@/components/shl_solver/ResultDisplay";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
-import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { fetchLLMs } from "@/utils/helpers";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
@@ -28,9 +28,27 @@ import HistoryDrawer from "@/components/shl_solver/HistoryDrawer";
 import { SHLSolverHistoryItem } from "@/interfaces/history";
 import { useAppDispatch } from "@/store/hooks";
 import { addImages, clearImages } from "@/store/features/shlSlice";
+import TestCaseUploader from "@/components/shl_solver/TestCaseUploader";
+
+const SHL_TASK_ID_STORAGE_KEY = "shl_task_id";
+const SHL_TASK_IMAGES_STORAGE_KEY = "shl_task_images";
+const SHL_TASK_MODEL_ID_STORAGE_KEY = "shl_task_model_id";
+const SHL_TASK_TEST_CASE_IMAGE_STORAGE_KEY = "shl_task_test_case_image";
+
+const normalizeHistoryImageUrl = (url: string) => {
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://") ||
+    url.startsWith("/") ||
+    url.startsWith("data:")
+  ) {
+    return url;
+  }
+
+  return `/uploads/${url}`;
+};
 
 const SHLSolverPage = () => {
-  const { login } = useAuth();
   const { customFetch } = useFetch();
   const dispatch = useAppDispatch();
   const [models, setModels] = useState<Model[]>([]);
@@ -43,6 +61,31 @@ const SHLSolverPage = () => {
   const [isHistoryView, setIsHistoryView] = useState(false); // Track if viewing history
   const [showSponsorModal, setShowSponsorModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [testCaseImage, setTestCaseImage] = useState<ImageData | null>(null);
+  const [historyTestCaseImageUrl, setHistoryTestCaseImageUrl] = useState<
+    string | null
+  >(null);
+
+  const clearPersistedTaskState = useCallback(() => {
+    sessionStorage.removeItem(SHL_TASK_ID_STORAGE_KEY);
+    sessionStorage.removeItem(SHL_TASK_IMAGES_STORAGE_KEY);
+    sessionStorage.removeItem(SHL_TASK_MODEL_ID_STORAGE_KEY);
+    sessionStorage.removeItem(SHL_TASK_TEST_CASE_IMAGE_STORAGE_KEY);
+  }, []);
+
+  const handleTestCaseImageChange = useCallback(
+    (image: ImageData | null) => {
+      setHistoryTestCaseImageUrl(null);
+      setTestCaseImage(image);
+      clearPersistedTaskState();
+      setError(null);
+
+      if (!isHistoryView) {
+        setResult(null);
+      }
+    },
+    [clearPersistedTaskState, isHistoryView]
+  );
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -67,7 +110,7 @@ const SHLSolverPage = () => {
 
     while (!isCompleted) {
       // 如果本地存储的taskId变了或者被清空了，说明开启了新任务或重置了，则停止当前轮询
-      const currentTaskId = sessionStorage.getItem("shl_task_id");
+      const currentTaskId = sessionStorage.getItem(SHL_TASK_ID_STORAGE_KEY);
       if (currentTaskId !== taskId) {
         break;
       }
@@ -86,9 +129,7 @@ const SHLSolverPage = () => {
             `查询任务状态失败: ${statusData.error || statusRes.statusText}`
           );
           isCompleted = true;
-          sessionStorage.removeItem("shl_task_id");
-          sessionStorage.removeItem("shl_task_images");
-          sessionStorage.removeItem("shl_task_model_id");
+          clearPersistedTaskState();
           setLoading(false);
           break;
         }
@@ -99,9 +140,7 @@ const SHLSolverPage = () => {
         ) {
           setResult(statusData.result);
           isCompleted = true;
-          sessionStorage.removeItem("shl_task_id");
-          sessionStorage.removeItem("shl_task_images");
-          sessionStorage.removeItem("shl_task_model_id");
+          clearPersistedTaskState();
           setLoading(false);
         } else if (
           statusData.status === "FAILED" ||
@@ -110,12 +149,10 @@ const SHLSolverPage = () => {
           setError(`分析失败: ${statusData.error || "发生了未知错误"}`);
           setResult(null);
           isCompleted = true;
-          sessionStorage.removeItem("shl_task_id");
-          sessionStorage.removeItem("shl_task_images");
-          sessionStorage.removeItem("shl_task_model_id");
+          clearPersistedTaskState();
           setLoading(false);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Task Polling Error:", err);
       }
     }
@@ -126,11 +163,13 @@ const SHLSolverPage = () => {
     try {
       setLoading(true);
       setError(null);
+      setHistoryTestCaseImageUrl(null);
       setIsHistoryView(false); // Reset history view on new analysis
 
       const payload: SHLAnalysisPayload = {
         images_data: imagesData,
         llmId: Number(selectedModel),
+        test_case_image: testCaseImage,
       };
 
       const res = await customFetch(
@@ -152,14 +191,29 @@ const SHLSolverPage = () => {
 
       // 如果返回了任务ID，则进入轮询
       if (data.task_id) {
-        sessionStorage.setItem("shl_task_id", data.task_id);
+        sessionStorage.setItem(SHL_TASK_ID_STORAGE_KEY, data.task_id);
         if (selectedModel) {
-          sessionStorage.setItem("shl_task_model_id", String(selectedModel));
+          sessionStorage.setItem(
+            SHL_TASK_MODEL_ID_STORAGE_KEY,
+            String(selectedModel)
+          );
         }
         try {
-          sessionStorage.setItem("shl_task_images", JSON.stringify(imagesData));
+          sessionStorage.setItem(
+            SHL_TASK_IMAGES_STORAGE_KEY,
+            JSON.stringify(imagesData)
+          );
+
+          if (testCaseImage) {
+            sessionStorage.setItem(
+              SHL_TASK_TEST_CASE_IMAGE_STORAGE_KEY,
+              JSON.stringify(testCaseImage)
+            );
+          } else {
+            sessionStorage.removeItem(SHL_TASK_TEST_CASE_IMAGE_STORAGE_KEY);
+          }
         } catch (e) {
-          console.error("Failed to save images to sessionStorage", e);
+          console.error("Failed to save SHL task state to sessionStorage", e);
         }
         pollTask(data.task_id);
       } else {
@@ -167,7 +221,7 @@ const SHLSolverPage = () => {
         setResult(data);
         setLoading(false);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("SHL Analysis Error:", error);
       setError("上传的截图有无法识别的内容");
       setLoading(false);
@@ -177,6 +231,7 @@ const SHLSolverPage = () => {
   const handleHistorySelect = (item: SHLSolverHistoryItem) => {
     // 1. Set the result for display
     if (item.result_json) {
+      setError(null);
       setResult(item.result_json);
     } else {
       setResult(null);
@@ -190,17 +245,18 @@ const SHLSolverPage = () => {
     if (item.image_urls && item.image_urls.length > 0) {
       const urls = item.image_urls.filter((url: string) => url.trim() !== "");
       if (urls.length > 0) {
-        // Prepend /uploads/ if not present and if it's not a full URL (http)
-        const displayUrls = urls.map((url) => {
-          if (url.startsWith("http") || url.startsWith("/uploads/")) {
-            return url;
-          }
-          return `/uploads/${url}`;
-        });
+        const displayUrls = urls.map(normalizeHistoryImageUrl);
         // Pass empty data array since we don't have base64 for re-analysis, just previews
         dispatch(addImages({ previews: displayUrls, data: [] }));
       }
     }
+
+    setHistoryTestCaseImageUrl(
+      item.test_case_image_url
+        ? normalizeHistoryImageUrl(item.test_case_image_url)
+        : null
+    );
+    setTestCaseImage(null);
 
     // 3. Set model if available (optional, just for UI consistency)
     if (item.model) {
@@ -222,7 +278,9 @@ const SHLSolverPage = () => {
 
   useEffect(() => {
     if (models.length > 0) {
-      const savedModelId = sessionStorage.getItem("shl_task_model_id");
+      const savedModelId = sessionStorage.getItem(
+        SHL_TASK_MODEL_ID_STORAGE_KEY
+      );
       if (savedModelId && models.some((m) => m.id === Number(savedModelId))) {
         setSelectedModel(Number(savedModelId));
       } else {
@@ -233,9 +291,11 @@ const SHLSolverPage = () => {
 
   // 恢复之前的轮询状态
   useEffect(() => {
-    const savedTaskId = sessionStorage.getItem("shl_task_id");
+    const savedTaskId = sessionStorage.getItem(SHL_TASK_ID_STORAGE_KEY);
     if (savedTaskId) {
-      const savedImagesStr = sessionStorage.getItem("shl_task_images");
+      const savedImagesStr = sessionStorage.getItem(
+        SHL_TASK_IMAGES_STORAGE_KEY
+      );
       if (savedImagesStr) {
         try {
           const imagesData = JSON.parse(savedImagesStr) as ImageData[];
@@ -247,6 +307,21 @@ const SHLSolverPage = () => {
           console.error("Failed to restore images from sessionStorage", e);
         }
       }
+
+      const savedTestCaseStr = sessionStorage.getItem(
+        SHL_TASK_TEST_CASE_IMAGE_STORAGE_KEY
+      );
+      if (savedTestCaseStr) {
+        try {
+          setTestCaseImage(JSON.parse(savedTestCaseStr) as ImageData);
+        } catch (e) {
+          console.error(
+            "Failed to restore test case image from sessionStorage",
+            e
+          );
+        }
+      }
+
       pollTask(savedTaskId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -364,22 +439,35 @@ const SHLSolverPage = () => {
       <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 w-full flex-1 flex flex-col">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full flex-1">
           {/* Left Column: Image Uploader */}
-          <ImageUploader
-            onAnalyze={analyzeProblem}
-            onClearResult={() => {
-              sessionStorage.removeItem("shl_task_id");
-              sessionStorage.removeItem("shl_task_images");
-              sessionStorage.removeItem("shl_task_model_id");
-              setResult(null);
-              setIsHistoryView(false); // Clear history view when result cleared
-            }}
-            loading={loading}
-            selectedModelName={
-              models.find((m) => m.id === selectedModel)?.name.split(" ")[2] ||
-              "AI"
-            }
-            isHistoryView={isHistoryView || !!result}
-          />
+          <div className="flex h-full flex-col gap-4 md:gap-6">
+            <div className="min-h-112 flex-none md:flex-8 flex flex-col transition-all duration-300">
+              <ImageUploader
+                onAnalyze={analyzeProblem}
+                onClearResult={() => {
+                  clearPersistedTaskState();
+                  setError(null);
+                  setResult(null);
+                  setIsHistoryView(false); // Clear history view when result cleared
+                }}
+                loading={loading}
+                selectedModelName={
+                  models
+                    .find((m) => m.id === selectedModel)
+                    ?.name.split(" ")[2] || "AI"
+                }
+                isHistoryView={isHistoryView || !!result}
+              />
+            </div>
+
+            <div className="flex-none md:flex-2 flex flex-col transition-all duration-300">
+              <TestCaseUploader
+                imageData={testCaseImage}
+                previewUrl={historyTestCaseImageUrl}
+                onChange={handleTestCaseImageChange}
+                loading={loading}
+              />
+            </div>
+          </div>
 
           {/* Right Column: Result Display */}
           <ResultDisplay result={result} />
@@ -436,9 +524,11 @@ const SHLSolverPage = () => {
                   {/* Alipay */}
                   <div className="flex flex-col items-center space-y-2 md:space-y-3 group">
                     <div className="relative p-1.5 md:p-2 bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
-                      <img
+                      <Image
                         src="/sponsor/alipay.png"
                         alt="支付宝打赏"
+                        width={176}
+                        height={176}
                         className="w-28 h-28 md:w-44 md:h-44 object-contain rounded-md md:rounded-lg"
                       />
                       <div className="absolute inset-0 border-2 border-blue-500/0 group-hover:border-blue-500/10 rounded-lg md:rounded-xl transition-colors pointer-events-none"></div>
@@ -457,9 +547,11 @@ const SHLSolverPage = () => {
                   {/* WeChat */}
                   <div className="flex flex-col items-center space-y-2 md:space-y-3 group">
                     <div className="relative p-1.5 md:p-2 bg-white rounded-lg md:rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-transform hover:-translate-y-1 duration-300">
-                      <img
+                      <Image
                         src="/sponsor/wechat.png"
                         alt="微信打赏"
+                        width={176}
+                        height={176}
                         className="w-28 h-28 md:w-44 md:h-44 object-contain rounded-md md:rounded-lg"
                       />
                       <div className="absolute inset-0 border-2 border-green-500/0 group-hover:border-green-500/10 rounded-lg md:rounded-xl transition-colors pointer-events-none"></div>

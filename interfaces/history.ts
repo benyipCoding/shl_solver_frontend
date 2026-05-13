@@ -3,6 +3,7 @@ import { AnalysisResult } from "./shl_solver";
 export interface SHLSolverHistoryItem {
   id: number;
   image_urls: string[]; // List of URLs, matching backend
+  test_case_image_url?: string | null;
   token_count: number;
   model: string;
   username: string; // Updated to match backend 'username' field
