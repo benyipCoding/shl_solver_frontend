@@ -449,6 +449,10 @@ const SHLSolverPage = () => {
                   setResult(null);
                   setIsHistoryView(false); // Clear history view when result cleared
                 }}
+                onClearAll={() => {
+                  setTestCaseImage(null);
+                  setHistoryTestCaseImageUrl(null);
+                }}
                 loading={loading}
                 selectedModelName={
                   models

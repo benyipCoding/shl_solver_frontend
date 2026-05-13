@@ -23,6 +23,7 @@ import {
 interface ImageUploaderProps {
   onAnalyze: (imagesData: ImageData[]) => void;
   onClearResult: () => void;
+  onClearAll?: () => void;
   loading: boolean;
   selectedModelName: string;
   isHistoryView?: boolean;
@@ -31,6 +32,7 @@ interface ImageUploaderProps {
 const ImageUploader: React.FC<ImageUploaderProps> = ({
   onAnalyze,
   onClearResult,
+  onClearAll,
   loading,
   selectedModelName,
   isHistoryView = false,
@@ -149,6 +151,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
     dispatch(clearImages());
     setError(null);
     onClearResult();
+    if (onClearAll) onClearAll();
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -266,6 +269,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg font-medium transition-colors flex items-center justify-center border border-slate-200 dark:border-slate-700 dashed-border text-sm md:text-base"
+                disabled={loading || isHistoryView}
               >
                 <Plus className="w-4 h-4 mr-2" /> 继续添加 / 粘贴
               </button>
