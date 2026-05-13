@@ -461,6 +461,25 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                   </div>
                 </div>
 
+                {/* 测试用例补充 */}
+                <div className="flex items-start">
+                  <div className="bg-cyan-100 dark:bg-cyan-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-cyan-600 dark:text-cyan-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-cyan-200/50 dark:border-cyan-800/50">
+                    <Terminal className="w-5 h-5 md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      补充测试用例
+                    </h4>
+                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      部分老题的示例与实际要求不符。建议解析时附上{" "}
+                      <span className="font-medium text-cyan-600 dark:text-cyan-400">
+                        测试用例截图
+                      </span>
+                      ，帮助 AI 精准对焦需求，提升通过率。
+                    </p>
+                  </div>
+                </div>
+
                 {/* 纠错排查 */}
                 <div className="flex items-start">
                   <div className="bg-rose-100 dark:bg-rose-900/30 p-2 md:p-2.5 rounded-lg md:rounded-xl text-rose-600 dark:text-rose-400 mr-3 md:mr-4 shrink-0 shadow-sm border border-rose-200/50 dark:border-rose-800/50">
