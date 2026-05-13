@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import Image from "next/image";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScanSearch,
   Trash2,
@@ -9,19 +10,50 @@ import {
   AlertTriangle,
   CheckCircle,
 } from "lucide-react";
-import { ImageData } from "@/interfaces/shl_solver";
+import {
+  ImageData,
+  TaskStatusResponse,
+  TaskSubmitResponse,
+  VerificationResult,
+} from "@/interfaces/shl_solver";
 import { compressImage } from "@/utils/helpers";
 import toast from "react-hot-toast";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import {
   addVerificationImages,
   removeVerificationImage,
-  clearVerificationImages,
   setVerificationLoading,
   setVerificationResult,
   setVerificationError,
   resetVerification,
 } from "@/store/features/shlSlice";
+
+const VERIFY_TASK_STORAGE_KEY = "shl_verify_task_id";
+const VERIFY_POLL_DELAY = 3000;
+
+const parseApiResponse = async <T,>(response: Response): Promise<T> => {
+  const text = await response.text();
+
+  if (!text) {
+    return {} as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      response.ok ? "服务返回了无法识别的数据" : "服务暂时不可用，请稍后重试"
+    );
+  }
+};
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+};
 
 interface VisualDiffProps {
   referenceCode: string;
@@ -38,14 +70,165 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
   } = useAppSelector((state) => state.shl.verification);
 
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
+  const [verificationTaskId, setVerificationTaskId] = useState<string | null>(
+    null
+  );
 
   const verificationFileInputRef = useRef<HTMLInputElement>(null);
+  const loadingToastIdRef = useRef<string | null>(null);
+
+  const clearVerificationTask = useCallback(() => {
+    sessionStorage.removeItem(VERIFY_TASK_STORAGE_KEY);
+    setVerificationTaskId(null);
+  }, []);
 
   const handleResetVerification = () => {
-    dispatch(clearVerificationImages());
+    if (loadingToastIdRef.current) {
+      toast.dismiss(loadingToastIdRef.current);
+      loadingToastIdRef.current = null;
+    }
+
+    clearVerificationTask();
+    dispatch(resetVerification());
+
     if (verificationFileInputRef.current)
       verificationFileInputRef.current.value = "";
   };
+
+  useEffect(() => {
+    const savedTaskId = sessionStorage.getItem(VERIFY_TASK_STORAGE_KEY);
+
+    if (savedTaskId) {
+      setVerificationTaskId(savedTaskId);
+      dispatch(setVerificationLoading(true));
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    return () => {
+      if (loadingToastIdRef.current) {
+        toast.dismiss(loadingToastIdRef.current);
+        loadingToastIdRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!verificationTaskId) {
+      return;
+    }
+
+    let isCancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const finishVerificationTask = () => {
+      clearVerificationTask();
+      dispatch(setVerificationLoading(false));
+    };
+
+    const settleToast = (message: string, isError: boolean) => {
+      if (loadingToastIdRef.current) {
+        const toastId = loadingToastIdRef.current;
+        loadingToastIdRef.current = null;
+
+        if (isError) {
+          toast.error(message, { id: toastId });
+        } else {
+          toast.success(message, { id: toastId });
+        }
+
+        return;
+      }
+
+      if (isError) {
+        toast.error(message);
+      } else {
+        toast.success(message);
+      }
+    };
+
+    const pollVerificationTask = async () => {
+      try {
+        const response = await fetch(
+          `/api/shl_analyze/task/${verificationTaskId}`,
+          {
+            cache: "no-store",
+          }
+        );
+        const data = await parseApiResponse<
+          TaskStatusResponse<VerificationResult> | { error?: string }
+        >(response);
+
+        if (!response.ok) {
+          const message =
+            ("error" in data && data.error) || "查询比对任务状态失败";
+
+          if (!isCancelled) {
+            dispatch(setVerificationError(message));
+            finishVerificationTask();
+            settleToast(message, true);
+          }
+
+          return;
+        }
+
+        const taskData = data as TaskStatusResponse<VerificationResult>;
+        const status = taskData.status?.toLowerCase();
+
+        if (status === "completed") {
+          const result = taskData.result ?? null;
+
+          if (!isCancelled) {
+            dispatch(setVerificationResult(result));
+            finishVerificationTask();
+            settleToast(
+              result?.has_errors
+                ? "发现代码差异，请检查报告"
+                : "代码比对完成，未发现明显错误",
+              Boolean(result?.has_errors)
+            );
+          }
+
+          return;
+        }
+
+        if (status === "failed") {
+          const message = taskData.error || "比对失败，请重试";
+
+          if (!isCancelled) {
+            dispatch(setVerificationError(message));
+            finishVerificationTask();
+            settleToast(message, true);
+          }
+
+          return;
+        }
+
+        if (!isCancelled) {
+          timerId = setTimeout(pollVerificationTask, VERIFY_POLL_DELAY);
+        }
+      } catch (error: unknown) {
+        console.error("Verification polling failed:", error);
+
+        if (!isCancelled) {
+          const message = getErrorMessage(error, "查询比对任务状态失败");
+          dispatch(setVerificationError(message));
+          finishVerificationTask();
+          settleToast(message, true);
+        }
+      }
+    };
+
+    timerId = setTimeout(pollVerificationTask, VERIFY_POLL_DELAY);
+
+    return () => {
+      isCancelled = true;
+
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [clearVerificationTask, dispatch, verificationTaskId]);
 
   const handleVerificationFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
@@ -113,7 +296,8 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
       !verificationImagesData ||
       verificationImagesData.length === 0 ||
       !referenceCode ||
-      verificationLoading
+      verificationLoading ||
+      verificationTaskId
     )
       return;
 
@@ -138,24 +322,29 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await parseApiResponse<
+        TaskSubmitResponse | { error?: string }
+      >(response);
 
       if (!response.ok) {
-        throw new Error(data.error || "比对服务请求失败");
+        throw new Error(("error" in data && data.error) || "比对服务请求失败");
       }
 
-      dispatch(setVerificationResult(data));
-      if (data.has_errors) {
-        toast.error("发现代码差异，请检查报告", { id: toastId });
-      } else {
-        toast.success("代码比对完成，未发现明显错误", { id: toastId });
+      if (!("task_id" in data) || !data.task_id) {
+        throw new Error("比对任务提交成功，但未返回任务编号");
       }
-    } catch (error: any) {
+
+      sessionStorage.setItem(VERIFY_TASK_STORAGE_KEY, data.task_id);
+      setVerificationTaskId(data.task_id);
+      loadingToastIdRef.current = toastId;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "比对失败，请重试");
+
       console.error("Verification failed:", error);
-      dispatch(setVerificationError(error.message || "请求发生未知错误"));
-      toast.error(error.message || "比对失败，请重试", { id: toastId });
-    } finally {
+      dispatch(setVerificationError(message));
       dispatch(setVerificationLoading(false));
+      clearVerificationTask();
+      toast.error(message, { id: toastId });
     }
   };
 
@@ -227,10 +416,12 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
                 key={idx}
                 className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-100 animate-fadeIn dark:bg-slate-800 dark:border-slate-700 aspect-video"
               >
-                <img
+                <Image
                   src={img}
                   alt={`Verification snapshot ${idx + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  sizes="(min-width: 768px) 33vw, 50vw"
+                  className="object-cover"
                 />
                 <button
                   onClick={() => dispatch(removeVerificationImage(idx))}

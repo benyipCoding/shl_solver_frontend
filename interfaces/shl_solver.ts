@@ -48,6 +48,18 @@ export interface VerificationResult {
   errors: VerificationErrorDetail[];
 }
 
+export interface TaskSubmitResponse {
+  task_id: string;
+  status: string;
+}
+
+export interface TaskStatusResponse<T> {
+  task_id?: string;
+  status: string;
+  result?: T;
+  error?: string;
+}
+
 export interface SHLAnalysisPayload {
   images_data: ImageData[];
   llmId: number;
