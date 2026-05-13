@@ -469,6 +469,7 @@ const SHLSolverPage = () => {
                 previewUrl={historyTestCaseImageUrl}
                 onChange={handleTestCaseImageChange}
                 loading={loading}
+                isHistoryView={isHistoryView}
               />
             </div>
           </div>
