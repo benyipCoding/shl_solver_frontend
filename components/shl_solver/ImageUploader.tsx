@@ -148,6 +148,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   );
 
   const clearAllImages = () => {
+    if (loading) return;
     dispatch(clearImages());
     setError(null);
     onClearResult();
@@ -227,7 +228,12 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
             </h3>
             <button
               onClick={clearAllImages}
-              className="text-slate-400 hover:text-red-500 transition-colors flex items-center text-xs md:text-sm font-medium p-2"
+              disabled={loading}
+              className={`transition-colors flex items-center text-xs md:text-sm font-medium p-2 ${
+                loading
+                  ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                  : "text-slate-400 hover:text-red-500"
+              }`}
             >
               <Trash2 className="w-4 h-4 mr-1" /> 清空
             </button>
@@ -249,9 +255,14 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeImage(index);
+                      if (!loading) removeImage(index);
                     }}
-                    className="bg-white/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 p-2 rounded-full shadow-sm hover:shadow-md transition-all backdrop-blur-sm"
+                    disabled={loading}
+                    className={`p-2 rounded-full shadow-sm hover:shadow-md transition-all backdrop-blur-sm ${
+                      loading
+                        ? "bg-slate-100/80 dark:bg-slate-800/80 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                        : "bg-white/90 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400"
+                    }`}
                     title="移除此图片"
                   >
                     <X className="w-4 h-4" />

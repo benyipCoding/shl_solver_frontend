@@ -49,6 +49,7 @@ const TestCaseUploader: React.FC<TestCaseUploaderProps> = ({
 
   const handleClear = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (isBusy) return;
     onChange(null);
     setError(null);
     if (fileInputRef.current) {
@@ -214,7 +215,11 @@ const TestCaseUploader: React.FC<TestCaseUploaderProps> = ({
             <button
               onClick={handleClear}
               disabled={isBusy}
-              className="shrink-0 p-2 md:p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
+              className={`shrink-0 p-2 md:p-2.5 rounded-xl transition-colors ${
+                isBusy
+                  ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                  : "text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+              }`}
               title="移除测试用例"
             >
               <Trash2 className="w-5 h-5" />
