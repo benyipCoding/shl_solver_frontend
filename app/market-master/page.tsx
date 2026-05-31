@@ -39,6 +39,9 @@ import {
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
 const MAX_CANDLE_COUNT = 5000;
+const MAX_DAILY_CANDLE_COUNT = 2000;
+const MAX_WEEKLY_CANDLE_COUNT = 1040;
+const MAX_MONTHLY_CANDLE_COUNT = 360;
 const SELECTED_LINE_WIDTH_BOOST = 1;
 const RIGHT_PANEL_DEFAULT_WIDTH = 320;
 const RIGHT_PANEL_MIN_WIDTH = 260;
@@ -60,26 +63,6 @@ const TIMEFRAME_OPTIONS = [
 ];
 
 const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
-const CONTINUOUS_WEEKEND_ASSET_TYPES = new Set([
-  "digital currency",
-  "cryptocurrency",
-]);
-const TIMEFRAME_DURATION_SECONDS: Record<string, number> = {
-  m1: 60,
-  m5: 5 * 60,
-  m15: 15 * 60,
-  m30: 30 * 60,
-  H1: 60 * 60,
-  H4: 4 * 60 * 60,
-  D1: 24 * 60 * 60,
-  W1: 7 * 24 * 60 * 60,
-};
-const WEEKEND_CLOSE_DAY_UTC = 5;
-const WEEKEND_CLOSE_HOUR_UTC = 22;
-const WEEKEND_REOPEN_HOUR_UTC = 22;
-const WEEKEND_PLACEHOLDER_MAX_RANGE_RATIO = 0.0002;
-const WEEKEND_FULLY_CLOSED_RATIO = 0.75;
-const WEEKEND_PARTIAL_CLOSED_RATIO = 0.5;
 
 type CandleInput = {
   datetime?: string;
@@ -88,6 +71,31 @@ type CandleInput = {
   low?: number | string | null;
   close?: number | string | null;
   [key: string]: unknown;
+};
+
+type InstrumentContext = {
+  symbol: string;
+  assetType: string | null;
+  currency: string | null;
+  exchange: string | null;
+};
+
+type InstrumentProfile = {
+  priceDecimals: number;
+  inputStep: string;
+  sl: number;
+  tp: number;
+};
+
+const SYMBOL_PROFILE_OVERRIDES: Record<string, InstrumentProfile> = {
+  "BTC/USD": { priceDecimals: 2, inputStep: "1", sl: 1500, tp: 3000 },
+  US30: { priceDecimals: 2, inputStep: "1", sl: 300, tp: 600 },
+  NAS100: { priceDecimals: 2, inputStep: "1", sl: 200, tp: 400 },
+  SPX500: { priceDecimals: 2, inputStep: "1", sl: 75, tp: 150 },
+  "XAG/USD": { priceDecimals: 2, inputStep: "0.1", sl: 1, tp: 2 },
+  "XAU/USD": { priceDecimals: 2, inputStep: "0.1", sl: 20, tp: 40 },
+  UKOIL: { priceDecimals: 2, inputStep: "0.1", sl: 2, tp: 4 },
+  USOIL: { priceDecimals: 2, inputStep: "0.1", sl: 2, tp: 4 },
 };
 
 const padTimePart = (value: number) => String(value).padStart(2, "0");
@@ -172,11 +180,172 @@ const createInitialAiReviewModal = () => ({
   loading: false,
 });
 
-const getDefaultRiskDistance = (nextSymbol: string) => {
-  if (nextSymbol === "XAU/USD") {
-    return { sl: 20, tp: 40 };
+const normalizeAssetType = (assetType?: string | null) =>
+  assetType?.trim().toLowerCase() || "";
+
+const roundToDecimals = (value: number, decimals: number) => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
+
+const stepFromDecimals = (decimals: number) =>
+  decimals <= 0 ? "1" : (1 / 10 ** decimals).toFixed(decimals);
+
+const resolvePriceDecimals = (referencePrice?: number | null) => {
+  if (!referencePrice || !Number.isFinite(referencePrice)) {
+    return 2;
   }
-  return { sl: 0.005, tp: 0.01 };
+
+  if (referencePrice >= 1000) {
+    return 2;
+  }
+
+  if (referencePrice >= 1) {
+    return 4;
+  }
+
+  return 6;
+};
+
+const buildRatioProfile = ({
+  priceDecimals,
+  referencePrice,
+  slRatio,
+  tpRatio,
+  minSl,
+  minTp,
+}: {
+  priceDecimals: number;
+  referencePrice?: number | null;
+  slRatio: number;
+  tpRatio: number;
+  minSl: number;
+  minTp: number;
+}): InstrumentProfile => {
+  const hasReferencePrice =
+    typeof referencePrice === "number" && Number.isFinite(referencePrice);
+  const nextSl = Math.max(
+    hasReferencePrice ? referencePrice * slRatio : minSl,
+    minSl
+  );
+  const nextTp = Math.max(
+    hasReferencePrice ? referencePrice * tpRatio : minTp,
+    minTp
+  );
+
+  return {
+    priceDecimals,
+    inputStep:
+      hasReferencePrice && referencePrice >= 1000 && priceDecimals <= 2
+        ? "1"
+        : stepFromDecimals(priceDecimals),
+    sl: roundToDecimals(nextSl, priceDecimals),
+    tp: roundToDecimals(nextTp, priceDecimals),
+  };
+};
+
+const getInstrumentProfile = ({
+  symbol,
+  assetType,
+  referencePrice,
+}: {
+  symbol: string;
+  assetType?: string | null;
+  referencePrice?: number | null;
+}): InstrumentProfile => {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const normalizedAssetType = normalizeAssetType(assetType);
+
+  if (SYMBOL_PROFILE_OVERRIDES[normalizedSymbol]) {
+    return SYMBOL_PROFILE_OVERRIDES[normalizedSymbol];
+  }
+
+  if (normalizedAssetType === "physical currency") {
+    return {
+      priceDecimals: 4,
+      inputStep: "0.0001",
+      sl: 0.005,
+      tp: 0.01,
+    };
+  }
+
+  if (
+    normalizedAssetType === "digital currency" ||
+    normalizedAssetType === "cryptocurrency"
+  ) {
+    const priceDecimals = referencePrice && referencePrice >= 1000 ? 2 : 4;
+    return buildRatioProfile({
+      priceDecimals,
+      referencePrice,
+      slRatio: 0.02,
+      tpRatio: 0.04,
+      minSl: 50,
+      minTp: 100,
+    });
+  }
+
+  if (
+    normalizedAssetType === "commodity" ||
+    normalizedAssetType === "precious metal"
+  ) {
+    return buildRatioProfile({
+      priceDecimals: 2,
+      referencePrice,
+      slRatio: 0.01,
+      tpRatio: 0.02,
+      minSl: 1,
+      minTp: 2,
+    });
+  }
+
+  if (
+    normalizedAssetType === "index" ||
+    normalizedAssetType === "common stock" ||
+    normalizedAssetType === "stock" ||
+    normalizedAssetType === "etf" ||
+    normalizedAssetType === "mutual fund"
+  ) {
+    return buildRatioProfile({
+      priceDecimals: 2,
+      referencePrice,
+      slRatio: 0.01,
+      tpRatio: 0.02,
+      minSl: 0.5,
+      minTp: 1,
+    });
+  }
+
+  if (normalizedSymbol.includes("/")) {
+    return {
+      priceDecimals: 4,
+      inputStep: "0.0001",
+      sl: 0.005,
+      tp: 0.01,
+    };
+  }
+
+  const priceDecimals = resolvePriceDecimals(referencePrice);
+  return buildRatioProfile({
+    priceDecimals,
+    referencePrice,
+    slRatio: 0.01,
+    tpRatio: 0.02,
+    minSl: priceDecimals >= 4 ? 0.005 : 0.5,
+    minTp: priceDecimals >= 4 ? 0.01 : 1,
+  });
+};
+
+const getDefaultRiskDistance = (
+  nextSymbol: string,
+  assetType?: string | null,
+  referencePrice?: number | null
+) => {
+  const profile = getInstrumentProfile({
+    symbol: nextSymbol,
+    assetType,
+    referencePrice,
+  });
+  return { sl: profile.sl, tp: profile.tp };
 };
 
 const clamp = (value: number, min: number, max: number) =>
@@ -185,6 +354,19 @@ const clamp = (value: number, min: number, max: number) =>
 const getIntervalByTimeframe = (timeframe: string) =>
   TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.interval ||
   "1day";
+
+const getRequestedCandleCount = (interval: string) => {
+  if (interval === "1day") {
+    return MAX_DAILY_CANDLE_COUNT;
+  }
+  if (interval === "1week") {
+    return MAX_WEEKLY_CANDLE_COUNT;
+  }
+  if (interval === "1month") {
+    return MAX_MONTHLY_CANDLE_COUNT;
+  }
+  return MAX_CANDLE_COUNT;
+};
 
 const toUtcEpochSeconds = (dateTimeValue: string) => {
   if (!dateTimeValue) return null;
@@ -205,101 +387,7 @@ const toUtcEpochSeconds = (dateTimeValue: string) => {
   return Math.floor(parsedTime / 1000);
 };
 
-const isContinuousWeekendMarket = (assetType?: string | null) =>
-  CONTINUOUS_WEEKEND_ASSET_TYPES.has(assetType?.trim().toLowerCase() || "");
-
-const isFlatPlaceholderBar = (candle: CandleInput) => {
-  const open = Number(candle.open);
-  const high = Number(candle.high);
-  const low = Number(candle.low);
-  const close = Number(candle.close);
-
-  if ([open, high, low, close].some((value) => Number.isNaN(value))) {
-    return false;
-  }
-
-  const referencePrice = Math.max(
-    Math.abs(open),
-    Math.abs(high),
-    Math.abs(low),
-    Math.abs(close),
-    1
-  );
-
-  return (
-    Math.abs(high - low) / referencePrice <= WEEKEND_PLACEHOLDER_MAX_RANGE_RATIO
-  );
-};
-
-const getClosedSessionEpochs = (
-  candles: CandleInput[],
-  timeframe: string,
-  assetType?: string | null
-) => {
-  if (isContinuousWeekendMarket(assetType)) {
-    return new Set<number>();
-  }
-
-  const durationSeconds = TIMEFRAME_DURATION_SECONDS[timeframe] || 86400;
-  const skipEpochs = new Set<number>();
-
-  let currentBlock: CandleInput[] = [];
-
-  const processBlock = (block: CandleInput[]) => {
-    if (!block.length) return;
-    const tStart = toUtcEpochSeconds(block[0].datetime);
-    const tEnd = toUtcEpochSeconds(block[block.length - 1].datetime);
-    if (tStart !== null && tEnd !== null) {
-      const duration = tEnd - tStart + durationSeconds;
-      // 任何连续平滑K线构成 >= 20小时 的时间段，判定为休市（周末或公众节假日）
-      if (duration >= 20 * 3600) {
-        block.forEach((c) => {
-          const t = toUtcEpochSeconds(c.datetime);
-          if (t !== null) skipEpochs.add(t);
-        });
-      }
-    }
-  };
-
-  const sorted = [...candles].sort((a, b) => {
-    const ta = toUtcEpochSeconds(a.datetime) || 0;
-    const tb = toUtcEpochSeconds(b.datetime) || 0;
-    return ta - tb;
-  });
-
-  for (let i = 0; i < sorted.length; i++) {
-    const t = toUtcEpochSeconds(sorted[i].datetime);
-    if (t === null) continue;
-
-    if (isFlatPlaceholderBar(sorted[i])) {
-      currentBlock.push(sorted[i]);
-    } else {
-      processBlock(currentBlock);
-      currentBlock = [];
-    }
-  }
-  processBlock(currentBlock);
-
-  return skipEpochs;
-};
-
-const normalizeCandles = (
-  candles: CandleInput[] = [],
-  options: {
-    timeframe?: string;
-    assetType?: string | null;
-    shouldFilterNonTrading?: boolean;
-  } = {}
-) => {
-  const skipEpochs =
-    options.shouldFilterNonTrading !== false
-      ? getClosedSessionEpochs(
-          candles,
-          options.timeframe || "",
-          options.assetType
-        )
-      : new Set<number>();
-
+const normalizeCandles = (candles: CandleInput[] = []) => {
   return [...candles]
     .sort(
       (a, b) =>
@@ -308,7 +396,7 @@ const normalizeCandles = (
     )
     .filter((candle) => {
       const t = toUtcEpochSeconds(candle.datetime);
-      return t !== null && !skipEpochs.has(t);
+      return t !== null;
     })
     .map((candle) => {
       const time = toUtcEpochSeconds(candle.datetime);
@@ -335,19 +423,43 @@ const normalizeCandles = (
   }[];
 };
 
-const hasResidualWeekendPlaceholderBars = (
-  candles: CandleInput[] = [],
-  options: {
-    timeframe?: string;
-    assetType?: string | null;
-  } = {}
-) => {
-  const skipEpochs = getClosedSessionEpochs(
-    candles,
-    options.timeframe || "",
-    options.assetType
+const buildDefaultsMarketData = (payload: any) => {
+  const rawCandles = payload?.data?.candles || [];
+  const assetType = payload?.data?.meta?.asset_type || null;
+
+  return {
+    rawCandles,
+    assetType,
+    currency: payload?.data?.meta?.currency || null,
+    exchange: payload?.data?.meta?.exchange || null,
+    latestClose: rawCandles[0]?.close,
+  };
+};
+
+const buildTimeSeriesMarketData = (payload: any) => {
+  const rawCandles = payload?.data?.values || [];
+
+  return {
+    rawCandles,
+    assetType: payload?.data?.meta?.type || null,
+    currency: payload?.data?.meta?.currency || null,
+    exchange: payload?.data?.meta?.exchange || null,
+    latestClose: rawCandles[0]?.close,
+  };
+};
+
+const shouldRetryWithTimeSeries = (payload: any, rawCandles: CandleInput[]) => {
+  if (rawCandles.length > 0) {
+    return false;
+  }
+
+  const filteringReason = payload?.data?.filtering?.reason;
+
+  return (
+    payload?.data?.count === 0 ||
+    (typeof filteringReason === "string" &&
+      filteringReason.endsWith("_api_error_fallback"))
   );
-  return skipEpochs.size > 0;
 };
 
 export default function ChartApp() {
@@ -422,10 +534,17 @@ export default function ChartApp() {
   const [symbol, setSymbol] = useState("XAU/USD");
   const [timeframe, setTimeframe] = useState("D1");
   const timeframeRef = useRef(timeframe);
-  const priceDecimals = symbol === "XAU/USD" ? 2 : 4;
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [instrumentContext, setInstrumentContext] = useState<InstrumentContext>(
+    {
+      symbol: "",
+      assetType: null,
+      currency: null,
+      exchange: null,
+    }
+  );
 
   useEffect(() => {
     timeframeRef.current = timeframe;
@@ -446,6 +565,16 @@ export default function ChartApp() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const currentPrice = fullDataRef.current[currentIndex - 1]?.close || 0;
+  const activeInstrumentProfile = getInstrumentProfile({
+    symbol,
+    assetType:
+      instrumentContext.symbol === symbol ? instrumentContext.assetType : null,
+    referencePrice:
+      instrumentContext.symbol === symbol && currentPrice > 0
+        ? currentPrice
+        : null,
+  });
+  const priceDecimals = activeInstrumentProfile.priceDecimals;
   const [legendData, setLegendData] = useState(null);
 
   const [balance, setBalance] = useState(100000);
@@ -1006,18 +1135,25 @@ export default function ChartApp() {
       setDataError("");
       setIsDataLoading(true);
       setLegendData(null);
+      setInstrumentContext({
+        symbol: "",
+        assetType: null,
+        currency: null,
+        exchange: null,
+      });
 
       const { sl, tp } = getDefaultRiskDistance(symbol);
       setSlDistance(sl);
       setTpDistance(tp);
 
       try {
+        const interval = getIntervalByTimeframe(timeframe);
+        const outputsize = getRequestedCandleCount(interval);
         const params = new URLSearchParams({
           symbol,
-          interval: getIntervalByTimeframe(timeframe),
-          outputsize: String(MAX_CANDLE_COUNT),
+          interval,
+          outputsize: String(outputsize),
           timezone: "UTC",
-          filter_non_trading: "true",
         });
         const response = await customFetch(
           `/api/market_master/kline/defaults?${params.toString()}`
@@ -1030,25 +1166,54 @@ export default function ChartApp() {
           );
         }
 
-        const rawCandles = payload?.data?.candles || [];
-        const assetType = payload?.data?.meta?.asset_type;
-        const shouldApplyFallbackNonTradingFilter =
-          payload?.data?.filtering?.applied !== true ||
-          hasResidualWeekendPlaceholderBars(rawCandles, {
-            timeframe,
-            assetType,
-          });
+        let marketData = buildDefaultsMarketData(payload);
 
-        const newData = normalizeCandles(rawCandles, {
-          timeframe,
-          assetType,
-          shouldFilterNonTrading: shouldApplyFallbackNonTradingFilter,
-        });
+        if (shouldRetryWithTimeSeries(payload, marketData.rawCandles)) {
+          const fallbackParams = new URLSearchParams({
+            symbol,
+            interval,
+            outputsize: String(outputsize),
+            timezone: "UTC",
+          });
+          const fallbackResponse = await customFetch(
+            `/api/market_master/time-series?${fallbackParams.toString()}`
+          );
+          const fallbackPayload = await fallbackResponse.json();
+
+          if (
+            fallbackResponse.ok &&
+            Array.isArray(fallbackPayload?.data?.values) &&
+            fallbackPayload.data.values.length > 0
+          ) {
+            marketData = buildTimeSeriesMarketData(fallbackPayload);
+          }
+        }
+
+        const { rawCandles, assetType, currency, exchange, latestClose } =
+          marketData;
+
+        const newData = normalizeCandles(rawCandles);
         if (!newData.length) {
-          throw new Error("后端未返回可用的 K 线数据");
+          throw new Error(
+            `当前标的 ${symbol} 暂无可用 K 线数据，请切换周期或标的`
+          );
         }
 
         if (cancelled) return;
+
+        setInstrumentContext({
+          symbol,
+          assetType: assetType || null,
+          currency,
+          exchange,
+        });
+        const nextRiskDistance = getDefaultRiskDistance(
+          symbol,
+          assetType,
+          Number(latestClose) || newData[newData.length - 1]?.close || null
+        );
+        setSlDistance(nextRiskDistance.sl);
+        setTpDistance(nextRiskDistance.tp);
 
         fullDataRef.current = newData;
 
@@ -2555,6 +2720,7 @@ export default function ChartApp() {
           setTpDistance={setTpDistance}
           handlePlaceOrder={handlePlaceOrder}
           priceDecimals={priceDecimals}
+          riskInputStep={activeInstrumentProfile.inputStep}
           isMaximized={isMaximized}
           panelWidth={rightPanelWidth}
         />

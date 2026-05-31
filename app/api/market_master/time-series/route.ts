@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { proxyMarketMasterGet } from "../../_proxy";
+import { proxyMarketMasterGet } from "../_proxy";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const params = Object.fromEntries(searchParams.entries());
 
-  if (!params.keyword) {
-    return NextResponse.json({ error: "缺少 keyword 参数" }, { status: 400 });
+  if (!params.symbol) {
+    return NextResponse.json({ error: "缺少 symbol 参数" }, { status: 400 });
   }
 
   return proxyMarketMasterGet(
     request,
-    "/market_master/search/unified",
-    "搜索交易标的失败"
+    "/market_master/time-series",
+    "获取 K 线数据失败"
   );
 }

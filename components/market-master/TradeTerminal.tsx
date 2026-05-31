@@ -18,6 +18,7 @@ export const TradeTerminal = ({
   setTpDistance,
   handlePlaceOrder,
   priceDecimals,
+  riskInputStep,
   isMaximized,
   panelWidth,
 }: any) => {
@@ -88,7 +89,7 @@ export const TradeTerminal = ({
                 </label>
                 <input
                   type="number"
-                  step={symbol === "XAU/USD" ? "1" : "0.0001"}
+                  step={riskInputStep}
                   value={slDistance}
                   disabled={!slEnabled}
                   onChange={(e) => setSlDistance(Number(e.target.value))}
@@ -106,7 +107,7 @@ export const TradeTerminal = ({
                 </label>
                 <input
                   type="number"
-                  step={symbol === "XAU/USD" ? "1" : "0.0001"}
+                  step={riskInputStep}
                   value={tpDistance}
                   disabled={!tpEnabled}
                   onChange={(e) => setTpDistance(Number(e.target.value))}

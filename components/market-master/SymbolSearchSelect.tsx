@@ -12,17 +12,52 @@ const VIEWPORT_PADDING = 12;
 
 const INITIAL_FAVORITES = ["XAU/USD", "EUR/USD", "GBP/USD"];
 
+const LEGACY_SYMBOL_MAP: Record<string, string> = {
+  "XBR/USD": "UKOil",
+  "XTI/USD": "USOil",
+  DXY: "USDOLLAR",
+  DJI: "US30",
+  NDX: "NAS100",
+  SPX: "SPX500",
+};
+
+const toCanonicalSymbol = (symbol: string) => {
+  const trimmedSymbol = symbol.trim();
+  if (!trimmedSymbol) {
+    return trimmedSymbol;
+  }
+
+  return LEGACY_SYMBOL_MAP[trimmedSymbol.toUpperCase()] || trimmedSymbol;
+};
+
+const normalizeFavorites = (symbols: string[]) => {
+  const nextFavorites: string[] = [];
+  const seen = new Set<string>();
+
+  for (const symbol of symbols) {
+    const canonicalSymbol = toCanonicalSymbol(symbol);
+    if (!canonicalSymbol || seen.has(canonicalSymbol)) {
+      continue;
+    }
+
+    seen.add(canonicalSymbol);
+    nextFavorites.push(canonicalSymbol);
+  }
+
+  return nextFavorites;
+};
+
 const POPULAR_SYMBOLS = [
   { symbol: "XAU/USD", label: "黄金/美元" },
   { symbol: "XAG/USD", label: "白银/美元" },
   { symbol: "EUR/USD", label: "欧元/美元" },
   { symbol: "GBP/USD", label: "英镑/美元" },
-  { symbol: "XTI/USD", label: "美国原油" },
-  { symbol: "XBR/USD", label: "布伦特原油" },
-  { symbol: "DXY", label: "美元指数" },
-  { symbol: "DJI", label: "道琼斯" },
-  { symbol: "NDX", label: "纳斯达克" },
-  { symbol: "SPX", label: "标普500" },
+  { symbol: "USOil", label: "美国原油" },
+  { symbol: "UKOil", label: "布伦特原油" },
+  { symbol: "USDOLLAR", label: "美元指数" },
+  { symbol: "US30", label: "道琼斯" },
+  { symbol: "NAS100", label: "纳斯达克100" },
+  { symbol: "SPX500", label: "标普500" },
   { symbol: "BTC/USD", label: "比特币/美元" },
 ];
 
@@ -55,6 +90,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   const containerRef = useRef<any>(null);
   const triggerRef = useRef<any>(null);
   const panelRef = useRef<any>(null);
+  const canonicalValue = toCanonicalSymbol(value || "");
 
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,16 +108,33 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
     const saved = localStorage.getItem("marketMasterFavorites");
     if (saved) {
       try {
-        setFavorites(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (!Array.isArray(parsed)) {
+          return;
+        }
+
+        const normalized = normalizeFavorites(
+          parsed.filter((item): item is string => typeof item === "string")
+        );
+        setFavorites(normalized);
+
+        if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+          localStorage.setItem(
+            "marketMasterFavorites",
+            JSON.stringify(normalized)
+          );
+        }
       } catch (e) {}
     }
   }, []);
 
   const toggleFavorite = (symbol: string) => {
+    const canonicalSymbol = toCanonicalSymbol(symbol);
     setFavorites((prev) => {
-      const next = prev.includes(symbol)
-        ? prev.filter((s) => s !== symbol)
-        : [...prev, symbol];
+      const normalizedPrev = normalizeFavorites(prev);
+      const next = normalizedPrev.includes(canonicalSymbol)
+        ? normalizedPrev.filter((item) => item !== canonicalSymbol)
+        : [...normalizedPrev, canonicalSymbol];
       localStorage.setItem("marketMasterFavorites", JSON.stringify(next));
       return next;
     });
@@ -190,7 +243,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   }, [searchKeyword, isModalOpen, runSearch]);
 
   const handleSelect = (nextSymbol: string) => {
-    onChange(nextSymbol);
+    onChange(toCanonicalSymbol(nextSymbol));
     setIsOpen(false);
     setIsModalOpen(false);
   };
@@ -204,7 +257,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
           className="flex w-full items-center justify-between gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm font-semibold text-gray-200 transition-colors hover:border-gray-600 focus:outline-none focus:border-blue-500"
           onClick={() => setIsOpen((prev) => !prev)}
         >
-          <span className="truncate">{value}</span>
+          <span className="truncate">{canonicalValue}</span>
           <ChevronDown size={14} className="text-gray-500 shrink-0" />
         </button>
 
@@ -233,14 +286,14 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                   >
                     <span
                       className={
-                        sym === value
+                        sym === canonicalValue
                           ? "text-blue-400 font-semibold"
                           : "text-gray-200"
                       }
                     >
                       {sym}
                     </span>
-                    {sym === value && (
+                    {sym === canonicalValue && (
                       <Check size={14} className="text-blue-500" />
                     )}
                   </button>
