@@ -98,7 +98,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
 
   const [favorites, setFavorites] = useState<string[]>(INITIAL_FAVORITES);
 
-  // Search logic for modal
+  // Search logic for modal.
   const [searchKeyword, setSearchKeyword] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
