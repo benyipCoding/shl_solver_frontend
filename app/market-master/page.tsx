@@ -193,7 +193,7 @@ const stepFromDecimals = (decimals: number) =>
 
 const resolvePriceDecimals = (referencePrice?: number | null) => {
   if (!referencePrice || !Number.isFinite(referencePrice)) {
-    return 2;
+    return 5;
   }
 
   if (referencePrice >= 1000) {
@@ -201,7 +201,7 @@ const resolvePriceDecimals = (referencePrice?: number | null) => {
   }
 
   if (referencePrice >= 1) {
-    return 4;
+    return 5;
   }
 
   return 6;
@@ -262,8 +262,8 @@ const getInstrumentProfile = ({
 
   if (normalizedAssetType === "physical currency") {
     return {
-      priceDecimals: 4,
-      inputStep: "0.0001",
+      priceDecimals: 5,
+      inputStep: "0.00001",
       sl: 0.005,
       tp: 0.01,
     };
@@ -317,8 +317,8 @@ const getInstrumentProfile = ({
 
   if (normalizedSymbol.includes("/")) {
     return {
-      priceDecimals: 4,
-      inputStep: "0.0001",
+      priceDecimals: 5,
+      inputStep: "0.00001",
       sl: 0.005,
       tp: 0.01,
     };
@@ -330,8 +330,8 @@ const getInstrumentProfile = ({
     referencePrice,
     slRatio: 0.01,
     tpRatio: 0.02,
-    minSl: priceDecimals >= 4 ? 0.005 : 0.5,
-    minTp: priceDecimals >= 4 ? 0.01 : 1,
+    minSl: priceDecimals >= 5 ? 0.005 : 0.5,
+    minTp: priceDecimals >= 5 ? 0.01 : 1,
   });
 };
 
@@ -575,6 +575,35 @@ export default function ChartApp() {
         : null,
   });
   const priceDecimals = activeInstrumentProfile.priceDecimals;
+
+  useEffect(() => {
+    const minMove = 1 / Math.pow(10, priceDecimals);
+    const priceFormatConfig = {
+      type: "price",
+      precision: priceDecimals,
+      minMove: minMove,
+    };
+
+    if (seriesRef.current) {
+      seriesRef.current.applyOptions({ priceFormat: priceFormatConfig });
+    }
+
+    Object.values(emaSeriesRefs.current).forEach((series: any) => {
+      series.applyOptions({ priceFormat: priceFormatConfig });
+    });
+
+    if (macdLineSeriesRef.current) {
+      macdLineSeriesRef.current.applyOptions({
+        priceFormat: priceFormatConfig,
+      });
+    }
+    if (macdSignalSeriesRef.current) {
+      macdSignalSeriesRef.current.applyOptions({
+        priceFormat: priceFormatConfig,
+      });
+    }
+  }, [priceDecimals]);
+
   const [legendData, setLegendData] = useState(null);
 
   const [balance, setBalance] = useState(100000);
@@ -1329,6 +1358,11 @@ export default function ChartApp() {
             lastValueVisible: false,
             priceLineVisible: false,
             title: "",
+            priceFormat: {
+              type: "price",
+              precision: priceDecimals,
+              minMove: 1 / Math.pow(10, priceDecimals),
+            },
           });
           emaSeriesRefs.current[ema.id] = series;
         } else {
@@ -1427,6 +1461,11 @@ export default function ChartApp() {
       wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
       priceLineVisible: false,
+      priceFormat: {
+        type: "price",
+        precision: priceDecimals,
+        minMove: 1 / Math.pow(10, priceDecimals),
+      },
     });
     series.setData(fullDataRef.current.slice(0, visibleCount));
 
@@ -1438,6 +1477,11 @@ export default function ChartApp() {
         lastValueVisible: false,
         priceLineVisible: false,
         title: "",
+        priceFormat: {
+          type: "price",
+          precision: priceDecimals,
+          minMove: 1 / Math.pow(10, priceDecimals),
+        },
       });
       emaSeries.setData(
         fullEmaDataRef.current[ema.id]?.slice(0, visibleCount) || []
@@ -1940,6 +1984,11 @@ export default function ChartApp() {
       lastValueVisible: false,
       priceLineVisible: false,
       title: "",
+      priceFormat: {
+        type: "price",
+        precision: priceDecimals,
+        minMove: 1 / Math.pow(10, priceDecimals),
+      },
     });
     const signalLine = subChart.addSeries(LineSeries, {
       color: indConfig.macd.signalColor,
@@ -1947,6 +1996,11 @@ export default function ChartApp() {
       lastValueVisible: false,
       priceLineVisible: false,
       title: "",
+      priceFormat: {
+        type: "price",
+        precision: priceDecimals,
+        minMove: 1 / Math.pow(10, priceDecimals),
+      },
     });
 
     const currentMacdData = fullMacdDataRef.current.slice(0, visibleCount);
