@@ -129,7 +129,15 @@ export const TopBar = ({
           >
             <AlignJustify size={16} />
           </button>
+          <button
+            onClick={clearLines}
+            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors"
+            title="清空画线"
+          >
+            <Trash2 size={18} />
+          </button>
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
+
           <button
             onClick={() => setIsMagnetEnabled(!isMagnetEnabled)}
             className={`p-1.5 rounded-md flex items-center transition-colors ${
@@ -160,6 +168,14 @@ export const TopBar = ({
           >
             <ArrowUpDown size={16} />
           </button>
+          <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
+          <button
+            onClick={() => setIsIndicatorModalOpen(true)}
+            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-blue-400 transition-colors"
+            title="指标配置中心 (Indicators)"
+          >
+            <BarChart2 size={18} />
+          </button>
         </div>
 
         <button
@@ -174,21 +190,6 @@ export const TopBar = ({
             <Sparkles size={14} />
           )}
           AI 智能扫描
-        </button>
-
-        <button
-          onClick={() => setIsIndicatorModalOpen(true)}
-          className="p-2 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-gray-800 transition-colors"
-          title="指标配置中心 (Indicators)"
-        >
-          <BarChart2 size={18} />
-        </button>
-        <button
-          onClick={clearLines}
-          className="p-2 ml-1 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
-          title="清空画线"
-        >
-          <Trash2 size={18} />
         </button>
 
         <button
