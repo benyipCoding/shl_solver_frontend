@@ -57,6 +57,7 @@ const TIMEFRAME_OPTIONS = [
   { value: "m15", label: "M15", interval: "15min" },
   { value: "m30", label: "M30", interval: "30min" },
   { value: "H1", label: "H1", interval: "1h" },
+  { value: "H2", label: "H2", interval: "2h" },
   { value: "H4", label: "H4", interval: "4h" },
   { value: "D1", label: "D1", interval: "1day" },
   { value: "W1", label: "W1", interval: "1week" },
