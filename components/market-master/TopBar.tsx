@@ -44,6 +44,7 @@ export const TopBar = ({
   isPlaying,
   setIsPlaying,
   isDataLoading,
+  isHistoryLoading = false,
   dataError,
   balance,
   totalFloatingPnl,
@@ -73,6 +74,10 @@ export const TopBar = ({
         {isDataLoading ? (
           <div className="text-xs text-blue-400 shrink-0">
             加载真实行情中...
+          </div>
+        ) : isHistoryLoading ? (
+          <div className="text-xs text-blue-300 shrink-0">
+            加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
           </div>
         ) : dataError ? (
           <div

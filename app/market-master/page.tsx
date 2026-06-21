@@ -38,10 +38,7 @@ import {
 // 4. React 主组件
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
-const MAX_CANDLE_COUNT = 5000;
-const MAX_DAILY_CANDLE_COUNT = 2000;
-const MAX_WEEKLY_CANDLE_COUNT = 1040;
-const MAX_MONTHLY_CANDLE_COUNT = 360;
+const KLINE_PAGE_SIZE = 5000;
 const SELECTED_LINE_WIDTH_BOOST = 1;
 const RIGHT_PANEL_DEFAULT_WIDTH = 320;
 const RIGHT_PANEL_MIN_WIDTH = 260;
@@ -356,17 +353,20 @@ const getIntervalByTimeframe = (timeframe: string) =>
   TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.interval ||
   "1day";
 
-const getRequestedCandleCount = (interval: string) => {
-  if (interval === "1day") {
-    return MAX_DAILY_CANDLE_COUNT;
-  }
-  if (interval === "1week") {
-    return MAX_WEEKLY_CANDLE_COUNT;
-  }
-  if (interval === "1month") {
-    return MAX_MONTHLY_CANDLE_COUNT;
-  }
-  return MAX_CANDLE_COUNT;
+type NormalizedCandle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+type KlinePageMeta = {
+  rawCandles: CandleInput[];
+  assetType: string | null;
+  currency: string | null;
+  exchange: string | null;
+  latestClose: unknown;
 };
 
 const toUtcEpochSeconds = (dateTimeValue: string) => {
@@ -463,6 +463,90 @@ const shouldRetryWithTimeSeries = (payload: any, rawCandles: CandleInput[]) => {
   );
 };
 
+const getOldestRawDatetime = (rawCandles: CandleInput[]) => {
+  const sorted = normalizeCandles(rawCandles);
+  if (!sorted.length) return null;
+
+  const oldestTime = sorted[0].time;
+  const match = rawCandles.find(
+    (candle) => toUtcEpochSeconds(candle.datetime) === oldestTime
+  );
+
+  return typeof match?.datetime === "string" ? match.datetime : null;
+};
+
+const mergeCandleData = (
+  existing: NormalizedCandle[],
+  older: NormalizedCandle[]
+) => {
+  const merged = new Map<number, NormalizedCandle>();
+  for (const candle of older) {
+    merged.set(candle.time, candle);
+  }
+  for (const candle of existing) {
+    merged.set(candle.time, candle);
+  }
+  return [...merged.values()].sort((a, b) => a.time - b.time);
+};
+
+const fetchKlinePage = async (
+  customFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ) => Promise<Response>,
+  {
+    symbol,
+    interval,
+    outputsize,
+    endDate,
+  }: {
+    symbol: string;
+    interval: string;
+    outputsize: number;
+    endDate?: string;
+  }
+): Promise<KlinePageMeta> => {
+  const params = new URLSearchParams({
+    symbol,
+    interval,
+    outputsize: String(outputsize),
+    timezone: "UTC",
+  });
+  if (endDate) {
+    params.set("end_date", endDate);
+  }
+
+  const response = await customFetch(
+    `/api/market_master/kline/defaults?${params.toString()}`
+  );
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || payload?.message || "获取 K 线数据失败"
+    );
+  }
+
+  let marketData = buildDefaultsMarketData(payload);
+
+  if (shouldRetryWithTimeSeries(payload, marketData.rawCandles)) {
+    const fallbackResponse = await customFetch(
+      `/api/market_master/time-series?${params.toString()}`
+    );
+    const fallbackPayload = await fallbackResponse.json();
+
+    if (
+      fallbackResponse.ok &&
+      Array.isArray(fallbackPayload?.data?.values) &&
+      fallbackPayload.data.values.length > 0
+    ) {
+      marketData = buildTimeSeriesMarketData(fallbackPayload);
+    }
+  }
+
+  return marketData;
+};
+
 export default function ChartApp() {
   const { customFetch } = useFetch();
   const layoutRef = useRef<any>(null);
@@ -537,6 +621,8 @@ export default function ChartApp() {
   const timeframeRef = useRef(timeframe);
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [totalCandles, setTotalCandles] = useState(0);
   const [dataError, setDataError] = useState("");
   const [instrumentContext, setInstrumentContext] = useState<InstrumentContext>(
     {
@@ -906,15 +992,30 @@ export default function ChartApp() {
       dataOverride: any[] = [],
       nextIndexOverride?: number,
       nextBacktestMode: boolean = false,
-      shouldFitContent: boolean = false
+      shouldFitContent: boolean = false,
+      options?: {
+        prependedCount?: number;
+        shouldFocusLatest?: boolean;
+      }
     ) => {
       const data = dataOverride.length ? dataOverride : fullDataRef.current;
       const activeConfig = indConfigRef.current;
+      const prependedCount = options?.prependedCount ?? 0;
+      const shouldFocusLatest = options?.shouldFocusLatest ?? !nextBacktestMode;
       const nextIndex = Math.min(
         Math.max(nextIndexOverride ?? currentIndexRef.current, 0),
         data.length
       );
       const candleData = nextBacktestMode ? data.slice(0, nextIndex) : data;
+
+      const logicalRange =
+        prependedCount > 0 && chartRef.current
+          ? chartRef.current.timeScale().getVisibleLogicalRange()
+          : null;
+      const subLogicalRange =
+        prependedCount > 0 && subChartRef.current
+          ? subChartRef.current.timeScale().getVisibleLogicalRange()
+          : null;
 
       if (seriesRef.current) {
         seriesRef.current.setData(candleData);
@@ -961,10 +1062,41 @@ export default function ChartApp() {
         return;
       }
 
-      focusLatestCandles(data);
+      if (prependedCount > 0 && logicalRange && chartRef.current) {
+        chartRef.current.timeScale().setVisibleLogicalRange({
+          from: logicalRange.from + prependedCount,
+          to: logicalRange.to + prependedCount,
+        });
+        if (subLogicalRange && subChartRef.current) {
+          subChartRef.current.timeScale().setVisibleLogicalRange({
+            from: subLogicalRange.from + prependedCount,
+            to: subLogicalRange.to + prependedCount,
+          });
+        }
+        return;
+      }
+
+      if (shouldFocusLatest) {
+        focusLatestCandles(data);
+      }
     },
     [focusLatestCandles]
   );
+
+  const recomputeIndicators = useCallback((data: NormalizedCandle[]) => {
+    const activeConfig = indConfigRef.current;
+    const newEmaData: Record<string, ReturnType<typeof calculateEMA>> = {};
+    activeConfig.emas.forEach((ema: { id: string; period: number }) => {
+      newEmaData[ema.id] = calculateEMA(data, ema.period);
+    });
+    fullEmaDataRef.current = newEmaData;
+    fullMacdDataRef.current = calculateMACD(
+      data,
+      activeConfig.macd.fast,
+      activeConfig.macd.slow,
+      activeConfig.macd.signal
+    );
+  }, []);
 
   const stopResizeDrag = useCallback(() => {
     if (!resizeStateRef.current.direction) return;
@@ -1130,6 +1262,7 @@ export default function ChartApp() {
       fullEmaDataRef.current = {};
       fullMacdDataRef.current = [];
       setCurrentIndex(0);
+      setTotalCandles(0);
       setLegendData(null);
 
       if (seriesRef.current) {
@@ -1157,6 +1290,115 @@ export default function ChartApp() {
       orderLinesRef.current = {};
     };
 
+    const applyLoadedMarketData = (
+      marketData: KlinePageMeta,
+      data: NormalizedCandle[],
+      options?: { prependedCount?: number; isInitialPage?: boolean }
+    ) => {
+      const { prependedCount = 0, isInitialPage = false } = options || {};
+      const { assetType, currency, exchange, latestClose } = marketData;
+
+      if (isInitialPage) {
+        setInstrumentContext({
+          symbol,
+          assetType: assetType || null,
+          currency,
+          exchange,
+        });
+        const nextRiskDistance = getDefaultRiskDistance(
+          symbol,
+          assetType,
+          Number(latestClose) || data[data.length - 1]?.close || null
+        );
+        setSlDistance(nextRiskDistance.sl);
+        setTpDistance(nextRiskDistance.tp);
+      }
+
+      fullDataRef.current = data;
+      recomputeIndicators(data);
+      setTotalCandles(data.length);
+
+      let nextCurrentIndex = currentIndexRef.current;
+      if (isInitialPage) {
+        nextCurrentIndex = isBacktestMode
+          ? Math.min(INITIAL_VISIBLE_COUNT, data.length)
+          : data.length;
+        setCurrentIndex(nextCurrentIndex);
+      } else if (prependedCount > 0 && isBacktestMode) {
+        nextCurrentIndex = Math.min(
+          currentIndexRef.current + prependedCount,
+          data.length
+        );
+        setCurrentIndex(nextCurrentIndex);
+      } else if (!isBacktestMode) {
+        nextCurrentIndex = data.length;
+        setCurrentIndex(nextCurrentIndex);
+      }
+
+      syncDisplayedData(
+        data,
+        nextCurrentIndex,
+        isBacktestMode,
+        isInitialPage && isBacktestMode,
+        {
+          prependedCount,
+          shouldFocusLatest: isInitialPage,
+        }
+      );
+    };
+
+    const loadHistoricalPages = async (
+      interval: string,
+      initialPage: KlinePageMeta,
+      initialData: NormalizedCandle[]
+    ) => {
+      if (initialPage.rawCandles.length < KLINE_PAGE_SIZE) {
+        return;
+      }
+
+      setIsHistoryLoading(true);
+      let mergedData = initialData;
+      let cursorEndDate = getOldestRawDatetime(initialPage.rawCandles);
+
+      try {
+        while (!cancelled && cursorEndDate) {
+          const nextPage = await fetchKlinePage(customFetch, {
+            symbol,
+            interval,
+            outputsize: KLINE_PAGE_SIZE,
+            endDate: cursorEndDate,
+          });
+
+          if (cancelled) return;
+
+          const olderData = normalizeCandles(nextPage.rawCandles);
+          if (!olderData.length) {
+            break;
+          }
+
+          const previousLength = mergedData.length;
+          mergedData = mergeCandleData(mergedData, olderData);
+          const prependedCount = mergedData.length - previousLength;
+
+          if (prependedCount <= 0) {
+            break;
+          }
+
+          applyLoadedMarketData(nextPage, mergedData, { prependedCount });
+
+          if (nextPage.rawCandles.length < KLINE_PAGE_SIZE) {
+            break;
+          }
+
+          cursorEndDate = getOldestRawDatetime(nextPage.rawCandles);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHistoryLoading(false);
+        }
+      }
+    };
+
     const loadMarketData = async () => {
       setIsPlaying(false);
       clearAllSelections();
@@ -1164,6 +1406,8 @@ export default function ChartApp() {
       removeOrderLines();
       setDataError("");
       setIsDataLoading(true);
+      setIsHistoryLoading(false);
+      setTotalCandles(0);
       setLegendData(null);
       setInstrumentContext({
         symbol: "",
@@ -1178,51 +1422,13 @@ export default function ChartApp() {
 
       try {
         const interval = getIntervalByTimeframe(timeframe);
-        const outputsize = getRequestedCandleCount(interval);
-        const params = new URLSearchParams({
+        const firstPage = await fetchKlinePage(customFetch, {
           symbol,
           interval,
-          outputsize: String(outputsize),
-          timezone: "UTC",
+          outputsize: KLINE_PAGE_SIZE,
         });
-        const response = await customFetch(
-          `/api/market_master/kline/defaults?${params.toString()}`
-        );
-        const payload = await response.json();
 
-        if (!response.ok) {
-          throw new Error(
-            payload?.error || payload?.message || "获取 K 线数据失败"
-          );
-        }
-
-        let marketData = buildDefaultsMarketData(payload);
-
-        if (shouldRetryWithTimeSeries(payload, marketData.rawCandles)) {
-          const fallbackParams = new URLSearchParams({
-            symbol,
-            interval,
-            outputsize: String(outputsize),
-            timezone: "UTC",
-          });
-          const fallbackResponse = await customFetch(
-            `/api/market_master/time-series?${fallbackParams.toString()}`
-          );
-          const fallbackPayload = await fallbackResponse.json();
-
-          if (
-            fallbackResponse.ok &&
-            Array.isArray(fallbackPayload?.data?.values) &&
-            fallbackPayload.data.values.length > 0
-          ) {
-            marketData = buildTimeSeriesMarketData(fallbackPayload);
-          }
-        }
-
-        const { rawCandles, assetType, currency, exchange, latestClose } =
-          marketData;
-
-        const newData = normalizeCandles(rawCandles);
+        const newData = normalizeCandles(firstPage.rawCandles);
         if (!newData.length) {
           throw new Error(
             `当前标的 ${symbol} 暂无可用 K 线数据，请切换周期或标的`
@@ -1231,45 +1437,10 @@ export default function ChartApp() {
 
         if (cancelled) return;
 
-        setInstrumentContext({
-          symbol,
-          assetType: assetType || null,
-          currency,
-          exchange,
-        });
-        const nextRiskDistance = getDefaultRiskDistance(
-          symbol,
-          assetType,
-          Number(latestClose) || newData[newData.length - 1]?.close || null
-        );
-        setSlDistance(nextRiskDistance.sl);
-        setTpDistance(nextRiskDistance.tp);
+        applyLoadedMarketData(firstPage, newData, { isInitialPage: true });
+        setIsDataLoading(false);
 
-        fullDataRef.current = newData;
-
-        const activeConfig = indConfigRef.current;
-        const newEmaData = {};
-        activeConfig.emas.forEach((ema) => {
-          newEmaData[ema.id] = calculateEMA(newData, ema.period);
-        });
-        fullEmaDataRef.current = newEmaData;
-        fullMacdDataRef.current = calculateMACD(
-          newData,
-          activeConfig.macd.fast,
-          activeConfig.macd.slow,
-          activeConfig.macd.signal
-        );
-
-        const nextCurrentIndex = isBacktestMode
-          ? Math.min(INITIAL_VISIBLE_COUNT, newData.length)
-          : newData.length;
-        setCurrentIndex(nextCurrentIndex);
-        syncDisplayedData(
-          newData,
-          nextCurrentIndex,
-          isBacktestMode,
-          isBacktestMode
-        );
+        await loadHistoricalPages(interval, firstPage, newData);
       } catch (error: any) {
         if (cancelled) return;
 
@@ -1278,6 +1449,7 @@ export default function ChartApp() {
       } finally {
         if (!cancelled) {
           setIsDataLoading(false);
+          setIsHistoryLoading(false);
         }
       }
     };
@@ -1288,7 +1460,7 @@ export default function ChartApp() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearAllSelections, customFetch, symbol, timeframe, syncDisplayedData]);
+  }, [clearAllSelections, customFetch, recomputeIndicators, symbol, timeframe, syncDisplayedData]);
 
   useEffect(() => {
     if (isDataLoading || !fullDataRef.current.length) return;
@@ -2513,7 +2685,6 @@ export default function ChartApp() {
   };
 
   const formatVal = (val) => (val != null ? val.toFixed(priceDecimals) : "-");
-  const totalCandles = fullDataRef.current.length;
 
   if (!isMounted) return null;
 
@@ -2596,6 +2767,7 @@ export default function ChartApp() {
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
         isDataLoading={isDataLoading}
+        isHistoryLoading={isHistoryLoading}
         dataError={dataError}
         balance={balance}
         totalFloatingPnl={totalFloatingPnl}
@@ -2611,6 +2783,11 @@ export default function ChartApp() {
             {isDataLoading && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 text-sm text-blue-200 backdrop-blur-sm">
                 正在加载真实 K 线数据...
+              </div>
+            )}
+            {!isDataLoading && isHistoryLoading && (
+              <div className="absolute top-3 right-4 z-10 rounded border border-blue-500/30 bg-gray-900/80 px-3 py-1.5 text-xs text-blue-200 backdrop-blur-sm">
+                正在加载更早的历史 K 线 ({totalCandles.toLocaleString()} 根)...
               </div>
             )}
             {!isDataLoading && dataError && (
