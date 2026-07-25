@@ -47,20 +47,6 @@ const normalizeFavorites = (symbols: string[]) => {
   return nextFavorites;
 };
 
-const POPULAR_SYMBOLS = [
-  { symbol: "XAU/USD", label: "黄金/美元" },
-  { symbol: "XAG/USD", label: "白银/美元" },
-  { symbol: "EUR/USD", label: "欧元/美元" },
-  { symbol: "GBP/USD", label: "英镑/美元" },
-  { symbol: "USOil", label: "美国原油" },
-  { symbol: "UKOil", label: "布伦特原油" },
-  { symbol: "USDOLLAR", label: "美元指数" },
-  { symbol: "US30", label: "道琼斯" },
-  { symbol: "NAS100", label: "纳斯达克100" },
-  { symbol: "SPX500", label: "标普500" },
-  { symbol: "BTC/USD", label: "比特币/美元" },
-];
-
 const rankSearchItem = (item: any, keyword: string) => {
   const normalizedKeyword = keyword.trim().toLowerCase();
   const symbol = item.symbol?.toLowerCase() || "";
@@ -100,6 +86,12 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
 
   // Search logic for modal.
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [activeMarket, setActiveMarket] = useState("");
+  const [markets, setMarkets] = useState<
+    Array<{ market: string; label: string; symbol_count?: number }>
+  >([]);
+  const [isLoadingMarkets, setIsLoadingMarkets] = useState(false);
+  const [marketsError, setMarketsError] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [results, setResults] = useState<any[]>([]);
@@ -182,9 +174,16 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   }, [isOpen, updatePanelPosition]);
 
   const runSearch = useCallback(
-    async (keyword: string) => {
+    async ({
+      keyword = "",
+      market = "",
+    }: {
+      keyword?: string;
+      market?: string;
+    }) => {
       const trimmedKeyword = keyword.trim();
-      if (!trimmedKeyword) {
+      const trimmedMarket = market.trim();
+      if (!trimmedKeyword && !trimmedMarket) {
         setResults([]);
         setSearchError("");
         return;
@@ -195,9 +194,15 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
 
       try {
         const params = new URLSearchParams({
-          keyword: trimmedKeyword,
-          outputsize: "8",
+          outputsize: trimmedMarket && !trimmedKeyword ? "30" : "8",
         });
+        if (trimmedKeyword) {
+          params.set("keyword", trimmedKeyword);
+        }
+        if (trimmedMarket) {
+          params.set("market", trimmedMarket);
+        }
+
         const response = await customFetch(
           `/api/market_master/search/unified?${params.toString()}`
         );
@@ -212,7 +217,10 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
           );
         }
 
-        setResults(sortSearchItems(payload?.data?.items || [], trimmedKeyword));
+        const items = payload?.data?.items || [];
+        setResults(
+          trimmedKeyword ? sortSearchItems(items, trimmedKeyword) : items
+        );
       } catch (error: any) {
         setResults([]);
         setSearchError(error?.message || "搜索交易标的失败");
@@ -223,8 +231,58 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
     [customFetch]
   );
 
+  const loadMarkets = useCallback(async () => {
+    setIsLoadingMarkets(true);
+    setMarketsError("");
+
+    try {
+      const response = await customFetch("/api/market_master/search/markets");
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.error || payload?.message || "获取热门品类失败"
+        );
+      }
+
+      const items = Array.isArray(payload?.data?.items)
+        ? payload.data.items
+        : [];
+      setMarkets(
+        items.filter(
+          (item: any) =>
+            typeof item?.market === "string" && item.market.trim()
+        )
+      );
+    } catch (error: any) {
+      setMarkets([]);
+      setMarketsError(error?.message || "获取热门品类失败");
+    } finally {
+      setIsLoadingMarkets(false);
+    }
+  }, [customFetch]);
+
   useEffect(() => {
     if (!isModalOpen) return;
+    void loadMarkets();
+  }, [isModalOpen, loadMarkets]);
+
+  const handleMarketClick = (market: string) => {
+    setActiveMarket(market);
+    setSearchKeyword("");
+    void runSearch({ market });
+  };
+
+  const clearSearchState = () => {
+    setSearchKeyword("");
+    setActiveMarket("");
+    setResults([]);
+    setSearchError("");
+  };
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    if (activeMarket) return;
 
     const keyword = searchKeyword.trim();
     if (!keyword) {
@@ -234,18 +292,19 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
     }
 
     const timer = window.setTimeout(() => {
-      void runSearch(keyword);
+      void runSearch({ keyword });
     }, 250);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [searchKeyword, isModalOpen, runSearch]);
+  }, [searchKeyword, isModalOpen, runSearch, activeMarket]);
 
   const handleSelect = (nextSymbol: string) => {
     onChange(toCanonicalSymbol(nextSymbol));
     setIsOpen(false);
     setIsModalOpen(false);
+    clearSearchState();
   };
 
   return (
@@ -324,8 +383,8 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
       {isModalOpen &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl h-[40rem]">
+          <div className="fixed inset-0 z-200 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="flex w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl h-160">
               <div className="flex items-center justify-between border-b border-gray-800 p-4">
                 <h3 className="text-lg font-semibold text-white">
                   管理喜爱与搜索新标的
@@ -333,7 +392,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                 <button
                   onClick={() => {
                     setIsModalOpen(false);
-                    setSearchKeyword("");
+                    clearSearchState();
                   }}
                   className="text-gray-400 hover:text-white transition-colors focus:outline-none"
                 >
@@ -379,35 +438,56 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                 <div className="w-2/3 flex flex-col bg-gray-900">
                   <div className="border-b border-gray-800 p-4 space-y-4">
                     <div className="space-y-2">
-                      <div className="text-xs text-gray-400">
-                        热门搜索快捷方式：
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {POPULAR_SYMBOLS.map((pop) => (
-                          <button
-                            key={pop.symbol}
-                            type="button"
-                            onClick={() => setSearchKeyword(pop.symbol)}
-                            className="rounded-full border border-gray-700 bg-gray-800 px-3 py-1 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-colors"
-                          >
-                            {pop.label}
-                          </button>
-                        ))}
-                      </div>
+                      <div className="text-xs text-gray-400">热门品类：</div>
+                      {marketsError ? (
+                        <div className="text-xs text-red-300">{marketsError}</div>
+                      ) : isLoadingMarkets ? (
+                        <div className="flex items-center gap-2 text-xs text-blue-200">
+                          <Loader2 size={12} className="animate-spin" />
+                          正在加载品类...
+                        </div>
+                      ) : markets.length ? (
+                        <div className="flex flex-wrap gap-2">
+                          {markets.map((item) => {
+                            const isActive = activeMarket === item.market;
+                            return (
+                              <button
+                                key={item.market}
+                                type="button"
+                                onClick={() => handleMarketClick(item.market)}
+                                className={
+                                  isActive
+                                    ? "rounded-full border border-blue-500 bg-blue-500/15 px-3 py-1 text-xs text-blue-300 transition-colors"
+                                    : "rounded-full border border-gray-700 bg-gray-800 px-3 py-1 text-xs text-gray-300 hover:border-blue-500 hover:text-white transition-colors"
+                                }
+                              >
+                                {item.label || item.market}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-500">暂无可用品类</div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 focus-within:border-blue-500 transition-colors">
                       <Search size={18} className="text-gray-400" />
                       <input
                         value={searchKeyword}
-                        onChange={(e) => setSearchKeyword(e.target.value)}
+                        onChange={(e) => {
+                          if (activeMarket) {
+                            setActiveMarket("");
+                          }
+                          setSearchKeyword(e.target.value);
+                        }}
                         placeholder="输入代码或名称搜索，例如 USO"
                         className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-500"
                         autoFocus
                       />
-                      {searchKeyword && (
+                      {(searchKeyword || activeMarket) && (
                         <button
-                          onClick={() => setSearchKeyword("")}
+                          onClick={clearSearchState}
                           className="text-gray-500 hover:text-gray-300 focus:outline-none"
                         >
                           <X size={16} />
@@ -470,13 +550,13 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                           </div>
                         );
                       })
-                    ) : searchKeyword.trim() ? (
+                    ) : searchKeyword.trim() || activeMarket ? (
                       <div className="rounded-lg px-3 py-4 text-sm text-gray-400">
                         没有找到匹配的交易标的
                       </div>
                     ) : (
                       <div className="rounded-lg px-3 py-4 text-sm text-gray-400">
-                        在上方输入代码或名称进行搜索
+                        选择上方品类，或输入代码/名称进行搜索
                       </div>
                     )}
                   </div>
