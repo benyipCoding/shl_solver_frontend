@@ -58,17 +58,25 @@ const normalizeFavorites = (symbols: string[]) => {
   return nextFavorites;
 };
 
-const notifyFavoritesChanged = () => {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
-};
-
-const persistFavorites = (favorites: string[]) => {
+const writeFavorites = (favorites: string[]) => {
   const next = normalizeFavorites(favorites);
   if (typeof window !== "undefined") {
     localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
-    notifyFavoritesChanged();
   }
+  return next;
+};
+
+/** 延迟通知，避免在 setState updater / render 期间同步更新其他组件 */
+const notifyFavoritesChanged = () => {
+  if (typeof window === "undefined") return;
+  queueMicrotask(() => {
+    window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
+  });
+};
+
+const commitFavorites = (favorites: string[]) => {
+  const next = writeFavorites(favorites);
+  notifyFavoritesChanged();
   return next;
 };
 
@@ -133,7 +141,9 @@ export const SymbolFavoriteButton = ({ symbol }: { symbol: string }) => {
       type="button"
       onClick={() => {
         if (!canonicalValue) return;
-        setFavorites((prev) => persistFavorites(toggleFavoriteInList(prev, canonicalValue)));
+        setFavorites((prev) =>
+          commitFavorites(toggleFavoriteInList(prev, canonicalValue))
+        );
       }}
       disabled={!canonicalValue}
       className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -203,8 +213,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   const [results, setResults] = useState<any[]>([]);
 
   useEffect(() => {
-    const favorites = resolveFavorites();
-    setFavorites(persistFavorites(favorites));
+    setFavorites(writeFavorites(resolveFavorites()));
 
     const syncFavorites = () => setFavorites(resolveFavorites());
     window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavorites);
@@ -214,7 +223,9 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   }, []);
 
   const toggleFavorite = (symbol: string) => {
-    setFavorites((prev) => persistFavorites(toggleFavoriteInList(prev, symbol)));
+    setFavorites((prev) =>
+      commitFavorites(toggleFavoriteInList(prev, symbol))
+    );
   };
 
   const updatePanelPosition = useCallback(() => {
