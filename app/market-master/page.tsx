@@ -20,6 +20,7 @@ import { TradeTerminal } from "@/components/market-master/TradeTerminal";
 import {
   getDefaultSymbol,
   INITIAL_FAVORITES,
+  persistLastSymbol,
 } from "@/components/market-master/SymbolSearchSelect";
 import { useFetch } from "@/context/FetchContext";
 import {
@@ -644,6 +645,11 @@ export default function ChartApp() {
     setIsMounted(true);
     setSymbol(getDefaultSymbol());
   }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    persistLastSymbol(symbol);
+  }, [isMounted, symbol]);
 
   const fullDataRef = useRef<any[]>([]);
   const fullEmaDataRef = useRef<any>({});

@@ -11,6 +11,7 @@ const PANEL_GAP = 8;
 const VIEWPORT_PADDING = 12;
 
 export const FAVORITES_STORAGE_KEY = "marketMasterFavorites";
+export const LAST_SYMBOL_STORAGE_KEY = "marketMasterLastSymbol";
 const FAVORITES_CHANGED_EVENT = "marketMasterFavoritesChanged";
 
 /** 初次登录默认喜爱列表：黄金、美元指数、英镑、欧元、布伦特原油、比特币 */
@@ -107,9 +108,38 @@ export const resolveFavorites = (): string[] => {
   }
 };
 
-/** 图表默认品种：喜爱列表第一个 */
+/** 读取最近一次查看的交易标的 */
+export const resolveLastSymbol = (): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const saved = localStorage.getItem(LAST_SYMBOL_STORAGE_KEY);
+  if (!saved) {
+    return null;
+  }
+
+  const canonical = toCanonicalSymbol(saved.trim());
+  return canonical || null;
+};
+
+/** 写入最近一次查看的交易标的 */
+export const persistLastSymbol = (symbol: string) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const canonical = toCanonicalSymbol(symbol.trim());
+  if (!canonical) {
+    return;
+  }
+
+  localStorage.setItem(LAST_SYMBOL_STORAGE_KEY, canonical);
+};
+
+/** 图表默认品种：最近一次查看的标的，否则喜爱列表第一个 */
 export const getDefaultSymbol = () =>
-  resolveFavorites()[0] || INITIAL_FAVORITES[0];
+  resolveLastSymbol() || resolveFavorites()[0] || INITIAL_FAVORITES[0];
 
 const toggleFavoriteInList = (favorites: string[], symbol: string) => {
   const canonicalSymbol = toCanonicalSymbol(symbol);
