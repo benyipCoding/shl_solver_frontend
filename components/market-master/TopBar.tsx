@@ -1,6 +1,9 @@
 import React from "react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
-import { SymbolSearchSelect } from "@/components/market-master/SymbolSearchSelect";
+import {
+  SymbolFavoriteButton,
+  SymbolSearchSelect,
+} from "@/components/market-master/SymbolSearchSelect";
 import {
   CircleDollarSign,
   MousePointer2,
@@ -56,7 +59,7 @@ export const TopBar = ({
           <CircleDollarSign className="text-blue-500" /> 复盘模拟交易
         </h1>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <SymbolSearchSelect value={symbol} onChange={setSymbol} />
           <select
             value={timeframe}
@@ -69,6 +72,7 @@ export const TopBar = ({
               </option>
             ))}
           </select>
+          <SymbolFavoriteButton symbol={symbol} />
         </div>
 
         {isDataLoading ? (

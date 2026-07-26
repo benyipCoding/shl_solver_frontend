@@ -10,7 +10,18 @@ const PANEL_MAX_HEIGHT = 320;
 const PANEL_GAP = 8;
 const VIEWPORT_PADDING = 12;
 
-const INITIAL_FAVORITES = ["XAU/USD", "EUR/USD", "GBP/USD"];
+export const FAVORITES_STORAGE_KEY = "marketMasterFavorites";
+const FAVORITES_CHANGED_EVENT = "marketMasterFavoritesChanged";
+
+/** 初次登录默认喜爱列表：黄金、美元指数、英镑、欧元、布伦特原油、比特币 */
+export const INITIAL_FAVORITES = [
+  "XAU/USD",
+  "USDOLLAR",
+  "GBP/USD",
+  "EUR/USD",
+  "UKOil",
+  "BTC/USD",
+];
 
 const LEGACY_SYMBOL_MAP: Record<string, string> = {
   "XBR/USD": "UKOil",
@@ -45,6 +56,101 @@ const normalizeFavorites = (symbols: string[]) => {
   }
 
   return nextFavorites;
+};
+
+const notifyFavoritesChanged = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(FAVORITES_CHANGED_EVENT));
+};
+
+const persistFavorites = (favorites: string[]) => {
+  const next = normalizeFavorites(favorites);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
+    notifyFavoritesChanged();
+  }
+  return next;
+};
+
+/** 读取本地喜爱列表；无记录或为空时回退到默认列表 */
+export const resolveFavorites = (): string[] => {
+  if (typeof window === "undefined") {
+    return [...INITIAL_FAVORITES];
+  }
+
+  const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
+  if (!saved) {
+    return [...INITIAL_FAVORITES];
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) {
+      return [...INITIAL_FAVORITES];
+    }
+
+    const normalized = normalizeFavorites(
+      parsed.filter((item): item is string => typeof item === "string")
+    );
+
+    return normalized.length > 0 ? normalized : [...INITIAL_FAVORITES];
+  } catch {
+    return [...INITIAL_FAVORITES];
+  }
+};
+
+/** 图表默认品种：喜爱列表第一个 */
+export const getDefaultSymbol = () =>
+  resolveFavorites()[0] || INITIAL_FAVORITES[0];
+
+const toggleFavoriteInList = (favorites: string[], symbol: string) => {
+  const canonicalSymbol = toCanonicalSymbol(symbol);
+  const normalizedPrev = normalizeFavorites(favorites);
+  return normalizedPrev.includes(canonicalSymbol)
+    ? normalizedPrev.filter((item) => item !== canonicalSymbol)
+    : [...normalizedPrev, canonicalSymbol];
+};
+
+/** 当前品种一键收藏/取消收藏 */
+export const SymbolFavoriteButton = ({ symbol }: { symbol: string }) => {
+  const canonicalValue = toCanonicalSymbol(symbol || "");
+  const [favorites, setFavorites] = useState<string[]>(INITIAL_FAVORITES);
+
+  useEffect(() => {
+    const syncFavorites = () => setFavorites(resolveFavorites());
+    syncFavorites();
+    window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavorites);
+    return () => {
+      window.removeEventListener(FAVORITES_CHANGED_EVENT, syncFavorites);
+    };
+  }, []);
+
+  const isCurrentFavorite =
+    !!canonicalValue && favorites.includes(canonicalValue);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!canonicalValue) return;
+        setFavorites((prev) => persistFavorites(toggleFavoriteInList(prev, canonicalValue)));
+      }}
+      disabled={!canonicalValue}
+      className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 ${
+        isCurrentFavorite
+          ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"
+          : "border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600 hover:bg-gray-700 hover:text-yellow-400"
+      }`}
+      title={isCurrentFavorite ? "取消喜爱当前品种" : "添加到喜爱"}
+      aria-label={isCurrentFavorite ? "取消喜爱当前品种" : "添加到喜爱"}
+      aria-pressed={isCurrentFavorite}
+    >
+      <Star
+        size={16}
+        className={isCurrentFavorite ? "fill-yellow-400 text-yellow-400" : ""}
+      />
+    </button>
+  );
 };
 
 const rankSearchItem = (item: any, keyword: string) => {
@@ -97,39 +203,18 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   const [results, setResults] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("marketMasterFavorites");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (!Array.isArray(parsed)) {
-          return;
-        }
+    const favorites = resolveFavorites();
+    setFavorites(persistFavorites(favorites));
 
-        const normalized = normalizeFavorites(
-          parsed.filter((item): item is string => typeof item === "string")
-        );
-        setFavorites(normalized);
-
-        if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-          localStorage.setItem(
-            "marketMasterFavorites",
-            JSON.stringify(normalized)
-          );
-        }
-      } catch (e) {}
-    }
+    const syncFavorites = () => setFavorites(resolveFavorites());
+    window.addEventListener(FAVORITES_CHANGED_EVENT, syncFavorites);
+    return () => {
+      window.removeEventListener(FAVORITES_CHANGED_EVENT, syncFavorites);
+    };
   }, []);
 
   const toggleFavorite = (symbol: string) => {
-    const canonicalSymbol = toCanonicalSymbol(symbol);
-    setFavorites((prev) => {
-      const normalizedPrev = normalizeFavorites(prev);
-      const next = normalizedPrev.includes(canonicalSymbol)
-        ? normalizedPrev.filter((item) => item !== canonicalSymbol)
-        : [...normalizedPrev, canonicalSymbol];
-      localStorage.setItem("marketMasterFavorites", JSON.stringify(next));
-      return next;
-    });
+    setFavorites((prev) => persistFavorites(toggleFavoriteInList(prev, symbol)));
   };
 
   const updatePanelPosition = useCallback(() => {

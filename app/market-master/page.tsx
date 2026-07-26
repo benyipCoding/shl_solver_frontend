@@ -17,6 +17,10 @@ import { ShapeConfigModal } from "@/components/market-master/ShapeConfigModal";
 import { TopBar } from "@/components/market-master/TopBar";
 import { TradeHistory } from "@/components/market-master/TradeHistory";
 import { TradeTerminal } from "@/components/market-master/TradeTerminal";
+import {
+  getDefaultSymbol,
+  INITIAL_FAVORITES,
+} from "@/components/market-master/SymbolSearchSelect";
 import { useFetch } from "@/context/FetchContext";
 import {
   ShapePrimitive,
@@ -522,9 +526,7 @@ const fetchKlinePage = async (
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(
-      payload?.error || payload?.message || "获取 K 线数据失败"
-    );
+    throw new Error(payload?.error || payload?.message || "获取 K 线数据失败");
   }
 
   let marketData = buildDefaultsMarketData(payload);
@@ -616,7 +618,7 @@ export default function ChartApp() {
     startHeight: BOTTOM_PANEL_DEFAULT_HEIGHT,
   });
 
-  const [symbol, setSymbol] = useState("XAU/USD");
+  const [symbol, setSymbol] = useState(INITIAL_FAVORITES[0]);
   const [timeframe, setTimeframe] = useState("D1");
   const timeframeRef = useRef(timeframe);
   const [isBacktestMode, setIsBacktestMode] = useState(false);
@@ -638,7 +640,10 @@ export default function ChartApp() {
   }, [timeframe]);
 
   const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => setIsMounted(true), []);
+  useEffect(() => {
+    setIsMounted(true);
+    setSymbol(getDefaultSymbol());
+  }, []);
 
   const fullDataRef = useRef<any[]>([]);
   const fullEmaDataRef = useRef<any>({});
@@ -1255,6 +1260,8 @@ export default function ChartApp() {
   };
 
   useEffect(() => {
+    if (!isMounted) return;
+
     let cancelled = false;
 
     const clearChartData = () => {
@@ -1460,7 +1467,15 @@ export default function ChartApp() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearAllSelections, customFetch, recomputeIndicators, symbol, timeframe, syncDisplayedData]);
+  }, [
+    clearAllSelections,
+    customFetch,
+    isMounted,
+    recomputeIndicators,
+    symbol,
+    timeframe,
+    syncDisplayedData,
+  ]);
 
   useEffect(() => {
     if (isDataLoading || !fullDataRef.current.length) return;
