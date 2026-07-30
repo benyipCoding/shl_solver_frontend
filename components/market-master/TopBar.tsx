@@ -209,7 +209,7 @@ export const TopBar = ({
           </button>
         </div>
 
-        <button
+        {/* <button
           onClick={handleAIChartAnalysis}
           disabled={isAIAnalyzing || isDataLoading || totalCandles === 0}
           className="flex items-center gap-1.5 ml-3 px-3 py-1.5 rounded-lg bg-linear-to-r from-indigo-600/20 to-purple-600/20 hover:from-indigo-600 hover:to-purple-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.15)] disabled:opacity-50"
@@ -221,7 +221,7 @@ export const TopBar = ({
             <Sparkles size={14} />
           )}
           AI 智能扫描
-        </button>
+        </button> */}
 
         <button
           onClick={() => {

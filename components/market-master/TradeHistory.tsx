@@ -35,7 +35,7 @@ export const TradeHistory = ({
         <span>交易记录 (持仓与历史)</span>
 
         <div className="flex items-center gap-4">
-          <button
+          {/* <button
             onClick={(e) => {
               e.stopPropagation();
               handleAIReview();
@@ -43,7 +43,7 @@ export const TradeHistory = ({
             className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white px-3 py-1 rounded transition-colors text-xs font-bold border border-indigo-500/50"
           >
             <Activity size={14} /> 生成 AI 习惯画像
-          </button>
+          </button> */}
           <button className="text-gray-500 hover:text-white transition-colors">
             {isBottomPanelOpen ? (
               <ChevronDown size={18} />
