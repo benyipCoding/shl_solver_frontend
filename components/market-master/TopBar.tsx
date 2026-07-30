@@ -52,6 +52,28 @@ export const TopBar = ({
   balance,
   totalFloatingPnl,
 }: any) => {
+  const canEnterBacktest =
+    !isDataLoading && !isHistoryLoading && totalCandles > 0 && !dataError;
+  const isBacktestToggleDisabled = !isBacktestMode && !canEnterBacktest;
+
+  let backtestButtonLabel = "开启逐K回测";
+  let backtestButtonTitle = "开启逐K回测模式";
+  if (isBacktestMode) {
+    backtestButtonLabel = "退出逐K回测";
+    backtestButtonTitle = "退出逐K回测模式";
+  } else if (isDataLoading) {
+    backtestButtonLabel = "行情加载中，暂不可开启回测";
+    backtestButtonTitle =
+      "当前品种/周期的 K 线仍在加载，请等待完成后再开启逐K回测";
+  } else if (isHistoryLoading) {
+    backtestButtonLabel = "历史K线加载中...";
+    backtestButtonTitle =
+      "正在分页拉取该品种当前周期的全部历史 K 线，请等待全部加载完成后再开启逐K回测";
+  } else if (dataError || totalCandles === 0) {
+    backtestButtonLabel = "暂无K线数据，无法开启回测";
+    backtestButtonTitle = dataError || "暂无可用 K 线数据，无法开启逐K回测";
+  }
+
   return (
     <div className="h-16 border-b border-gray-800 flex items-center px-6 bg-gray-900 shrink-0 gap-6">
       <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -202,17 +224,24 @@ export const TopBar = ({
         </button>
 
         <button
-          onClick={() => setIsBacktestMode(!isBacktestMode)}
-          disabled={isDataLoading || totalCandles === 0}
-          className={`ml-3 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+          onClick={() => {
+            if (!isBacktestMode && !canEnterBacktest) return;
+            setIsBacktestMode(!isBacktestMode);
+          }}
+          disabled={isBacktestToggleDisabled}
+          className={`ml-3 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             isBacktestMode
               ? "border-blue-500/50 bg-blue-600/20 text-blue-200 hover:bg-blue-600/30"
               : "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
           }`}
-          title={isBacktestMode ? "退出逐K回测模式" : "开启逐K回测模式"}
+          title={backtestButtonTitle}
         >
-          <StepForward size={14} />
-          {isBacktestMode ? "退出逐K回测" : "开启逐K回测"}
+          {!isBacktestMode && (isDataLoading || isHistoryLoading) ? (
+            <Loader2 size={14} className="animate-spin shrink-0" />
+          ) : (
+            <StepForward size={14} className="shrink-0" />
+          )}
+          {backtestButtonLabel}
         </button>
 
         {isBacktestMode && (
