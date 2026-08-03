@@ -167,13 +167,13 @@ export const TradeHistory = ({
                       ) : (
                         <div className="flex items-center justify-center gap-2">
                           <span className="text-xs text-gray-600">已完结</span>
-                          <button
+                          {/* <button
                             onClick={() => handleAIReview(trade)}
                             className="text-[10px] flex items-center gap-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/50 px-2 py-0.5 rounded transition-colors"
                             title="使用 AI 深度分析此笔交易"
                           >
                             <Bot size={12} /> AI
-                          </button>
+                          </button> */}
                         </div>
                       )}
                     </td>

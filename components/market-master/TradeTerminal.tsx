@@ -85,7 +85,7 @@ export const TradeTerminal = ({
                     checked={slEnabled}
                     onChange={(e) => setSlEnabled(e.target.checked)}
                   />{" "}
-                  默认止损 (点)
+                  止损 (点)
                 </label>
                 <input
                   type="number"
@@ -103,7 +103,7 @@ export const TradeTerminal = ({
                     checked={tpEnabled}
                     onChange={(e) => setTpEnabled(e.target.checked)}
                   />{" "}
-                  默认止盈 (点)
+                  止盈 (点)
                 </label>
                 <input
                   type="number"

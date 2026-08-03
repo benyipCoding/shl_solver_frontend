@@ -266,8 +266,8 @@ const getInstrumentProfile = ({
   if (normalizedAssetType === "physical currency") {
     return {
       priceDecimals: 5,
-      inputStep: "0.00001",
-      sl: 0.005,
+      inputStep: "0.01",
+      sl: 0.01,
       tp: 0.01,
     };
   }
@@ -321,8 +321,8 @@ const getInstrumentProfile = ({
   if (normalizedSymbol.includes("/")) {
     return {
       priceDecimals: 5,
-      inputStep: "0.00001",
-      sl: 0.005,
+      inputStep: "0.01",
+      sl: 0.01,
       tp: 0.01,
     };
   }
@@ -333,7 +333,7 @@ const getInstrumentProfile = ({
     referencePrice,
     slRatio: 0.01,
     tpRatio: 0.02,
-    minSl: priceDecimals >= 5 ? 0.005 : 0.5,
+    minSl: priceDecimals >= 5 ? 0.01 : 0.5,
     minTp: priceDecimals >= 5 ? 0.01 : 1,
   });
 };
