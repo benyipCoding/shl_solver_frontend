@@ -740,6 +740,12 @@ export default function ChartApp() {
   const [aiReviewModal, setAiReviewModal] = useState(
     createInitialAiReviewModal
   );
+  const [pendingMarketChange, setPendingMarketChange] = useState<null | {
+    kind: "symbol" | "timeframe";
+    value: string;
+    openCount: number;
+    wasBacktestMode: boolean;
+  }>(null);
 
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
 
@@ -2440,6 +2446,7 @@ export default function ChartApp() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type) => {
+    if (!isBacktestMode) return;
     if (!fullDataRef.current.length || currentPrice <= 0) return;
 
     const entry = currentPrice;
@@ -2491,6 +2498,92 @@ export default function ChartApp() {
       return updated;
     });
   };
+
+  const forceCloseAllOpenTrades = useCallback(() => {
+    const markPrice =
+      fullDataRef.current[currentIndexRef.current - 1]?.close || 0;
+    if (markPrice <= 0) return;
+
+    setTrades((prev) => {
+      let balanceChange = 0;
+      const updated = prev.map((t) => {
+        if (t.status !== "Open") return t;
+        const pnl =
+          t.type === "Buy"
+            ? (markPrice - t.entry) * t.units
+            : (t.entry - markPrice) * t.units;
+        balanceChange += pnl;
+        return {
+          ...t,
+          status: "Closed",
+          closePrice: markPrice,
+          pnl,
+          reason: "Forced Market Close",
+        };
+      });
+      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
+      return updated;
+    });
+  }, []);
+
+  const applyMarketChange = useCallback(
+    (kind: "symbol" | "timeframe", value: string) => {
+      if (kind === "symbol") {
+        setSymbol(value);
+        return;
+      }
+      setTimeframe(value);
+    },
+    []
+  );
+
+  const requestMarketChange = useCallback(
+    (kind: "symbol" | "timeframe", value: string) => {
+      if (kind === "symbol" && value === symbol) return;
+      if (kind === "timeframe" && value === timeframe) return;
+
+      const openCount = tradesRef.current.filter(
+        (t) => t.status === "Open"
+      ).length;
+
+      if (isBacktestMode || openCount > 0) {
+        if (openCount > 0) {
+          setPendingMarketChange({
+            kind,
+            value,
+            openCount,
+            wasBacktestMode: isBacktestMode,
+          });
+          return;
+        }
+
+        // 回测中无未平仓：先退出回测，再切换
+        setIsPlaying(false);
+        setIsBacktestMode(false);
+        applyMarketChange(kind, value);
+        return;
+      }
+
+      applyMarketChange(kind, value);
+    },
+    [applyMarketChange, isBacktestMode, symbol, timeframe]
+  );
+
+  const confirmPendingMarketChange = useCallback(() => {
+    if (!pendingMarketChange) return;
+    const { kind, value, wasBacktestMode } = pendingMarketChange;
+    forceCloseAllOpenTrades();
+    setIsPlaying(false);
+    if (wasBacktestMode) {
+      setIsBacktestMode(false);
+    }
+    applyMarketChange(kind, value);
+    setPendingMarketChange(null);
+  }, [applyMarketChange, forceCloseAllOpenTrades, pendingMarketChange]);
+
+  const cancelPendingMarketChange = useCallback(() => {
+    setPendingMarketChange(null);
+  }, []);
 
   const toggleTradeVisibility = (tradeId) => {
     setTrades((prev) =>
@@ -2805,9 +2898,13 @@ export default function ChartApp() {
 
       <TopBar
         symbol={symbol}
-        setSymbol={setSymbol}
+        setSymbol={(nextSymbol: string) =>
+          requestMarketChange("symbol", nextSymbol)
+        }
         timeframe={timeframe}
-        setTimeframe={setTimeframe}
+        setTimeframe={(nextTimeframe: string) =>
+          requestMarketChange("timeframe", nextTimeframe)
+        }
         timeframeOptions={TIMEFRAME_OPTIONS}
         mode={mode}
         setMode={setInteractionMode}
@@ -3020,8 +3117,54 @@ export default function ChartApp() {
           riskInputStep={activeInstrumentProfile.inputStep}
           isMaximized={isMaximized}
           panelWidth={rightPanelWidth}
+          canPlaceOrder={isBacktestMode && !isDataLoading && !dataError}
         />
       </div>
+
+      {pendingMarketChange && (
+        <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
+            <div className="border-b border-gray-700 px-5 py-4">
+              <h3 className="text-base font-bold text-white">确认切换</h3>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm leading-relaxed text-gray-300">
+              <p>
+                当前有{" "}
+                <span className="font-semibold text-amber-300">
+                  {pendingMarketChange.openCount}
+                </span>{" "}
+                笔尚未平仓的交易。
+              </p>
+              <p>
+                {pendingMarketChange.wasBacktestMode
+                  ? `切换${
+                      pendingMarketChange.kind === "symbol" ? "交易标的" : "周期"
+                    }将先退出逐K回测，并以当前回测市价强制平仓这些未平仓交易。`
+                  : `切换${
+                      pendingMarketChange.kind === "symbol" ? "交易标的" : "周期"
+                    }将以当前市价强制平仓这些未平仓交易。`}
+              </p>
+              <p className="text-gray-400">是否继续？</p>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-700 px-5 py-4">
+              <button
+                type="button"
+                onClick={cancelPendingMarketChange}
+                className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingMarketChange}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500"
+              >
+                确认切换并强平
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

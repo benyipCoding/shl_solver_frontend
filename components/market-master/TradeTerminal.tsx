@@ -21,6 +21,7 @@ export const TradeTerminal = ({
   riskInputStep,
   isMaximized,
   panelWidth,
+  canPlaceOrder = false,
 }: any) => {
   if (!isRightPanelOpen && !isMaximized) {
     return (
@@ -116,20 +117,34 @@ export const TradeTerminal = ({
               </div>
             </div>
             <div className="text-xs text-gray-500 text-center mt-2">
-              提示：建仓后可直接在图表上拖拽止损止盈线
+              {canPlaceOrder
+                ? "提示：建仓后可直接在图表上拖拽止损止盈线"
+                : "提示：请先开启逐K回测后再下单（做多/做空）"}
             </div>
           </div>
 
           <div className="flex gap-3 mt-auto mb-4">
             <button
               onClick={() => handlePlaceOrder("Sell")}
-              className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg shadow-red-900/20"
+              disabled={!canPlaceOrder}
+              title={
+                canPlaceOrder
+                  ? "做空"
+                  : "仅在逐K回测模式下可下单，请先开启逐K回测"
+              }
+              className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg shadow-red-900/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600 disabled:active:scale-100"
             >
               做空 (Sell)
             </button>
             <button
               onClick={() => handlePlaceOrder("Buy")}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg shadow-emerald-900/20"
+              disabled={!canPlaceOrder}
+              title={
+                canPlaceOrder
+                  ? "做多"
+                  : "仅在逐K回测模式下可下单，请先开启逐K回测"
+              }
+              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold transition-all active:scale-95 shadow-lg shadow-emerald-900/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
             >
               做多 (Buy)
             </button>
