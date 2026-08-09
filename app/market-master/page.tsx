@@ -52,9 +52,7 @@ const pickRandomBacktestStartIndex = (totalCount: number) => {
   if (totalCount < MIN_BACKTEST_CANDLES) return null;
   const minIndex = INITIAL_VISIBLE_COUNT;
   const maxIndex = totalCount - MIN_FORWARD_CANDLES;
-  return (
-    minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1))
-  );
+  return minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
 };
 const SELECTED_LINE_WIDTH_BOOST = 1;
 const RIGHT_PANEL_DEFAULT_WIDTH = 320;
@@ -718,7 +716,7 @@ export default function ChartApp() {
 
   const [balance, setBalance] = useState(100000);
   const [trades, setTrades] = useState([]);
-  const [orderUnits, setOrderUnits] = useState(1);
+  const [orderUnits, setOrderUnits] = useState(100);
   const [slEnabled, setSlEnabled] = useState(true);
   const [slDistance, setSlDistance] = useState(20);
   const [tpEnabled, setTpEnabled] = useState(true);
@@ -1528,23 +1526,13 @@ export default function ChartApp() {
       }
 
       setCurrentIndex(randomStart);
-      syncDisplayedData(
-        fullDataRef.current,
-        randomStart,
-        true,
-        true
-      );
+      syncDisplayedData(fullDataRef.current, randomStart, true, true);
       return;
     }
 
     const nextCurrentIndex = fullDataRef.current.length;
     setCurrentIndex(nextCurrentIndex);
-    syncDisplayedData(
-      fullDataRef.current,
-      nextCurrentIndex,
-      false,
-      false
-    );
+    syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
   }, [isBacktestMode, isDataLoading, syncDisplayedData]);
 
   const applyIndicatorConfig = () => {
@@ -3138,10 +3126,14 @@ export default function ChartApp() {
               <p>
                 {pendingMarketChange.wasBacktestMode
                   ? `切换${
-                      pendingMarketChange.kind === "symbol" ? "交易标的" : "周期"
+                      pendingMarketChange.kind === "symbol"
+                        ? "交易标的"
+                        : "周期"
                     }将先退出逐K回测，并以当前回测市价强制平仓这些未平仓交易。`
                   : `切换${
-                      pendingMarketChange.kind === "symbol" ? "交易标的" : "周期"
+                      pendingMarketChange.kind === "symbol"
+                        ? "交易标的"
+                        : "周期"
                     }将以当前市价强制平仓这些未平仓交易。`}
               </p>
               <p className="text-gray-400">是否继续？</p>
