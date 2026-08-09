@@ -51,13 +51,19 @@ export const TopBar = ({
   dataError,
   balance,
   totalFloatingPnl,
+  minBacktestCandles = 2200,
+  initialVisibleCount = 200,
+  minForwardCandles = 2000,
 }: any) => {
   const canEnterBacktest =
-    !isDataLoading && !isHistoryLoading && totalCandles > 0 && !dataError;
+    !isDataLoading &&
+    !isHistoryLoading &&
+    !dataError &&
+    totalCandles >= minBacktestCandles;
   const isBacktestToggleDisabled = !isBacktestMode && !canEnterBacktest;
 
   let backtestButtonLabel = "开启逐K回测";
-  let backtestButtonTitle = "开启逐K回测模式";
+  let backtestButtonTitle = `开启逐K回测模式：将从随机合法时间点开始（初始约 ${initialVisibleCount} 根上下文，前方至少保留 ${minForwardCandles} 根可播放）`;
   if (isBacktestMode) {
     backtestButtonLabel = "退出逐K回测";
     backtestButtonTitle = "退出逐K回测模式";
@@ -72,6 +78,9 @@ export const TopBar = ({
   } else if (dataError || totalCandles === 0) {
     backtestButtonLabel = "暂无K线数据，无法开启回测";
     backtestButtonTitle = dataError || "暂无可用 K 线数据，无法开启逐K回测";
+  } else if (totalCandles < minBacktestCandles) {
+    backtestButtonLabel = "历史不足，无法开启回测";
+    backtestButtonTitle = `当前品种/周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
   }
 
   return (

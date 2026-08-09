@@ -43,7 +43,19 @@ import {
 // 4. React 主组件
 // ==========================================
 const INITIAL_VISIBLE_COUNT = 200;
+const MIN_FORWARD_CANDLES = 2000;
+const MIN_BACKTEST_CANDLES = INITIAL_VISIBLE_COUNT + MIN_FORWARD_CANDLES;
 const KLINE_PAGE_SIZE = 5000;
+
+/** 合法起点：至少保留 INITIAL_VISIBLE_COUNT 根上下文，且前方至少 MIN_FORWARD_CANDLES 根可播 */
+const pickRandomBacktestStartIndex = (totalCount: number) => {
+  if (totalCount < MIN_BACKTEST_CANDLES) return null;
+  const minIndex = INITIAL_VISIBLE_COUNT;
+  const maxIndex = totalCount - MIN_FORWARD_CANDLES;
+  return (
+    minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1))
+  );
+};
 const SELECTED_LINE_WIDTH_BOOST = 1;
 const RIGHT_PANEL_DEFAULT_WIDTH = 320;
 const RIGHT_PANEL_MIN_WIDTH = 260;
@@ -1067,8 +1079,8 @@ export default function ChartApp() {
 
       if (nextBacktestMode) {
         if (shouldFitContent) {
-          if (chartRef.current) chartRef.current.timeScale().fitContent();
-          if (subChartRef.current) subChartRef.current.timeScale().fitContent();
+          // 随机起点可能已揭示上千根历史，聚焦最近一段而非 fitContent 全挤在一起
+          focusLatestCandles(candleData);
         }
         return;
       }
@@ -1332,18 +1344,30 @@ export default function ChartApp() {
       setTotalCandles(data.length);
 
       let nextCurrentIndex = currentIndexRef.current;
+      let nextBacktestMode = isBacktestMode;
+
       if (isInitialPage) {
-        nextCurrentIndex = isBacktestMode
-          ? Math.min(INITIAL_VISIBLE_COUNT, data.length)
-          : data.length;
+        if (isBacktestMode) {
+          const randomStart = pickRandomBacktestStartIndex(data.length);
+          if (randomStart == null) {
+            // 新品种/周期历史不足，自动退出回测
+            nextBacktestMode = false;
+            setIsBacktestMode(false);
+            nextCurrentIndex = data.length;
+          } else {
+            nextCurrentIndex = randomStart;
+          }
+        } else {
+          nextCurrentIndex = data.length;
+        }
         setCurrentIndex(nextCurrentIndex);
-      } else if (prependedCount > 0 && isBacktestMode) {
+      } else if (prependedCount > 0 && nextBacktestMode) {
         nextCurrentIndex = Math.min(
           currentIndexRef.current + prependedCount,
           data.length
         );
         setCurrentIndex(nextCurrentIndex);
-      } else if (!isBacktestMode) {
+      } else if (!nextBacktestMode) {
         nextCurrentIndex = data.length;
         setCurrentIndex(nextCurrentIndex);
       }
@@ -1351,8 +1375,8 @@ export default function ChartApp() {
       syncDisplayedData(
         data,
         nextCurrentIndex,
-        isBacktestMode,
-        isInitialPage && isBacktestMode,
+        nextBacktestMode,
+        isInitialPage && nextBacktestMode,
         {
           prependedCount,
           shouldFocusLatest: isInitialPage,
@@ -1487,16 +1511,33 @@ export default function ChartApp() {
     if (isDataLoading || !fullDataRef.current.length) return;
 
     setIsPlaying(false);
-    const nextCurrentIndex = isBacktestMode
-      ? Math.min(INITIAL_VISIBLE_COUNT, fullDataRef.current.length)
-      : fullDataRef.current.length;
 
+    if (isBacktestMode) {
+      const randomStart = pickRandomBacktestStartIndex(
+        fullDataRef.current.length
+      );
+      if (randomStart == null) {
+        setIsBacktestMode(false);
+        return;
+      }
+
+      setCurrentIndex(randomStart);
+      syncDisplayedData(
+        fullDataRef.current,
+        randomStart,
+        true,
+        true
+      );
+      return;
+    }
+
+    const nextCurrentIndex = fullDataRef.current.length;
     setCurrentIndex(nextCurrentIndex);
     syncDisplayedData(
       fullDataRef.current,
       nextCurrentIndex,
-      isBacktestMode,
-      isBacktestMode
+      false,
+      false
     );
   }, [isBacktestMode, isDataLoading, syncDisplayedData]);
 
@@ -2792,6 +2833,9 @@ export default function ChartApp() {
         dataError={dataError}
         balance={balance}
         totalFloatingPnl={totalFloatingPnl}
+        minBacktestCandles={MIN_BACKTEST_CANDLES}
+        initialVisibleCount={INITIAL_VISIBLE_COUNT}
+        minForwardCandles={MIN_FORWARD_CANDLES}
       />
 
       {/* === 核心布局区域 === */}
