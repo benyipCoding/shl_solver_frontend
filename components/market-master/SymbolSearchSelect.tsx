@@ -2,7 +2,15 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Loader2, Search, X, Star, Check } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  GripVertical,
+  Loader2,
+  Search,
+  Star,
+  X,
+} from "lucide-react";
 import { useFetch } from "@/context/FetchContext";
 
 const PANEL_MIN_WIDTH = 200;
@@ -149,6 +157,35 @@ const toggleFavoriteInList = (favorites: string[], symbol: string) => {
     : [...normalizedPrev, canonicalSymbol];
 };
 
+/** insertIndex 为放置后的目标下标（0..length，表示插到该位置之前） */
+const reorderFavorites = (
+  symbols: string[],
+  fromIndex: number,
+  insertIndex: number
+) => {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= symbols.length ||
+    insertIndex < 0 ||
+    insertIndex > symbols.length
+  ) {
+    return symbols;
+  }
+
+  let targetIndex = insertIndex;
+  if (fromIndex < targetIndex) {
+    targetIndex -= 1;
+  }
+  if (fromIndex === targetIndex) {
+    return symbols;
+  }
+
+  const next = [...symbols];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  return next;
+};
+
 /** 当前品种一键收藏/取消收藏 */
 export const SymbolFavoriteButton = ({ symbol }: { symbol: string }) => {
   const canonicalValue = toCanonicalSymbol(symbol || "");
@@ -229,6 +266,14 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   const [panelStyle, setPanelStyle] = useState<any>(null);
 
   const [favorites, setFavorites] = useState<string[]>(INITIAL_FAVORITES);
+  const [draggingFavoriteIndex, setDraggingFavoriteIndex] = useState<
+    number | null
+  >(null);
+  const [favoriteInsertIndex, setFavoriteInsertIndex] = useState<number | null>(
+    null
+  );
+  const draggingFavoriteIndexRef = useRef<number | null>(null);
+  const favoriteInsertIndexRef = useRef<number | null>(null);
 
   // Search logic for modal.
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -253,8 +298,64 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
   }, []);
 
   const toggleFavorite = (symbol: string) => {
+    setFavorites((prev) => commitFavorites(toggleFavoriteInList(prev, symbol)));
+  };
+
+  const resetFavoriteDrag = () => {
+    draggingFavoriteIndexRef.current = null;
+    favoriteInsertIndexRef.current = null;
+    setDraggingFavoriteIndex(null);
+    setFavoriteInsertIndex(null);
+  };
+
+  const handleFavoriteDragStart = (
+    index: number,
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", favorites[index] || String(index));
+    event.dataTransfer.setDragImage(event.currentTarget, 24, 16);
+    draggingFavoriteIndexRef.current = index;
+    favoriteInsertIndexRef.current = index;
+    setDraggingFavoriteIndex(index);
+    setFavoriteInsertIndex(index);
+  };
+
+  const handleFavoriteDragOverItem = (
+    index: number,
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    if (draggingFavoriteIndexRef.current === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    const insertIndex =
+      event.clientY > rect.top + rect.height / 2 ? index + 1 : index;
+    if (favoriteInsertIndexRef.current === insertIndex) return;
+    favoriteInsertIndexRef.current = insertIndex;
+    setFavoriteInsertIndex(insertIndex);
+  };
+
+  const handleFavoriteListDragOver = (
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    if (draggingFavoriteIndexRef.current === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (event.target !== event.currentTarget) return;
+    if (favoriteInsertIndexRef.current === favorites.length) return;
+    favoriteInsertIndexRef.current = favorites.length;
+    setFavoriteInsertIndex(favorites.length);
+  };
+
+  const handleFavoriteDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const fromIndex = draggingFavoriteIndexRef.current;
+    const insertIndex = favoriteInsertIndexRef.current;
+    resetFavoriteDrag();
+    if (fromIndex === null || insertIndex === null) return;
     setFavorites((prev) =>
-      commitFavorites(toggleFavoriteInList(prev, symbol))
+      commitFavorites(reorderFavorites(prev, fromIndex, insertIndex))
     );
   };
 
@@ -376,8 +477,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
         : [];
       setMarkets(
         items.filter(
-          (item: any) =>
-            typeof item?.market === "string" && item.market.trim()
+          (item: any) => typeof item?.market === "string" && item.market.trim()
         )
       );
     } catch (error: any) {
@@ -533,29 +633,86 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                     <h4 className="text-sm font-semibold text-gray-300">
                       已添加到喜爱
                     </h4>
+                    {favorites.length > 1 && (
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        拖动左侧手柄可调整顺序
+                      </p>
+                    )}
                   </div>
-                  <div className="flex-1 overflow-y-auto p-2">
+                  <div
+                    className={`flex-1 overflow-y-auto p-2 ${
+                      draggingFavoriteIndex !== null ? "select-none" : ""
+                    }`}
+                    onDragOver={handleFavoriteListDragOver}
+                    onDrop={handleFavoriteDrop}
+                  >
                     {favorites.length === 0 ? (
                       <div className="px-2 py-4 text-xs text-gray-500 text-center">
                         暂无喜爱标的
                       </div>
                     ) : (
-                      favorites.map((sym) => (
-                        <div
-                          key={sym}
-                          className="group flex items-center justify-between rounded-md px-3 py-2 hover:bg-gray-800/80 transition-colors"
-                        >
-                          <span className="text-sm text-gray-200">{sym}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleFavorite(sym)}
-                            className="text-gray-500 hover:text-red-400 transition-colors focus:outline-none"
-                            title="取消喜爱"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ))
+                      favorites.map((sym, index) => {
+                        const isDragging = draggingFavoriteIndex === index;
+                        const showInsertBefore =
+                          draggingFavoriteIndex !== null &&
+                          favoriteInsertIndex === index &&
+                          draggingFavoriteIndex !== index &&
+                          draggingFavoriteIndex + 1 !== index;
+                        const showInsertAfter =
+                          index === favorites.length - 1 &&
+                          draggingFavoriteIndex !== null &&
+                          favoriteInsertIndex === favorites.length &&
+                          draggingFavoriteIndex !== favorites.length - 1;
+
+                        return (
+                          <div key={sym} className="relative">
+                            {showInsertBefore && (
+                              <div className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-1/2 rounded-full bg-blue-500" />
+                            )}
+                            <div
+                              draggable
+                              onDragStart={(event) =>
+                                handleFavoriteDragStart(index, event)
+                              }
+                              onDragOver={(event) =>
+                                handleFavoriteDragOverItem(index, event)
+                              }
+                              onDragEnd={resetFavoriteDrag}
+                              className={`group flex cursor-grab items-center gap-2 rounded-md px-2 py-2 transition-colors active:cursor-grabbing ${
+                                isDragging
+                                  ? "bg-gray-800/90 opacity-40"
+                                  : "hover:bg-gray-800/80"
+                              }`}
+                            >
+                              <span
+                                className="flex h-5 w-4 shrink-0 items-center justify-center text-gray-600 group-hover:text-gray-400"
+                                title="拖动排序"
+                                aria-hidden
+                              >
+                                <GripVertical size={14} />
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-sm text-gray-200">
+                                {sym}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleFavorite(sym)}
+                                onMouseDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                }}
+                                className="shrink-0 cursor-pointer text-gray-500 hover:text-red-400 transition-colors focus:outline-none"
+                                title="取消喜爱"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                            {showInsertAfter && (
+                              <div className="pointer-events-none absolute left-2 right-2 bottom-0 z-10 h-0.5 translate-y-1/2 rounded-full bg-blue-500" />
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -566,7 +723,9 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                     <div className="space-y-2">
                       <div className="text-xs text-gray-400">热门品类：</div>
                       {marketsError ? (
-                        <div className="text-xs text-red-300">{marketsError}</div>
+                        <div className="text-xs text-red-300">
+                          {marketsError}
+                        </div>
                       ) : isLoadingMarkets ? (
                         <div className="flex items-center gap-2 text-xs text-blue-200">
                           <Loader2 size={12} className="animate-spin" />
@@ -593,7 +752,9 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                           })}
                         </div>
                       ) : (
-                        <div className="text-xs text-gray-500">暂无可用品类</div>
+                        <div className="text-xs text-gray-500">
+                          暂无可用品类
+                        </div>
                       )}
                     </div>
 
