@@ -198,6 +198,105 @@ const cloneIndicatorConfig = (config) => ({
   },
 });
 
+const INDICATOR_CONFIG_STORAGE_KEY = "marketMasterIndicatorConfig";
+
+const sanitizeColor = (value, fallback) =>
+  typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+const sanitizePositiveNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const sanitizeEmaConfig = (ema) => {
+  if (!ema || typeof ema !== "object") return null;
+  const period = sanitizePositiveNumber(ema.period, 0);
+  if (!period) return null;
+
+  return {
+    id:
+      typeof ema.id === "string" && ema.id
+        ? ema.id
+        : `ema_${period}_${Math.random().toString(36).slice(2, 8)}`,
+    period,
+    color: sanitizeColor(ema.color, "#ef5350"),
+    lineWidth: sanitizePositiveNumber(ema.lineWidth, 1.5),
+  };
+};
+
+const sanitizeIndicatorConfig = (raw) => {
+  const defaults = createDefaultIndicatorConfig();
+  if (!raw || typeof raw !== "object") return defaults;
+
+  const macdRaw = raw.macd && typeof raw.macd === "object" ? raw.macd : {};
+  const histRaw =
+    macdRaw.histColors && typeof macdRaw.histColors === "object"
+      ? macdRaw.histColors
+      : {};
+
+  return {
+    emas: Array.isArray(raw.emas)
+      ? raw.emas.map(sanitizeEmaConfig).filter(Boolean)
+      : [],
+    macd: {
+      enabled: Boolean(macdRaw.enabled),
+      fast: sanitizePositiveNumber(macdRaw.fast, defaults.macd.fast),
+      slow: sanitizePositiveNumber(macdRaw.slow, defaults.macd.slow),
+      signal: sanitizePositiveNumber(macdRaw.signal, defaults.macd.signal),
+      macdColor: sanitizeColor(macdRaw.macdColor, defaults.macd.macdColor),
+      signalColor: sanitizeColor(
+        macdRaw.signalColor,
+        defaults.macd.signalColor
+      ),
+      lineWidth: sanitizePositiveNumber(
+        macdRaw.lineWidth,
+        defaults.macd.lineWidth
+      ),
+      histColors: {
+        posGrow: sanitizeColor(
+          histRaw.posGrow,
+          defaults.macd.histColors.posGrow
+        ),
+        posFall: sanitizeColor(
+          histRaw.posFall,
+          defaults.macd.histColors.posFall
+        ),
+        negGrow: sanitizeColor(
+          histRaw.negGrow,
+          defaults.macd.histColors.negGrow
+        ),
+        negFall: sanitizeColor(
+          histRaw.negFall,
+          defaults.macd.histColors.negFall
+        ),
+      },
+    },
+  };
+};
+
+const loadPersistedIndicatorConfig = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(INDICATOR_CONFIG_STORAGE_KEY);
+    if (!raw) return null;
+    return sanitizeIndicatorConfig(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+};
+
+const persistIndicatorConfig = (config) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      INDICATOR_CONFIG_STORAGE_KEY,
+      JSON.stringify(cloneIndicatorConfig(config))
+    );
+  } catch {
+    // ignore quota / private mode failures
+  }
+};
+
 const createInitialAiReviewModal = () => ({
   visible: false,
   type: "single",
@@ -669,12 +768,25 @@ export default function ChartApp() {
   useEffect(() => {
     setIsMounted(true);
     setSymbol(getDefaultSymbol());
+
+    const persistedConfig = loadPersistedIndicatorConfig();
+    if (!persistedConfig) return;
+
+    const nextConfig = cloneIndicatorConfig(persistedConfig);
+    setIndConfig(nextConfig);
+    setDraftConfig(nextConfig);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!isMounted) return;
     persistLastSymbol(symbol);
   }, [isMounted, symbol]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    persistIndicatorConfig(indConfig);
+  }, [isMounted, indConfig]);
 
   const fullDataRef = useRef<any[]>([]);
   const fullEmaDataRef = useRef<any>({});
@@ -2353,9 +2465,10 @@ export default function ChartApp() {
     if (chartRef.current) {
       const mainTimeScale = chartRef.current.timeScale();
       const subTimeScale = subChart.timeScale();
-      subTimeScale.setVisibleLogicalRange(
-        mainTimeScale.getVisibleLogicalRange()
-      );
+      const initialRange = mainTimeScale.getVisibleLogicalRange();
+      if (initialRange) {
+        subTimeScale.setVisibleLogicalRange(initialRange);
+      }
       const syncToSub = (logicalRange) => {
         if (!logicalRange || isSyncingMain) return;
         isSyncingSub = true;
