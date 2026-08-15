@@ -157,6 +157,20 @@ const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
   )}`;
 };
 
+const findPointByTime = (data, time) => {
+  if (!data?.length || time == null) return null;
+  return data.find((d) => d.time === time) || null;
+};
+
+const applySyncedCrosshair = (chart, series, time, price) => {
+  if (!chart || !series) return;
+  if (time != null && price != null && Number.isFinite(Number(price))) {
+    chart.setCrosshairPosition(Number(price), time, series);
+    return;
+  }
+  chart.clearCrosshairPosition();
+};
+
 const createDefaultIndicatorConfig = () => ({
   emas: [],
   macd: {
@@ -574,6 +588,7 @@ export default function ChartApp() {
   const macdHistSeriesRef = useRef<any>(null);
   const macdLineSeriesRef = useRef<any>(null);
   const macdSignalSeriesRef = useRef<any>(null);
+  const isSyncingCrosshairRef = useRef(false);
 
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
   const [indicatorModalPos, setIndicatorModalPos] = useState({
@@ -1746,7 +1761,35 @@ export default function ChartApp() {
         updateLegend();
       }
 
-      if (!param.point) return;
+      const isSyncedMove = isSyncingCrosshairRef.current;
+      if (!isSyncedMove) {
+        isSyncingCrosshairRef.current = true;
+        try {
+          if (param.time) {
+            const macdPoint = findPointByTime(
+              fullMacdDataRef.current,
+              param.time
+            );
+            applySyncedCrosshair(
+              subChartRef.current,
+              macdLineSeriesRef.current,
+              param.time,
+              macdPoint?.macd ?? 0
+            );
+          } else {
+            applySyncedCrosshair(
+              subChartRef.current,
+              macdLineSeriesRef.current,
+              null,
+              null
+            );
+          }
+        } finally {
+          isSyncingCrosshairRef.current = false;
+        }
+      }
+
+      if (!param.point || isSyncedMove) return;
       const state = stateRef.current;
       const time = param.time;
       let price = series.coordinateToPrice(param.point.y);
@@ -2261,6 +2304,25 @@ export default function ChartApp() {
       } else {
         stateRef.current.isHovering = false;
         updateLegend();
+      }
+
+      if (isSyncingCrosshairRef.current) return;
+
+      isSyncingCrosshairRef.current = true;
+      try {
+        if (param.time) {
+          const candle = findPointByTime(fullDataRef.current, param.time);
+          applySyncedCrosshair(
+            chartRef.current,
+            seriesRef.current,
+            param.time,
+            candle?.close
+          );
+        } else {
+          applySyncedCrosshair(chartRef.current, seriesRef.current, null, null);
+        }
+      } finally {
+        isSyncingCrosshairRef.current = false;
       }
     };
     subChart.subscribeCrosshairMove(subCrosshairMoveHandler);
