@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
 import {
   SymbolFavoriteButton,
@@ -86,9 +87,13 @@ export const TopBar = ({
   return (
     <div className="h-16 border-b border-gray-800 flex items-center px-6 bg-gray-900 shrink-0 gap-6">
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <h1 className="text-lg font-bold text-white mr-4 flex items-center gap-2">
+        <Link
+          href="/"
+          className="text-lg font-bold text-white mr-4 flex items-center gap-2 shrink-0 hover:text-blue-400 transition-colors"
+          title="返回主页"
+        >
           <CircleDollarSign className="text-blue-500" /> 复盘模拟交易
-        </h1>
+        </Link>
 
         <div className="flex items-center gap-2">
           <SymbolSearchSelect value={symbol} onChange={setSymbol} />

@@ -7,6 +7,7 @@ import {
   Activity,
   FileSpreadsheet,
   Swords,
+  CircleDollarSign,
   Plus,
 } from "lucide-react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
@@ -194,6 +195,33 @@ export default function Home() {
 
                 <div className="mt-auto pt-4 flex items-center text-sm font-semibold text-amber-600 dark:text-amber-300 group-hover:text-amber-700 dark:group-hover:text-amber-200 transition-colors">
                   <span>立即分析</span>
+                  <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </Link>
+
+              {/* Card 5: Market Master */}
+              <Link
+                href="/market-master"
+                className="group relative bg-white dark:bg-slate-900 p-8 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col"
+              >
+                <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-[0.08] dark:opacity-[0.05] dark:group-hover:opacity-[0.1] transition-opacity duration-500 rotate-12">
+                  <CircleDollarSign className="w-48 h-48 text-cyan-600 dark:text-cyan-400" />
+                </div>
+
+                <div className="w-14 h-14 bg-cyan-50 dark:bg-cyan-900/40 rounded-xl flex items-center justify-center mb-6 group-hover:bg-cyan-600 dark:group-hover:bg-cyan-600 group-hover:scale-110 transition-all duration-300 shadow-sm">
+                  <CircleDollarSign className="h-7 w-7 text-cyan-600 dark:text-cyan-400 group-hover:text-white transition-colors" />
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                  Market Master
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed mb-6 font-medium grow">
+                  行情复盘与模拟交易工作台。支持真实 K
+                  线回放、画线标注与逐 K 回测，帮助你在实盘前打磨交易节奏。
+                </p>
+
+                <div className="mt-auto pt-4 flex items-center text-sm font-semibold text-cyan-600 dark:text-cyan-400 group-hover:text-cyan-700 dark:group-hover:text-cyan-300 transition-colors">
+                  <span>立即使用</span>
                   <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
                 </div>
               </Link>
