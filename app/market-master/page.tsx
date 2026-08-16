@@ -1,7 +1,13 @@
 // @ts-nocheck
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { Settings, Trash } from "lucide-react";
 import {
   CandlestickSeries,
@@ -156,6 +162,25 @@ const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
     utcDate.getUTCMinutes()
   )}`;
 };
+
+const formatCandleTooltipTime = (timeValue: Time) => {
+  const utcDate = toUtcDate(timeValue);
+  if (!utcDate) return "";
+
+  return `${utcDate.getUTCFullYear()}-${padTimePart(
+    utcDate.getUTCMonth() + 1
+  )}-${padTimePart(utcDate.getUTCDate())} ${padTimePart(
+    utcDate.getUTCHours()
+  )}:${padTimePart(utcDate.getUTCMinutes())}`;
+};
+
+const CANDLE_TOOLTIP_OFFSET = { x: 5, y: 5 };
+const CANDLE_TOOLTIP_OHLC_LABELS = [
+  { key: "open", label: "Open" },
+  { key: "high", label: "High" },
+  { key: "low", label: "Low" },
+  { key: "close", label: "Close" },
+];
 
 const findPointByTime = (data, time) => {
   if (!data?.length || time == null) return null;
@@ -840,6 +865,94 @@ export default function ChartApp() {
   }, [priceDecimals]);
 
   const [legendData, setLegendData] = useState(null);
+  const [candleTooltip, setCandleTooltip] = useState(null);
+  const candleTooltipRef = useRef(null);
+  const candleTooltipElRef = useRef(null);
+
+  const hideCandleTooltip = useCallback(() => {
+    candleTooltipRef.current = null;
+    setCandleTooltip(null);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (
+      !candleTooltip ||
+      !candleTooltipElRef.current ||
+      !chartContainerRef.current
+    )
+      return;
+
+    const { width, height } =
+      candleTooltipElRef.current.getBoundingClientRect();
+    if (!width || !height) return;
+
+    const containerWidth = chartContainerRef.current.clientWidth;
+    const posX = candleTooltip.point.x + CANDLE_TOOLTIP_OFFSET.x;
+    const posY = candleTooltip.point.y - height - CANDLE_TOOLTIP_OFFSET.y;
+    const nextLeft =
+      posX + width < containerWidth
+        ? posX
+        : Math.max(
+            CANDLE_TOOLTIP_OFFSET.x,
+            containerWidth - width - CANDLE_TOOLTIP_OFFSET.x
+          );
+    const nextTop =
+      candleTooltip.point.y >= height ? posY : CANDLE_TOOLTIP_OFFSET.y;
+
+    if (nextLeft === candleTooltip.left && nextTop === candleTooltip.top)
+      return;
+
+    setCandleTooltip((prev) =>
+      prev ? { ...prev, left: nextLeft, top: nextTop } : prev
+    );
+  }, [candleTooltip]);
+
+  useEffect(() => {
+    if (!candleTooltip) return;
+
+    const closeByWheel = () => hideCandleTooltip();
+    document.addEventListener("wheel", closeByWheel);
+
+    const container = chartContainerRef.current;
+    let panStart = null;
+    const onChartMouseDown = (event) => {
+      if (event.button !== 0) return;
+      if (candleTooltipElRef.current?.contains(event.target)) return;
+      const state = stateRef.current;
+      if (
+        state.hoveredOrderLine ||
+        state.lines.some((line) => line.hoveredPoint !== null)
+      )
+        return;
+      panStart = { x: event.clientX, y: event.clientY };
+    };
+    const onChartMouseMove = (event) => {
+      if (!panStart) return;
+      const dx = event.clientX - panStart.x;
+      const dy = event.clientY - panStart.y;
+      if (dx * dx + dy * dy < 16) return;
+      panStart = null;
+      hideCandleTooltip();
+    };
+    const onChartMouseUp = () => {
+      panStart = null;
+    };
+
+    container?.addEventListener("mousedown", onChartMouseDown);
+    window.addEventListener("mousemove", onChartMouseMove);
+    window.addEventListener("mouseup", onChartMouseUp);
+
+    return () => {
+      document.removeEventListener("wheel", closeByWheel);
+      container?.removeEventListener("mousedown", onChartMouseDown);
+      window.removeEventListener("mousemove", onChartMouseMove);
+      window.removeEventListener("mouseup", onChartMouseUp);
+    };
+  }, [candleTooltip, hideCandleTooltip]);
+
+  useEffect(() => {
+    hideCandleTooltip();
+  }, [symbol, timeframe, hideCandleTooltip]);
 
   const [balance, setBalance] = useState(100000);
   const [trades, setTrades] = useState([]);
@@ -2107,6 +2220,7 @@ export default function ChartApp() {
     const clickHandler = (param) => {
       const state = stateRef.current;
       if (state.mode === "draw") {
+        hideCandleTooltip();
         if (!state.currentLogical) return;
         if (!state.isDrawing) {
           const newLine = new ShapePrimitive(
@@ -2132,6 +2246,7 @@ export default function ChartApp() {
         (line) => line.hoveredPoint !== null
       );
       if (hoveredShape) {
+        hideCandleTooltip();
         setSelectedShape(hoveredShape);
         setSelectedIndicator(null);
         return;
@@ -2149,11 +2264,33 @@ export default function ChartApp() {
         : null;
 
       if (clickedEmaId) {
+        hideCandleTooltip();
         setSelectedShape(null);
         setSelectedIndicator({ kind: "ema", id: clickedEmaId });
-      } else {
-        clearAllSelections();
+        return;
       }
+
+      clearAllSelections();
+
+      if (state.hoveredOrderLine) return;
+      if (param.hoveredObjectId) return;
+
+      let candleData = param.seriesData?.get(series);
+      if (!candleData || candleData.open == null) {
+        candleData = clickedTime
+          ? fullDataRef.current.find((d) => d.time === clickedTime)
+          : null;
+      }
+      if (!candleData || candleData.open == null) return;
+
+      const nextTooltip = {
+        data: candleData,
+        point: { x: param.point.x, y: param.point.y },
+        left: param.point.x + CANDLE_TOOLTIP_OFFSET.x,
+        top: param.point.y,
+      };
+      candleTooltipRef.current = nextTooltip;
+      setCandleTooltip(nextTooltip);
     };
 
     const mousedownHandler = (e) => {
@@ -2839,6 +2976,7 @@ export default function ChartApp() {
   }, 0);
 
   const setDrawingTool = (type) => {
+    hideCandleTooltip();
     setMode("draw");
     setDrawType(type);
     stateRef.current.mode = "draw";
@@ -2993,6 +3131,7 @@ export default function ChartApp() {
   const setInteractionMode = (nextMode: string) => {
     setMode(nextMode);
     stateRef.current.mode = nextMode;
+    if (nextMode !== "idle") hideCandleTooltip();
   };
 
   const clearAllLines = () => {
@@ -3201,6 +3340,40 @@ export default function ChartApp() {
               </div>
             )}
             <div ref={chartContainerRef} className="absolute inset-0" />
+            {candleTooltip?.data && (
+              <div
+                ref={candleTooltipElRef}
+                className="absolute z-10 w-fit p-[2px] rounded-sm overflow-hidden cursor-pointer"
+                style={{
+                  left: `${candleTooltip.left}px`,
+                  top: `${candleTooltip.top}px`,
+                  background:
+                    "conic-gradient(#FFC876, #79FFF7, #9F53FF, #FF98E2, #FFC876)",
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  hideCandleTooltip();
+                }}
+              >
+                <div className="w-fit bg-black text-white p-2 rounded-sm">
+                  <h1 className="mb-2 font-semibold">{symbol}</h1>
+                  <p className="text-sm mb-1">
+                    {formatCandleTooltipTime(candleTooltip.data.time)}
+                  </p>
+                  {CANDLE_TOOLTIP_OHLC_LABELS.map(({ key, label }) => (
+                    <p className="flex text-sm pointer-events-none" key={key}>
+                      <span className="w-14">{label}:</span>
+                      <span>{formatVal(candleTooltip.data[key])}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {indConfig.macd.enabled && (
