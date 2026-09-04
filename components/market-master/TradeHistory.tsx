@@ -24,8 +24,12 @@ export const TradeHistory = ({
 
   return (
     <div
-      className="bg-gray-900 border-t border-gray-800 flex flex-col shrink-0 min-h-0"
-      style={{ height: isBottomPanelOpen ? panelHeight : 40 }}
+      className={`flex min-h-0 shrink-0 flex-col border-t border-gray-800 bg-gray-900 ${
+        isBottomPanelOpen
+          ? "h-[min(38dvh,260px)] md:h-[var(--panel-height)]"
+          : "h-10"
+      }`}
+      style={{ "--panel-height": `${panelHeight}px` } as React.CSSProperties}
     >
       <div
         className="h-10 px-4 border-b border-gray-800 text-sm font-medium text-gray-400 bg-gray-900 flex justify-between items-center shrink-0 cursor-pointer hover:bg-gray-800/80 transition-colors"
@@ -55,7 +59,113 @@ export const TradeHistory = ({
       </div>
       {isBottomPanelOpen && (
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-left text-sm whitespace-nowrap">
+          <div className="space-y-2 p-2 md:hidden">
+            {trades.length === 0 && (
+              <div className="py-6 text-center text-sm text-gray-600">
+                暂无交易数据
+              </div>
+            )}
+            {trades.map((trade: any) => {
+              const isOpen = trade.status === "Open";
+              const currentPnl = isOpen
+                ? trade.type === "Buy"
+                  ? (currentPrice - trade.entry) * trade.units
+                  : (trade.entry - currentPrice) * trade.units
+                : trade.pnl;
+              return (
+                <article
+                  key={trade.id}
+                  className="rounded-lg border border-gray-800 bg-gray-900/80 p-3"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded px-2 py-0.5 text-xs ${
+                          isOpen
+                            ? "bg-blue-500/20 text-blue-400"
+                            : "bg-gray-700 text-gray-400"
+                        }`}
+                      >
+                        {isOpen ? "持仓中" : trade.reason}
+                      </span>
+                      <span
+                        className={`text-sm font-bold ${
+                          trade.type === "Buy"
+                            ? "text-emerald-500"
+                            : "text-red-500"
+                        }`}
+                      >
+                        {trade.type}
+                      </span>
+                    </div>
+                    <span
+                      className={`font-mono text-sm font-bold ${
+                        currentPnl > 0
+                          ? "text-emerald-400"
+                          : currentPnl < 0
+                            ? "text-red-400"
+                            : "text-gray-400"
+                      }`}
+                    >
+                      {currentPnl > 0 ? "+" : ""}
+                      {currentPnl.toFixed(2)}
+                    </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <dt className="text-gray-600">数量</dt>
+                      <dd className="font-mono text-gray-300">{trade.units}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-600">开仓价</dt>
+                      <dd className="font-mono text-gray-300">
+                        {trade.entry.toFixed(priceDecimals)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-600">止损</dt>
+                      <dd className="font-mono text-red-400/70">
+                        {trade.sl !== null
+                          ? trade.sl.toFixed(priceDecimals)
+                          : "-"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-600">止盈</dt>
+                      <dd className="font-mono text-emerald-400/70">
+                        {trade.tp !== null
+                          ? trade.tp.toFixed(priceDecimals)
+                          : "-"}
+                      </dd>
+                    </div>
+                  </dl>
+                  {isOpen && (
+                    <div className="mt-3 flex items-center justify-end gap-3 border-t border-gray-800 pt-3">
+                      <button
+                        onClick={() => toggleTradeVisibility(trade.id)}
+                        className="flex min-h-9 items-center gap-1.5 px-2 text-xs text-gray-400 transition-colors hover:text-white"
+                      >
+                        {trade.visibleOnChart === false ? (
+                          <EyeOff size={16} />
+                        ) : (
+                          <Eye size={16} />
+                        )}
+                        {trade.visibleOnChart === false ? "显示标线" : "隐藏标线"}
+                      </button>
+                      <button
+                        onClick={() => handleCloseMarket(trade.id)}
+                        className="min-h-9 rounded bg-gray-700 px-4 text-xs text-white transition-colors hover:bg-gray-600"
+                      >
+                        市价平仓
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
+          <table className="hidden w-full whitespace-nowrap text-left text-sm md:table">
             <thead className="bg-gray-800/50 text-gray-500 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-2 font-normal">状态</th>

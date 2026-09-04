@@ -27,8 +27,9 @@ export const TradeTerminal = ({
     return (
       <button
         onClick={() => setIsRightPanelOpen(true)}
-        className="cursor-pointer absolute right-0 top-1/2 -translate-y-1/2 bg-gray-800 border border-slate-500 border-r-0 rounded-l-lg py-4 px-2 text-gray-400 hover:text-white hover:bg-gray-700 shadow-xl z-20"
+        className="absolute bottom-3 right-3 z-20 cursor-pointer rounded-full border border-slate-500 bg-gray-800 p-3 text-gray-300 shadow-xl transition-colors hover:bg-gray-700 hover:text-white md:bottom-auto md:right-0 md:top-1/2 md:-translate-y-1/2 md:rounded-l-lg md:rounded-r-none md:border-r-0 md:px-2 md:py-4"
         title="展开交易终端"
+        aria-label="展开交易终端"
       >
         <PanelRightOpen size={22} />
       </button>
@@ -37,11 +38,18 @@ export const TradeTerminal = ({
 
   if (isRightPanelOpen && !isMaximized) {
     return (
-      <div
-        className="bg-gray-900 border-l border-gray-800 flex flex-col shrink-0 min-h-0 z-10"
-        style={{ width: panelWidth }}
-      >
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+      <>
+        <button
+          type="button"
+          className="absolute inset-0 z-20 bg-black/50 backdrop-blur-[1px] md:hidden"
+          onClick={() => setIsRightPanelOpen(false)}
+          aria-label="关闭交易终端"
+        />
+        <div
+          className="absolute inset-x-0 bottom-0 z-30 flex max-h-[min(76dvh,600px)] min-h-0 shrink-0 flex-col overflow-hidden rounded-t-2xl border-t border-gray-700 bg-gray-900 shadow-2xl max-md:!w-full md:static md:max-h-none md:rounded-none md:border-l md:border-t-0 md:border-gray-800 md:shadow-none"
+          style={{ width: panelWidth }}
+        >
+        <div className="flex items-center justify-between border-b border-gray-800 p-3 md:p-4">
           <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">
             交易终端
           </h2>
@@ -49,22 +57,23 @@ export const TradeTerminal = ({
             onClick={() => setIsRightPanelOpen(false)}
             className="text-gray-500 hover:text-white transition-colors cursor-pointer"
             title="收起侧边栏"
+            aria-label="收起交易终端"
           >
             <PanelRightClose size={22} />
           </button>
         </div>
 
-        <div className="p-4 flex flex-col flex-1">
-          <div className="text-center mb-6">
+        <div className="flex flex-1 flex-col overflow-y-auto p-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-4">
+          <div className="mb-3 text-center md:mb-6">
             <div className="text-xs text-gray-500 mb-1">
               当前市价 ({symbol})
             </div>
-            <div className="text-3xl font-mono font-bold text-white tracking-tight">
+            <div className="font-mono text-2xl font-bold tracking-tight text-white md:text-3xl">
               {currentPrice.toFixed(priceDecimals)}
             </div>
           </div>
 
-          <div className="space-y-4 mb-6">
+          <div className="mb-4 space-y-3 md:mb-6 md:space-y-4">
             <div>
               <label className="text-xs text-gray-500 block mb-1">
                 交易数量 (Units)
@@ -123,7 +132,7 @@ export const TradeTerminal = ({
             </div>
           </div>
 
-          <div className="flex gap-3 mt-auto mb-4">
+          <div className="mt-auto flex gap-3 md:mb-4">
             <button
               onClick={() => handlePlaceOrder("Sell")}
               disabled={!canPlaceOrder}
@@ -150,7 +159,8 @@ export const TradeTerminal = ({
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </>
     );
   }
 

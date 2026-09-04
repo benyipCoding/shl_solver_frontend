@@ -26,11 +26,11 @@ export const IndicatorConfigModal = ({
         top: indicatorModalPos.y,
         position: "absolute",
       }}
-      className="z-50 w-137.5 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+      className="z-50 flex w-137.5 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl max-md:!fixed max-md:!bottom-2 max-md:!left-2 max-md:!right-2 max-md:!top-2 max-md:!w-auto"
     >
       <div
         onMouseDown={handleIndDragStart}
-        className="bg-gray-800 p-3 cursor-move flex items-center justify-between border-b border-gray-700"
+        className="flex cursor-move items-center justify-between border-b border-gray-700 bg-gray-800 p-3 max-md:cursor-default"
       >
         <span className="text-sm font-bold text-gray-300 tracking-wider flex items-center gap-2">
           <BarChart2 size={16} className="text-blue-500" /> 指标配置中心
@@ -46,8 +46,8 @@ export const IndicatorConfigModal = ({
         </button>
       </div>
 
-      <div className="flex h-72">
-        <div className="w-32 border-r border-gray-800 bg-gray-900/50 p-2 space-y-1">
+      <div className="flex h-72 min-h-0 max-md:h-auto max-md:flex-1 max-md:flex-col">
+        <div className="w-32 space-y-1 border-r border-gray-800 bg-gray-900/50 p-2 max-md:flex max-md:w-full max-md:space-y-0 max-md:border-b max-md:border-r-0">
           <button
             onClick={() => setSelectedIndTab("EMA")}
             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors font-medium ${
@@ -102,7 +102,7 @@ export const IndicatorConfigModal = ({
                   >
                     <Trash2 size={16} />
                   </button>
-                  <div className="grid grid-cols-2 gap-4 pr-6">
+                  <div className="grid grid-cols-1 gap-4 pr-6 sm:grid-cols-2">
                     <div>
                       <label className="text-[10px] text-gray-500 block mb-1">
                         周期 (Period)
@@ -202,7 +202,7 @@ export const IndicatorConfigModal = ({
                     <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">
                       核心参数
                     </h4>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
                         <label className="text-[10px] text-gray-400 block mb-1">
                           快线 (Fast)
@@ -269,7 +269,7 @@ export const IndicatorConfigModal = ({
                     <h4 className="text-[10px] text-gray-500 font-bold uppercase mb-2">
                       线条颜色
                     </h4>
-                    <div className="flex gap-6">
+                    <div className="flex flex-wrap gap-4 sm:gap-6">
                       <div className="flex items-center gap-2">
                         <ColorPicker
                           value={draftConfig.macd.macdColor}
@@ -307,7 +307,7 @@ export const IndicatorConfigModal = ({
         </div>
       </div>
 
-      <div className="p-3 border-t border-gray-800 bg-gray-800/80 flex justify-end gap-3">
+      <div className="flex justify-end gap-3 border-t border-gray-800 bg-gray-800/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           onClick={() => {
             setIsIndicatorModalOpen(false);

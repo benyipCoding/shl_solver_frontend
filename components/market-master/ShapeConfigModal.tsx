@@ -16,8 +16,8 @@ export const ShapeConfigModal = ({
   if (!shape) return null;
 
   return (
-    <div className="fixed inset-0 z-110 bg-black/40 flex items-center justify-center">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-80 p-5">
+    <div className="fixed inset-0 z-110 flex items-center justify-center bg-black/40 p-3">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-80 overflow-y-auto rounded-xl border border-gray-700 bg-gray-900 p-5 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h3 className="font-bold text-white tracking-wider">图形配置</h3>
           <button

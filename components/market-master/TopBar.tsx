@@ -84,23 +84,36 @@ export const TopBar = ({
     backtestButtonTitle = `当前品种/周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
   }
 
+  const compactBacktestButtonLabel = isBacktestMode
+    ? "退出回测"
+    : isDataLoading
+      ? "行情加载中"
+      : isHistoryLoading
+        ? "历史加载中"
+        : dataError || totalCandles === 0
+          ? "暂不可回测"
+          : totalCandles < minBacktestCandles
+            ? "历史不足"
+            : "逐K回测";
+
   return (
-    <div className="h-16 border-b border-gray-800 flex items-center px-6 bg-gray-900 shrink-0 gap-6">
-      <div className="flex items-center gap-4 min-w-0 flex-1">
+    <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-gray-800 bg-gray-900 px-3 py-2 lg:h-16 lg:flex-nowrap lg:gap-6 lg:px-6 lg:py-0">
+      <div className="order-2 flex w-full min-w-0 basis-full items-center gap-3 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:order-1 lg:w-auto lg:flex-1 lg:basis-auto lg:gap-4 lg:pb-0 2xl:overflow-visible">
         <Link
           href="/"
-          className="text-lg font-bold text-white mr-4 flex items-center gap-2 shrink-0 hover:text-blue-400 transition-colors"
+          className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4"
           title="返回主页"
         >
-          <CircleDollarSign className="text-blue-500" /> 复盘模拟交易
+          <CircleDollarSign className="text-blue-500" />
+          <span className="hidden sm:inline">复盘模拟交易</span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <SymbolSearchSelect value={symbol} onChange={setSymbol} />
           <select
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-md px-2 py-1 outline-none hover:bg-gray-700 transition-colors cursor-pointer"
+            className="cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:py-1"
           >
             {timeframeOptions.map((option: any) => (
               <option key={option.value} value={option.value}>
@@ -128,10 +141,10 @@ export const TopBar = ({
           </div>
         ) : null}
 
-        <div className="flex bg-gray-800 rounded-lg p-1 gap-1 border border-gray-700 ml-2">
+        <div className="ml-1 flex shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 lg:ml-2">
           <button
             onClick={() => setMode("idle")}
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               mode === "idle"
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -143,7 +156,7 @@ export const TopBar = ({
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
           <button
             onClick={() => setDrawingTool("line")}
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               mode === "draw" && drawType === "line"
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -154,7 +167,7 @@ export const TopBar = ({
           </button>
           <button
             onClick={() => setDrawingTool("rectangle")}
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               mode === "draw" && drawType === "rectangle"
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -165,7 +178,7 @@ export const TopBar = ({
           </button>
           <button
             onClick={() => setDrawingTool("fib")}
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               mode === "draw" && drawType === "fib"
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -176,7 +189,7 @@ export const TopBar = ({
           </button>
           <button
             onClick={clearLines}
-            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-red-400 transition-colors"
+            className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
             title="清空画线"
           >
             <Trash2 size={18} />
@@ -185,7 +198,7 @@ export const TopBar = ({
 
           <button
             onClick={() => setIsMagnetEnabled(!isMagnetEnabled)}
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               isMagnetEnabled
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -200,7 +213,7 @@ export const TopBar = ({
             onClick={() =>
               setIsRightPriceAutoScaleEnabled(!isRightPriceAutoScaleEnabled)
             }
-            className={`p-1.5 rounded-md flex items-center transition-colors ${
+            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
               isRightPriceAutoScaleEnabled
                 ? "bg-gray-700 text-blue-400"
                 : "hover:bg-gray-700 text-gray-400"
@@ -216,7 +229,7 @@ export const TopBar = ({
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
           <button
             onClick={() => setIsIndicatorModalOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-blue-400 transition-colors"
+            className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-blue-400 sm:p-2"
             title="指标配置中心 (Indicators)"
           >
             <BarChart2 size={18} />
@@ -243,7 +256,7 @@ export const TopBar = ({
             setIsBacktestMode(!isBacktestMode);
           }}
           disabled={isBacktestToggleDisabled}
-          className={`ml-3 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`ml-1 flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 lg:ml-3 ${
             isBacktestMode
               ? "border-blue-500/50 bg-blue-600/20 text-blue-200 hover:bg-blue-600/30"
               : "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
@@ -255,7 +268,8 @@ export const TopBar = ({
           ) : (
             <StepForward size={14} className="shrink-0" />
           )}
-          {backtestButtonLabel}
+          <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
+          <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
         </button>
 
         {isBacktestMode && (
@@ -289,17 +303,17 @@ export const TopBar = ({
         )}
       </div>
 
-      <div className="flex items-center gap-6 shrink-0">
-        <div className="flex flex-col items-end">
-          <span className="text-xs text-gray-500">账户余额</span>
-          <span className="font-mono font-bold text-white">
+      <div className="order-1 ml-auto flex w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:w-auto lg:gap-6">
+        <div className="flex flex-col items-end leading-tight">
+          <span className="hidden text-xs text-gray-500 sm:inline">账户余额</span>
+          <span className="font-mono text-sm font-bold text-white sm:text-base">
             ${balance.toFixed(2)}
           </span>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-xs text-gray-500">未结盈亏</span>
+        <div className="flex flex-col items-end leading-tight">
+          <span className="hidden text-xs text-gray-500 sm:inline">未结盈亏</span>
           <span
-            className={`font-mono font-bold ${
+            className={`font-mono text-sm font-bold sm:text-base ${
               totalFloatingPnl >= 0 ? "text-emerald-400" : "text-red-400"
             }`}
           >
@@ -309,6 +323,6 @@ export const TopBar = ({
         </div>
         <UserHeaderActions simpleMode={true} />
       </div>
-    </div>
+    </header>
   );
 };

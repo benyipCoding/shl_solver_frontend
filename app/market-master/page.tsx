@@ -760,6 +760,23 @@ export default function ChartApp() {
   const [bottomPanelHeight, setBottomPanelHeight] = useState(
     BOTTOM_PANEL_DEFAULT_HEIGHT
   );
+
+  useEffect(() => {
+    const mobileMedia = window.matchMedia("(max-width: 767px)");
+    const syncPanelDefaults = (isMobile: boolean) => {
+      if (isMobile) {
+        setIsRightPanelOpen(false);
+        setIsBottomPanelOpen(false);
+      }
+    };
+
+    syncPanelDefaults(mobileMedia.matches);
+    const handleViewportChange = (event: MediaQueryListEvent) =>
+      syncPanelDefaults(event.matches);
+    mobileMedia.addEventListener("change", handleViewportChange);
+    return () =>
+      mobileMedia.removeEventListener("change", handleViewportChange);
+  }, []);
   const resizeStateRef = useRef<any>({
     direction: null,
     startX: 0,
@@ -3146,7 +3163,7 @@ export default function ChartApp() {
   if (!isMounted) return null;
 
   return (
-    <div className="flex flex-col h-screen w-full bg-gray-950 font-sans text-gray-200">
+    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-gray-950 font-sans text-gray-200">
       <AiReviewModal
         aiReviewModal={aiReviewModal}
         setAiReviewModal={setAiReviewModal}
@@ -3260,12 +3277,12 @@ export default function ChartApp() {
               </div>
             )}
             {legendData && (
-              <div className="absolute top-3 left-4 z-10 flex items-center gap-4 text-xs font-mono pointer-events-none bg-gray-900/60 px-3 py-1.5 rounded border border-gray-700/50 backdrop-blur-sm">
+              <div className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2 py-1.5 font-mono text-[10px] backdrop-blur-sm sm:left-4 sm:top-3 sm:gap-4 sm:px-3 sm:text-xs">
                 <div className="text-gray-400 font-semibold tracking-wider">
                   {symbol}
                 </div>
-                <div className="flex gap-3 text-gray-400 border-r border-gray-600 pr-4">
-                  <span>
+                <div className="flex gap-2 border-r border-gray-600 pr-2 text-gray-400 sm:gap-3 sm:pr-4">
+                  <span className="hidden sm:inline">
                     O{" "}
                     <span
                       className={
@@ -3277,7 +3294,7 @@ export default function ChartApp() {
                       {formatVal(legendData.open)}
                     </span>
                   </span>
-                  <span>
+                  <span className="hidden sm:inline">
                     H{" "}
                     <span
                       className={
@@ -3289,7 +3306,7 @@ export default function ChartApp() {
                       {formatVal(legendData.high)}
                     </span>
                   </span>
-                  <span>
+                  <span className="hidden sm:inline">
                     L{" "}
                     <span
                       className={
@@ -3314,7 +3331,7 @@ export default function ChartApp() {
                     </span>
                   </span>
                 </div>
-                <div className="flex gap-3">
+                <div className="hidden gap-3 sm:flex">
                   {legendData.emas.map((ema, idx) => (
                     <div
                       key={idx}
@@ -3377,9 +3394,9 @@ export default function ChartApp() {
           </div>
 
           {indConfig.macd.enabled && (
-            <div className="h-48 relative border-t border-gray-800 bg-[#111827] shrink-0">
+            <div className="relative h-36 shrink-0 border-t border-gray-800 bg-[#111827] sm:h-48">
               {legendData && (
-                <div className="absolute top-2 left-4 z-10 flex items-center gap-4 text-xs font-mono pointer-events-none bg-gray-900/60 px-3 py-1.5 rounded border border-gray-700/50 backdrop-blur-sm">
+                <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2 py-1.5 font-mono text-[10px] backdrop-blur-sm sm:left-4 sm:right-auto sm:gap-4 sm:px-3 sm:text-xs">
                   <div className="text-gray-400 font-semibold tracking-wider">
                     MACD ({indConfig.macd.fast},{indConfig.macd.slow},
                     {indConfig.macd.signal})
@@ -3406,7 +3423,7 @@ export default function ChartApp() {
           {isBottomPanelOpen && !isMaximized && (
             <div
               onMouseDown={startBottomPanelResize}
-              className="h-1.5 shrink-0 cursor-row-resize bg-transparent hover:bg-blue-500/30 active:bg-blue-500/40 transition-colors"
+              className="hidden h-1.5 shrink-0 cursor-row-resize bg-transparent transition-colors hover:bg-blue-500/30 active:bg-blue-500/40 md:block"
               title="拖拽调整交易记录高度"
             />
           )}
@@ -3428,7 +3445,7 @@ export default function ChartApp() {
         {isRightPanelOpen && !isMaximized && (
           <div
             onMouseDown={startRightPanelResize}
-            className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-500/30 active:bg-blue-500/40 transition-colors"
+            className="hidden w-1.5 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-blue-500/30 active:bg-blue-500/40 md:block"
             title="拖拽调整交易终端宽度"
           />
         )}

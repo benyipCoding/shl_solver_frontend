@@ -9,10 +9,10 @@ export const AiReviewModal = ({
   if (!aiReviewModal.visible) return null;
 
   return (
-    <div className="fixed inset-0 z-120 bg-black/60 flex items-center justify-center backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-120 p-0 overflow-hidden flex flex-col">
-        <div className="bg-linear-to-r from-indigo-900/50 to-purple-900/50 p-4 border-b border-gray-700 flex justify-between items-center">
-          <span className="font-bold text-white tracking-wider flex items-center gap-2">
+    <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-120 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 p-0 shadow-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-700 bg-linear-to-r from-indigo-900/50 to-purple-900/50 p-3 sm:p-4">
+          <span className="flex min-w-0 items-center gap-2 font-bold tracking-wider text-white">
             <Bot size={18} className="text-indigo-400" /> {aiReviewModal.title}
           </span>
           <button
@@ -29,9 +29,9 @@ export const AiReviewModal = ({
             <X size={18} />
           </button>
         </div>
-        <div className="p-5">
+        <div className="overflow-y-auto p-3 sm:p-5">
           {aiReviewModal.type === "single" && aiReviewModal.trade && (
-            <div className="flex gap-4 mb-4 text-sm bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+            <div className="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-700/50 bg-gray-800/50 p-3 text-sm sm:grid-cols-4 sm:gap-4">
               <div>
                 <span className="text-gray-500 block text-xs mb-1">
                   交易方向
