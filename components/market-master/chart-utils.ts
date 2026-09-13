@@ -331,6 +331,48 @@ export function calculateMACD(
   });
 }
 
+export function calculateBollingerBands(
+  data: any[],
+  period: number = 20,
+  standardDeviation: number = 2,
+  key: string = "close"
+) {
+  const normalizedPeriod = Math.max(1, Math.floor(Number(period) || 20));
+  const normalizedDeviation = Math.max(
+    Number.EPSILON,
+    Number(standardDeviation) || 2
+  );
+
+  return data.map((point: any, index: number) => {
+    if (index < normalizedPeriod - 1) {
+      return {
+        time: point.time,
+        middle: null,
+        upper: null,
+        lower: null,
+      };
+    }
+
+    const window = data.slice(index - normalizedPeriod + 1, index + 1);
+    const middle =
+      window.reduce((sum, item) => sum + Number(item[key]), 0) /
+      normalizedPeriod;
+    const variance =
+      window.reduce((sum, item) => {
+        const distance = Number(item[key]) - middle;
+        return sum + distance * distance;
+      }, 0) / normalizedPeriod;
+    const bandDistance = Math.sqrt(variance) * normalizedDeviation;
+
+    return {
+      time: point.time,
+      middle,
+      upper: middle + bandDistance,
+      lower: middle - bandDistance,
+    };
+  });
+}
+
 export function generateMockData(
   symbol: string = "XAU/USD",
   timeframe: string = "D1",

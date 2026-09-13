@@ -46,8 +46,19 @@ export type EmaConfig = {
   lineWidth: number;
 };
 
+export type BollingerConfig = {
+  enabled: boolean;
+  period: number;
+  standardDeviation: number;
+  middleColor: string;
+  upperColor: string;
+  lowerColor: string;
+  lineWidth: number;
+};
+
 export type IndicatorConfig = {
   emas: EmaConfig[];
+  bollinger: BollingerConfig;
   macd: {
     enabled: boolean;
     fast: number;
@@ -186,6 +197,15 @@ export const applySyncedCrosshair = (
 
 export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
   emas: [],
+  bollinger: {
+    enabled: false,
+    period: 20,
+    standardDeviation: 2,
+    middleColor: "#f59e0b",
+    upperColor: "#38bdf8",
+    lowerColor: "#38bdf8",
+    lineWidth: 1.5,
+  },
   macd: {
     enabled: false,
     fast: 12,
@@ -207,6 +227,7 @@ export const cloneIndicatorConfig = (
   config: IndicatorConfig
 ): IndicatorConfig => ({
   emas: config.emas.map((ema) => ({ ...ema })),
+  bollinger: { ...config.bollinger },
   macd: {
     ...config.macd,
     histColors: { ...config.macd.histColors },
@@ -223,6 +244,9 @@ const sanitizePositiveNumber = (value: unknown, fallback: number) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
+
+const sanitizePositiveInteger = (value: unknown, fallback: number) =>
+  Math.max(1, Math.floor(sanitizePositiveNumber(value, fallback)));
 
 const sanitizeEmaConfig = (value: unknown): EmaConfig | null => {
   if (!isRecord(value)) return null;
@@ -246,6 +270,7 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
 
   const macdRaw = isRecord(value.macd) ? value.macd : {};
   const histRaw = isRecord(macdRaw.histColors) ? macdRaw.histColors : {};
+  const bollingerRaw = isRecord(value.bollinger) ? value.bollinger : {};
 
   return {
     emas: Array.isArray(value.emas)
@@ -253,6 +278,33 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
           .map(sanitizeEmaConfig)
           .filter((ema): ema is EmaConfig => ema !== null)
       : [],
+    bollinger: {
+      enabled: Boolean(bollingerRaw.enabled),
+      period: sanitizePositiveInteger(
+        bollingerRaw.period,
+        defaults.bollinger.period
+      ),
+      standardDeviation: sanitizePositiveNumber(
+        bollingerRaw.standardDeviation,
+        defaults.bollinger.standardDeviation
+      ),
+      middleColor: sanitizeColor(
+        bollingerRaw.middleColor,
+        defaults.bollinger.middleColor
+      ),
+      upperColor: sanitizeColor(
+        bollingerRaw.upperColor,
+        defaults.bollinger.upperColor
+      ),
+      lowerColor: sanitizeColor(
+        bollingerRaw.lowerColor,
+        defaults.bollinger.lowerColor
+      ),
+      lineWidth: sanitizePositiveNumber(
+        bollingerRaw.lineWidth,
+        defaults.bollinger.lineWidth
+      ),
+    },
     macd: {
       enabled: Boolean(macdRaw.enabled),
       fast: sanitizePositiveNumber(macdRaw.fast, defaults.macd.fast),

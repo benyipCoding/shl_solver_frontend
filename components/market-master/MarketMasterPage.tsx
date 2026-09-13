@@ -31,6 +31,7 @@ import {
 import { useFetch } from "@/context/FetchContext";
 import {
   ShapePrimitive,
+  calculateBollingerBands,
   calculateEMA,
   calculateMACD,
   distToSegmentSquared,
@@ -80,6 +81,19 @@ import {
 } from "@/components/market-master/market-data";
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 
+const BOLLINGER_LINE_DEFINITIONS = [
+  { key: "upper", colorKey: "upperColor" },
+  { key: "middle", colorKey: "middleColor" },
+  { key: "lower", colorKey: "lowerColor" },
+];
+
+const toBollingerLineData = (data: any[], key: string) =>
+  data.map((point) =>
+    point[key] == null
+      ? { time: point.time }
+      : { time: point.time, value: point[key] }
+  );
+
 export function MarketMasterPage() {
   const { customFetch } = useFetch();
   const chartContainerRef = useRef<any>(null);
@@ -100,6 +114,7 @@ export function MarketMasterPage() {
     updateAutomaticSegmentsAfterCandle,
   } = useAutomaticSegments({ chartRef, seriesRef });
   const emaSeriesRefs = useRef<any>({});
+  const bollingerSeriesRefs = useRef<any>({});
 
   const subChartContainerRef = useRef<any>(null);
   const subChartRef = useRef<any>(null);
@@ -209,6 +224,7 @@ export function MarketMasterPage() {
 
   const fullDataRef = useRef<any[]>([]);
   const fullEmaDataRef = useRef<any>({});
+  const fullBollingerDataRef = useRef<any[]>([]);
   const fullMacdDataRef = useRef<any[]>([]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -243,6 +259,10 @@ export function MarketMasterPage() {
     }
 
     Object.values(emaSeriesRefs.current).forEach((series: any) => {
+      series.applyOptions({ priceFormat: priceFormatConfig });
+    });
+
+    Object.values(bollingerSeriesRefs.current).forEach((series: any) => {
       series.applyOptions({ priceFormat: priceFormatConfig });
     });
 
@@ -396,6 +416,18 @@ export function MarketMasterPage() {
           lineWidth:
             ema.lineWidth +
             (selected.kind === "ema" && selected.id === ema.id
+              ? SELECTED_LINE_WIDTH_BOOST
+              : 0),
+        });
+      });
+
+      BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+        const series = bollingerSeriesRefs.current[key];
+        if (!series) return;
+        series.applyOptions({
+          lineWidth:
+            cfg.bollinger.lineWidth +
+            (selected.kind === "bollinger" && selected.id === key
               ? SELECTED_LINE_WIDTH_BOOST
               : 0),
         });
@@ -566,6 +598,34 @@ export function MarketMasterPage() {
     [getEpochTime]
   );
 
+  const findClosestBollingerAtPoint = useCallback(
+    (time: any, y: number) => {
+      if (!seriesRef.current || !indConfigRef.current.bollinger.enabled)
+        return null;
+      const targetTime = getEpochTime(time);
+      if (targetTime === null) return null;
+
+      const index = fullDataRef.current.findIndex((d) => d.time === targetTime);
+      const point = fullBollingerDataRef.current[index];
+      if (index === -1 || !point) return null;
+
+      let best: any = null;
+      const threshold = 8;
+      BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+        if (point[key] == null) return;
+        const yCoord = seriesRef.current.priceToCoordinate(point[key]);
+        if (yCoord === null) return;
+        const dist = Math.abs(y - yCoord);
+        if (dist <= threshold && (!best || dist < best.dist)) {
+          best = { key, dist };
+        }
+      });
+
+      return best?.key || null;
+    },
+    [getEpochTime]
+  );
+
   useEffect(() => {
     applyIndicatorSelectionStyles();
   }, [indConfig, applyIndicatorSelectionStyles]);
@@ -594,6 +654,9 @@ export function MarketMasterPage() {
           };
         })
         .filter((ema) => ema.value !== null);
+      const bollingerPoint = activeConfig.bollinger.enabled
+        ? fullBollingerDataRef.current[index]
+        : null;
 
       setLegendData({
         time: d.time,
@@ -602,6 +665,20 @@ export function MarketMasterPage() {
         low: d.low,
         close: d.close,
         emas: emasData,
+        bollinger:
+          bollingerPoint?.middle != null
+            ? {
+                period: activeConfig.bollinger.period,
+                standardDeviation:
+                  activeConfig.bollinger.standardDeviation,
+                middleColor: activeConfig.bollinger.middleColor,
+                upperColor: activeConfig.bollinger.upperColor,
+                lowerColor: activeConfig.bollinger.lowerColor,
+                middle: bollingerPoint.middle,
+                upper: bollingerPoint.upper,
+                lower: bollingerPoint.lower,
+              }
+            : null,
         macd: m ? m.macd : null,
         signal: m ? m.signal : null,
         hist: m ? m.hist : null,
@@ -687,6 +764,17 @@ export function MarketMasterPage() {
         );
       });
 
+      if (activeConfig.bollinger.enabled) {
+        const bollingerData = nextBacktestMode
+          ? fullBollingerDataRef.current.slice(0, nextIndex)
+          : fullBollingerDataRef.current;
+        BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+          bollingerSeriesRefs.current[key]?.setData(
+            toBollingerLineData(bollingerData, key)
+          );
+        });
+      }
+
       if (
         macdHistSeriesRef.current &&
         macdLineSeriesRef.current &&
@@ -747,6 +835,11 @@ export function MarketMasterPage() {
       newEmaData[ema.id] = calculateEMA(data, ema.period);
     });
     fullEmaDataRef.current = newEmaData;
+    fullBollingerDataRef.current = calculateBollingerBands(
+      data,
+      activeConfig.bollinger.period,
+      activeConfig.bollinger.standardDeviation
+    );
     fullMacdDataRef.current = calculateMACD(
       data,
       activeConfig.macd.fast,
@@ -827,6 +920,7 @@ export function MarketMasterPage() {
       clearAutomaticSegments();
       fullDataRef.current = [];
       fullEmaDataRef.current = {};
+      fullBollingerDataRef.current = [];
       fullMacdDataRef.current = [];
       setCurrentIndex(0);
       setTotalCandles(0);
@@ -839,6 +933,12 @@ export function MarketMasterPage() {
       Object.values(emaSeriesRefs.current).forEach((emaSeries: any) => {
         emaSeries.setData([]);
       });
+
+      Object.values(bollingerSeriesRefs.current).forEach(
+        (bollingerSeries: any) => {
+          bollingerSeries.setData([]);
+        }
+      );
 
       if (macdHistSeriesRef.current) macdHistSeriesRef.current.setData([]);
       if (macdLineSeriesRef.current) macdLineSeriesRef.current.setData([]);
@@ -1098,12 +1198,23 @@ export function MarketMasterPage() {
     ) {
       selectedIndicatorRef.current = { kind: null, id: null };
     }
+    if (
+      !nextConfig.bollinger.enabled &&
+      selectedIndicatorRef.current.kind === "bollinger"
+    ) {
+      selectedIndicatorRef.current = { kind: null, id: null };
+    }
 
     const newEmaData = {};
     nextConfig.emas.forEach((ema) => {
       newEmaData[ema.id] = calculateEMA(fullDataRef.current, ema.period);
     });
     fullEmaDataRef.current = newEmaData;
+    fullBollingerDataRef.current = calculateBollingerBands(
+      fullDataRef.current,
+      nextConfig.bollinger.period,
+      nextConfig.bollinger.standardDeviation
+    );
     fullMacdDataRef.current = calculateMACD(
       fullDataRef.current,
       nextConfig.macd.fast,
@@ -1148,6 +1259,46 @@ export function MarketMasterPage() {
           fullEmaDataRef.current[ema.id].slice(0, currentIndexRef.current)
         );
       });
+
+      if (nextConfig.bollinger.enabled) {
+        BOLLINGER_LINE_DEFINITIONS.forEach(({ key, colorKey }) => {
+          let series = bollingerSeriesRefs.current[key];
+          if (!series) {
+            series = chartRef.current.addSeries(LineSeries, {
+              color: nextConfig.bollinger[colorKey],
+              lineWidth: nextConfig.bollinger.lineWidth,
+              priceScaleId: "right",
+              lastValueVisible: false,
+              priceLineVisible: false,
+              title: "",
+              priceFormat: {
+                type: "price",
+                precision: priceDecimals,
+                minMove: 1 / Math.pow(10, priceDecimals),
+              },
+            });
+            bollingerSeriesRefs.current[key] = series;
+          } else {
+            series.applyOptions({
+              color: nextConfig.bollinger[colorKey],
+              lineWidth: nextConfig.bollinger.lineWidth,
+            });
+          }
+          series.setData(
+            toBollingerLineData(
+              fullBollingerDataRef.current.slice(0, currentIndexRef.current),
+              key
+            )
+          );
+        });
+      } else {
+        BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+          const series = bollingerSeriesRefs.current[key];
+          if (!series) return;
+          chartRef.current.removeSeries(series);
+          delete bollingerSeriesRefs.current[key];
+        });
+      }
     }
 
     if (
@@ -1264,6 +1415,31 @@ export function MarketMasterPage() {
       );
       emaSeriesRefs.current[ema.id] = emaSeries;
     });
+
+    if (indConfig.bollinger.enabled) {
+      BOLLINGER_LINE_DEFINITIONS.forEach(({ key, colorKey }) => {
+        const bollingerSeries = chart.addSeries(LineSeries, {
+          color: indConfig.bollinger[colorKey],
+          lineWidth: indConfig.bollinger.lineWidth,
+          priceScaleId: "right",
+          lastValueVisible: false,
+          priceLineVisible: false,
+          title: "",
+          priceFormat: {
+            type: "price",
+            precision: priceDecimals,
+            minMove: 1 / Math.pow(10, priceDecimals),
+          },
+        });
+        bollingerSeries.setData(
+          toBollingerLineData(
+            fullBollingerDataRef.current.slice(0, visibleCount),
+            key
+          )
+        );
+        bollingerSeriesRefs.current[key] = bollingerSeries;
+      });
+    }
     applyIndicatorSelectionStyles();
 
     chartRef.current = chart;
@@ -1569,11 +1745,24 @@ export function MarketMasterPage() {
       const clickedEmaId = clickedTime
         ? findClosestEmaAtPoint(clickedTime, param.point.y)
         : null;
+      const clickedBollingerLine = clickedTime
+        ? findClosestBollingerAtPoint(clickedTime, param.point.y)
+        : null;
 
       if (clickedEmaId) {
         hideCandleTooltip();
         setSelectedShape(null);
         setSelectedIndicator({ kind: "ema", id: clickedEmaId });
+        return;
+      }
+
+      if (clickedBollingerLine) {
+        hideCandleTooltip();
+        setSelectedShape(null);
+        setSelectedIndicator({
+          kind: "bollinger",
+          id: clickedBollingerLine,
+        });
         return;
       }
 
@@ -1772,6 +1961,7 @@ export function MarketMasterPage() {
       chartRef.current = null;
       seriesRef.current = null;
       emaSeriesRefs.current = {};
+      bollingerSeriesRefs.current = {};
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1781,6 +1971,7 @@ export function MarketMasterPage() {
     detachShapeFromMainSeries,
     drawAutomaticPens,
     drawAutomaticSegments,
+    findClosestBollingerAtPoint,
     findClosestEmaAtPoint,
     resetAutomaticPensState,
     resetAutomaticSegmentsState,
@@ -2014,6 +2205,21 @@ export function MarketMasterPage() {
       const series = emaSeriesRefs.current[ema.id];
       if (series && nextEma) series.update(nextEma);
     });
+
+    if (indConfig.bollinger.enabled) {
+      const nextBollinger = fullBollingerDataRef.current[currentIndex];
+      if (nextBollinger) {
+        BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+          const series = bollingerSeriesRefs.current[key];
+          if (!series) return;
+          series.update(
+            nextBollinger[key] == null
+              ? { time: nextBollinger.time }
+              : { time: nextBollinger.time, value: nextBollinger[key] }
+          );
+        });
+      }
+    }
 
     const nextMacd = fullMacdDataRef.current[currentIndex];
     if (subChartRef.current && indConfig.macd.enabled && nextMacd) {

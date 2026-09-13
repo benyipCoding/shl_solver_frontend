@@ -20,6 +20,16 @@ type LegendData = {
   low: number;
   close: number;
   emas: Array<{ color: string; period: number; value: number }>;
+  bollinger: {
+    period: number;
+    standardDeviation: number;
+    middleColor: string;
+    upperColor: string;
+    lowerColor: string;
+    middle: number;
+    upper: number;
+    lower: number;
+  } | null;
   macd: number;
   signal: number;
   hist: number;
@@ -185,6 +195,21 @@ export function MarketWorkspace({
                     EMA({ema.period}): {formatValue(ema.value)}
                   </div>
                 ))}
+                {legendData.bollinger && (
+                  <div className="flex gap-2 font-semibold">
+                    <span style={{ color: legendData.bollinger.upperColor }}>
+                      BOLL({legendData.bollinger.period},
+                      {legendData.bollinger.standardDeviation}) U:
+                      {formatValue(legendData.bollinger.upper)}
+                    </span>
+                    <span style={{ color: legendData.bollinger.middleColor }}>
+                      M:{formatValue(legendData.bollinger.middle)}
+                    </span>
+                    <span style={{ color: legendData.bollinger.lowerColor }}>
+                      L:{formatValue(legendData.bollinger.lower)}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}

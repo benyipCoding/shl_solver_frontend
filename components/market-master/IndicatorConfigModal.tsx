@@ -68,6 +68,16 @@ export const IndicatorConfigModal = ({
           >
             MACD
           </button>
+          <button
+            onClick={() => setSelectedIndTab("BOLL")}
+            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors font-medium ${
+              selectedIndTab === "BOLL"
+                ? "bg-gray-800 text-blue-400 shadow-sm"
+                : "text-gray-400 hover:bg-gray-800/50"
+            }`}
+          >
+            布林通道
+          </button>
         </div>
 
         <div className="flex-1 p-4 overflow-y-auto bg-[#111827]">
@@ -300,6 +310,159 @@ export const IndicatorConfigModal = ({
               ) : (
                 <div className="text-sm text-gray-600 text-center py-8">
                   MACD 暂未启用
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedIndTab === "BOLL" && (
+            <div className="space-y-4">
+              <div className="sticky top-0 z-10 mb-4 flex items-center justify-between border-b border-gray-800 bg-[#111827] pb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                  布林通道 (BOLL)
+                </h3>
+                {!draftConfig.bollinger.enabled ? (
+                  <button
+                    onClick={() =>
+                      setDraftConfig((prev: any) => ({
+                        ...prev,
+                        bollinger: { ...prev.bollinger, enabled: true },
+                      }))
+                    }
+                    className="flex items-center gap-1 rounded border border-emerald-500/50 bg-emerald-600/20 px-3 py-1 text-xs text-emerald-400 transition-colors hover:bg-emerald-600 hover:text-white"
+                  >
+                    <Plus size={14} />
+                    启用 BOLL
+                  </button>
+                ) : (
+                  <button
+                    onClick={() =>
+                      setDraftConfig((prev: any) => ({
+                        ...prev,
+                        bollinger: { ...prev.bollinger, enabled: false },
+                      }))
+                    }
+                    className="flex items-center gap-1 rounded border border-red-500/50 bg-red-600/20 px-3 py-1 text-xs text-red-400 transition-colors hover:bg-red-600 hover:text-white"
+                  >
+                    <Trash2 size={14} />
+                    移除 BOLL
+                  </button>
+                )}
+              </div>
+
+              {draftConfig.bollinger.enabled ? (
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="mb-2 text-[10px] font-bold uppercase text-gray-500">
+                      核心参数
+                    </h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] text-gray-400">
+                          中轨周期 (SMA)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={draftConfig.bollinger.period}
+                          onChange={(e) =>
+                            setDraftConfig((prev: any) => ({
+                              ...prev,
+                              bollinger: {
+                                ...prev.bollinger,
+                                period: Math.max(
+                                  1,
+                                  Math.floor(Number(e.target.value) || 1)
+                                ),
+                              },
+                            }))
+                          }
+                          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] text-gray-400">
+                          标准差倍数
+                        </label>
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={draftConfig.bollinger.standardDeviation}
+                          onChange={(e) =>
+                            setDraftConfig((prev: any) => ({
+                              ...prev,
+                              bollinger: {
+                                ...prev.bollinger,
+                                standardDeviation: Math.max(
+                                  0.1,
+                                  Number(e.target.value) || 0.1
+                                ),
+                              },
+                            }))
+                          }
+                          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] text-gray-400">
+                          线条粗细
+                        </label>
+                        <select
+                          value={draftConfig.bollinger.lineWidth}
+                          onChange={(e) =>
+                            setDraftConfig((prev: any) => ({
+                              ...prev,
+                              bollinger: {
+                                ...prev.bollinger,
+                                lineWidth: Number(e.target.value),
+                              },
+                            }))
+                          }
+                          className="w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white outline-none"
+                        >
+                          <option value={1}>极细</option>
+                          <option value={1.5}>较细</option>
+                          <option value={2}>正常</option>
+                          <option value={3}>粗</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="mb-2 text-[10px] font-bold uppercase text-gray-500">
+                      轨道颜色
+                    </h4>
+                    <div className="flex flex-wrap gap-4 sm:gap-6">
+                      {[
+                        ["upperColor", "上轨"],
+                        ["middleColor", "中轨"],
+                        ["lowerColor", "下轨"],
+                      ].map(([field, label]) => (
+                        <div key={field} className="flex items-center gap-2">
+                          <ColorPicker
+                            value={draftConfig.bollinger[field]}
+                            onChange={(color: any) =>
+                              setDraftConfig((prev: any) => ({
+                                ...prev,
+                                bollinger: {
+                                  ...prev.bollinger,
+                                  [field]: color,
+                                },
+                              }))
+                            }
+                          />
+                          <span className="text-xs text-gray-300">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-gray-600">
+                  布林通道暂未启用
                 </div>
               )}
             </div>
