@@ -38,6 +38,7 @@ import {
 import {
   useAutomaticPens,
 } from "@/hooks/useAutomaticPens";
+import { useAutomaticSegments } from "@/hooks/useAutomaticSegments";
 import {
   AI_ZONE_STYLES,
   buildChartInsight,
@@ -91,6 +92,13 @@ export function MarketMasterPage() {
     resetAutomaticPensState,
     updateAutomaticPensAfterCandle,
   } = useAutomaticPens({ chartRef, seriesRef });
+  const {
+    automaticSegmentCount,
+    clearAutomaticSegments,
+    drawAutomaticSegments,
+    resetAutomaticSegmentsState,
+    updateAutomaticSegmentsAfterCandle,
+  } = useAutomaticSegments({ chartRef, seriesRef });
   const emaSeriesRefs = useRef<any>({});
 
   const subChartContainerRef = useRef<any>(null);
@@ -816,6 +824,7 @@ export function MarketMasterPage() {
 
     const clearChartData = () => {
       clearAutomaticPens();
+      clearAutomaticSegments();
       fullDataRef.current = [];
       fullEmaDataRef.current = {};
       fullMacdDataRef.current = [];
@@ -1038,6 +1047,7 @@ export function MarketMasterPage() {
     symbol,
     timeframe,
     syncDisplayedData,
+    clearAutomaticSegments,
   ]);
 
   useEffect(() => {
@@ -1045,6 +1055,7 @@ export function MarketMasterPage() {
 
     setIsPlaying(false);
     clearAutomaticPens();
+    clearAutomaticSegments();
 
     if (isBacktestMode) {
       const randomStart = pickRandomBacktestStartIndex(
@@ -1065,6 +1076,7 @@ export function MarketMasterPage() {
     syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
   }, [
     clearAutomaticPens,
+    clearAutomaticSegments,
     isBacktestMode,
     isDataLoading,
     syncDisplayedData,
@@ -1698,6 +1710,16 @@ export function MarketMasterPage() {
         drawAutomaticPens();
         return;
       }
+      if (
+        e.key.toLowerCase() === "r" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        drawAutomaticSegments();
+        return;
+      }
 
       if (e.key === "Delete" || e.key === "Backspace") {
         let hoveredShapeIndex = stateRef.current.lines.findIndex(
@@ -1745,6 +1767,7 @@ export function MarketMasterPage() {
       window.removeEventListener("click", hideMenuOnClick);
       window.removeEventListener("keydown", handleKeyDown);
       resetAutomaticPensState();
+      resetAutomaticSegmentsState();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -1757,8 +1780,10 @@ export function MarketMasterPage() {
     clearAllSelections,
     detachShapeFromMainSeries,
     drawAutomaticPens,
+    drawAutomaticSegments,
     findClosestEmaAtPoint,
     resetAutomaticPensState,
+    resetAutomaticSegmentsState,
     setSelectedIndicator,
     setSelectedShape,
   ]);
@@ -1982,6 +2007,7 @@ export function MarketMasterPage() {
     const nextCandle = fullDataRef.current[currentIndex];
     seriesRef.current.update(nextCandle);
     updateAutomaticPensAfterCandle();
+    updateAutomaticSegmentsAfterCandle();
 
     indConfig.emas.forEach((ema) => {
       const nextEma = fullEmaDataRef.current[ema.id][currentIndex];
@@ -2047,7 +2073,12 @@ export function MarketMasterPage() {
     });
 
     setCurrentIndex((prev) => prev + 1);
-  }, [currentIndex, indConfig, updateAutomaticPensAfterCandle]);
+  }, [
+    currentIndex,
+    indConfig,
+    updateAutomaticPensAfterCandle,
+    updateAutomaticSegmentsAfterCandle,
+  ]);
 
   useEffect(() => {
     let interval;
@@ -2450,6 +2481,7 @@ export function MarketMasterPage() {
     stateRef.current.lines = [];
     setLines([]);
     clearAutomaticPens();
+    clearAutomaticSegments();
   };
 
   const formatVal = (val) => (val != null ? val.toFixed(priceDecimals) : "-");
@@ -2507,6 +2539,8 @@ export function MarketMasterPage() {
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
         drawAutomaticPens={drawAutomaticPens}
         automaticPenCount={automaticPenCount}
+        drawAutomaticSegments={drawAutomaticSegments}
+        automaticSegmentCount={automaticSegmentCount}
         clearLines={clearAllLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}

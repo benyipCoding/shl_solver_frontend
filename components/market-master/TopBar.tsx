@@ -21,6 +21,7 @@ import {
   Pause,
   Play,
   ChartSpline,
+  ChartNoAxesCombined,
 } from "lucide-react";
 
 export const TopBar = ({
@@ -42,6 +43,8 @@ export const TopBar = ({
   setIsIndicatorModalOpen,
   drawAutomaticPens,
   automaticPenCount = 0,
+  drawAutomaticSegments,
+  automaticSegmentCount = 0,
   clearLines,
   isBacktestMode,
   setIsBacktestMode,
@@ -206,6 +209,23 @@ export const TopBar = ({
             }
           >
             <ChartSpline size={16} />
+          </button>
+          <button
+            onClick={drawAutomaticSegments}
+            disabled={isDataLoading || Boolean(dataError) || totalCandles === 0}
+            aria-pressed={automaticSegmentCount > 0}
+            className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+              automaticSegmentCount > 0
+                ? "bg-gray-700 text-green-400"
+                : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
+            }`}
+            title={
+              automaticSegmentCount > 0
+                ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
+                : "自动绘制 Segments（快捷键 R）"
+            }
+          >
+            <ChartNoAxesCombined size={16} />
           </button>
           <button
             onClick={clearLines}
