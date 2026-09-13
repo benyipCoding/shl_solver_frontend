@@ -323,7 +323,7 @@ export const TopBar = ({
                 isDataLoading || isPlaying || currentIndex >= totalCandles
               }
               className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-              title="步进一根 K线"
+              title="步进一根 K 线（快捷键 D）"
             >
               <StepForward size={16} />
             </button>
@@ -335,7 +335,11 @@ export const TopBar = ({
                   ? "bg-amber-600 hover:bg-amber-500"
                   : "bg-blue-600 hover:bg-blue-500"
               }`}
-              title={isPlaying ? "暂停播放" : "自动播放"}
+              title={
+                isPlaying
+                  ? "暂停播放（快捷键 P）"
+                  : "自动播放（快捷键 P）"
+              }
             >
               {isPlaying ? <Pause size={16} /> : <Play size={16} />}
             </button>

@@ -2081,6 +2081,56 @@ export function MarketMasterPage() {
   ]);
 
   useEffect(() => {
+    const handleBacktestShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.repeat ||
+        !isBacktestMode
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (
+        key === "d" &&
+        !isDataLoading &&
+        !isPlaying &&
+        currentIndex < totalCandles
+      ) {
+        event.preventDefault();
+        handleNextCandle();
+        return;
+      }
+
+      if (
+        key === "p" &&
+        !isDataLoading &&
+        currentIndex < totalCandles
+      ) {
+        event.preventDefault();
+        setIsPlaying((playing) => !playing);
+      }
+    };
+
+    window.addEventListener("keydown", handleBacktestShortcut);
+    return () => window.removeEventListener("keydown", handleBacktestShortcut);
+  }, [
+    currentIndex,
+    handleNextCandle,
+    isBacktestMode,
+    isDataLoading,
+    isPlaying,
+    totalCandles,
+  ]);
+
+  useEffect(() => {
     let interval;
     if (isPlaying) interval = setInterval(handleNextCandle, 500);
     return () => clearInterval(interval);
