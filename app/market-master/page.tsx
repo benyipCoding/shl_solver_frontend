@@ -36,6 +36,11 @@ import {
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
 import {
+  AUTOMATIC_PENS_COLOR,
+  type AutomaticPen,
+  generateAutomaticPens,
+} from "@/components/market-master/automatic-pens";
+import {
   AI_ZONE_STYLES,
   buildChartInsight,
   buildProfileDiagnosis,
@@ -705,6 +710,10 @@ export default function ChartApp() {
   const chartContainerRef = useRef<any>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
+  const automaticPenSeriesRef = useRef<
+    Array<{ pen: AutomaticPen; series: any }>
+  >([]);
+  const automaticPensEnabledRef = useRef(false);
   const emaSeriesRefs = useRef<any>({});
 
   const subChartContainerRef = useRef<any>(null);
@@ -1065,6 +1074,97 @@ export default function ChartApp() {
     seriesRef.current.detachPrimitive(shape);
     if (typeof requestUpdate === "function") requestUpdate();
   }, []);
+
+  const [automaticPenCount, setAutomaticPenCount] = useState(0);
+
+  const clearAutomaticPens = useCallback((disable = true) => {
+    if (chartRef.current) {
+      automaticPenSeriesRef.current.forEach(({ series }) => {
+        chartRef.current.removeSeries(series);
+      });
+    }
+
+    automaticPenSeriesRef.current = [];
+    if (disable) automaticPensEnabledRef.current = false;
+    setAutomaticPenCount(0);
+  }, []);
+
+  const createAutomaticPenSeries = useCallback((pen: AutomaticPen) => {
+    if (!chartRef.current) return null;
+
+    const penSeries = chartRef.current.addSeries(LineSeries, {
+      color: AUTOMATIC_PENS_COLOR,
+      lineWidth: 2,
+      lastValueVisible: false,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    });
+    penSeries.setData([
+      { time: pen.startPoint.time, value: pen.startPoint.price },
+      { time: pen.endPoint.time, value: pen.endPoint.price },
+    ]);
+
+    return { pen, series: penSeries };
+  }, []);
+
+  const drawAutomaticPens = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) return;
+
+    const visibleRange = chart.timeScale().getVisibleRange();
+    if (!visibleRange) return;
+
+    const visibleCandles = series
+      .data()
+      .filter(
+        (candle) =>
+          candle.time >= visibleRange.from && candle.time <= visibleRange.to
+      );
+    const pens = generateAutomaticPens(visibleCandles);
+    clearAutomaticPens(false);
+    automaticPensEnabledRef.current = true;
+
+    automaticPenSeriesRef.current = pens.flatMap((pen) => {
+      const entry = createAutomaticPenSeries(pen);
+      return entry ? [entry] : [];
+    });
+    setAutomaticPenCount(automaticPenSeriesRef.current.length);
+  }, [clearAutomaticPens, createAutomaticPenSeries]);
+
+  const updateAutomaticPensAfterCandle = useCallback(() => {
+    const series = seriesRef.current;
+    const lastEntry =
+      automaticPenSeriesRef.current[automaticPenSeriesRef.current.length - 1];
+    if (!automaticPensEnabledRef.current || !lastEntry || !series) return;
+
+    const dataPens = generateAutomaticPens(series.data());
+    const lastDataPen = dataPens[dataPens.length - 1];
+    const lastDrawnPen = lastEntry.pen;
+    if (!lastDataPen || !lastDrawnPen) return;
+
+    if (lastDataPen.startPoint.time !== lastDrawnPen.startPoint.time) {
+      const entry = createAutomaticPenSeries(lastDataPen);
+      if (!entry) return;
+      automaticPenSeriesRef.current.push(entry);
+      setAutomaticPenCount(automaticPenSeriesRef.current.length);
+      return;
+    }
+
+    if (lastDataPen.endPoint.time === lastDrawnPen.endPoint.time) return;
+
+    chartRef.current?.removeSeries(lastEntry.series);
+    const entry = createAutomaticPenSeries(lastDataPen);
+    if (entry) {
+      automaticPenSeriesRef.current[
+        automaticPenSeriesRef.current.length - 1
+      ] = entry;
+    } else {
+      automaticPenSeriesRef.current.pop();
+    }
+    setAutomaticPenCount(automaticPenSeriesRef.current.length);
+  }, [createAutomaticPenSeries]);
 
   const [mode, setMode] = useState("idle");
   const [drawType, setDrawType] = useState("line");
@@ -1544,6 +1644,7 @@ export default function ChartApp() {
     let cancelled = false;
 
     const clearChartData = () => {
+      clearAutomaticPens();
       fullDataRef.current = [];
       fullEmaDataRef.current = {};
       fullMacdDataRef.current = [];
@@ -1772,6 +1873,7 @@ export default function ChartApp() {
     if (isDataLoading || !fullDataRef.current.length) return;
 
     setIsPlaying(false);
+    clearAutomaticPens();
 
     if (isBacktestMode) {
       const randomStart = pickRandomBacktestStartIndex(
@@ -1790,7 +1892,12 @@ export default function ChartApp() {
     const nextCurrentIndex = fullDataRef.current.length;
     setCurrentIndex(nextCurrentIndex);
     syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
-  }, [isBacktestMode, isDataLoading, syncDisplayedData]);
+  }, [
+    clearAutomaticPens,
+    isBacktestMode,
+    isDataLoading,
+    syncDisplayedData,
+  ]);
 
   const applyIndicatorConfig = () => {
     const nextConfig = cloneIndicatorConfig(draftConfig);
@@ -2410,6 +2517,17 @@ export default function ChartApp() {
         e.target.tagName === "SELECT"
       )
         return;
+      if (
+        e.key.toLowerCase() === "f" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        drawAutomaticPens();
+        return;
+      }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         let hoveredShapeIndex = stateRef.current.lines.findIndex(
           (l) => l.hoveredPoint !== null
@@ -2455,6 +2573,8 @@ export default function ChartApp() {
       window.removeEventListener("mouseup", mouseupHandler);
       window.removeEventListener("click", hideMenuOnClick);
       window.removeEventListener("keydown", handleKeyDown);
+      automaticPenSeriesRef.current = [];
+      automaticPensEnabledRef.current = false;
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -2466,6 +2586,7 @@ export default function ChartApp() {
     applyIndicatorSelectionStyles,
     clearAllSelections,
     detachShapeFromMainSeries,
+    drawAutomaticPens,
     findClosestEmaAtPoint,
     setSelectedIndicator,
     setSelectedShape,
@@ -2689,6 +2810,7 @@ export default function ChartApp() {
 
     const nextCandle = fullDataRef.current[currentIndex];
     seriesRef.current.update(nextCandle);
+    updateAutomaticPensAfterCandle();
 
     indConfig.emas.forEach((ema) => {
       const nextEma = fullEmaDataRef.current[ema.id][currentIndex];
@@ -2754,7 +2876,7 @@ export default function ChartApp() {
     });
 
     setCurrentIndex((prev) => prev + 1);
-  }, [currentIndex, indConfig]);
+  }, [currentIndex, indConfig, updateAutomaticPensAfterCandle]);
 
   useEffect(() => {
     let interval;
@@ -3156,6 +3278,7 @@ export default function ChartApp() {
     stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
     stateRef.current.lines = [];
     setLines([]);
+    clearAutomaticPens();
   };
 
   const formatVal = (val) => (val != null ? val.toFixed(priceDecimals) : "-");
@@ -3236,6 +3359,8 @@ export default function ChartApp() {
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
+        drawAutomaticPens={drawAutomaticPens}
+        automaticPenCount={automaticPenCount}
         clearLines={clearAllLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}

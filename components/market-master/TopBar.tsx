@@ -20,6 +20,7 @@ import {
   StepForward,
   Pause,
   Play,
+  ChartSpline,
 } from "lucide-react";
 
 export const TopBar = ({
@@ -39,6 +40,8 @@ export const TopBar = ({
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
+  drawAutomaticPens,
+  automaticPenCount = 0,
   clearLines,
   isBacktestMode,
   setIsBacktestMode,
@@ -186,6 +189,23 @@ export const TopBar = ({
             title="斐波那契回调 (Fib Retracement)"
           >
             <AlignJustify size={16} />
+          </button>
+          <button
+            onClick={drawAutomaticPens}
+            disabled={isDataLoading || Boolean(dataError) || totalCandles === 0}
+            aria-pressed={automaticPenCount > 0}
+            className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+              automaticPenCount > 0
+                ? "bg-gray-700 text-yellow-300"
+                : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
+            }`}
+            title={
+              automaticPenCount > 0
+                ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
+                : "自动绘制当前可视区 Pens（快捷键 F）"
+            }
+          >
+            <ChartSpline size={16} />
           </button>
           <button
             onClick={clearLines}
