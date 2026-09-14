@@ -51,6 +51,7 @@ import {
 } from "@/components/market-master/mock-ai";
 import {
   CANDLE_TOOLTIP_OFFSET,
+  DEFAULT_TIMEFRAME,
   INITIAL_VISIBLE_COUNT,
   MIN_BACKTEST_CANDLES,
   MIN_FORWARD_CANDLES,
@@ -66,8 +67,10 @@ import {
   getInstrumentProfile,
   getIntervalByTimeframe,
   loadPersistedIndicatorConfig,
+  persistLastTimeframe,
   persistIndicatorConfig,
   pickRandomBacktestStartIndex,
+  resolveLastTimeframe,
   type InstrumentContext,
 } from "@/components/market-master/market-config";
 import {
@@ -178,7 +181,7 @@ export function MarketMasterPage() {
   });
 
   const [symbol, setSymbol] = useState(INITIAL_FAVORITES[0]);
-  const [timeframe, setTimeframe] = useState("D1");
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const timeframeRef = useRef(timeframe);
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
@@ -202,6 +205,7 @@ export function MarketMasterPage() {
   useEffect(() => {
     setIsMounted(true);
     setSymbol(getDefaultSymbol());
+    setTimeframe(resolveLastTimeframe());
 
     const persistedConfig = loadPersistedIndicatorConfig();
     if (!persistedConfig) return;
@@ -216,6 +220,11 @@ export function MarketMasterPage() {
     if (!isMounted) return;
     persistLastSymbol(symbol);
   }, [isMounted, symbol]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    persistLastTimeframe(timeframe);
+  }, [isMounted, timeframe]);
 
   useEffect(() => {
     if (!isMounted) return;

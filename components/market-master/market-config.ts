@@ -25,6 +25,35 @@ export const TIMEFRAME_OPTIONS = [
   { value: "W1", label: "W1", interval: "1week" },
 ] as const;
 
+export const DEFAULT_TIMEFRAME = "D1";
+export const LAST_TIMEFRAME_STORAGE_KEY = "marketMasterLastTimeframe";
+
+const isSupportedTimeframe = (timeframe: string) =>
+  TIMEFRAME_OPTIONS.some((option) => option.value === timeframe);
+
+export const resolveLastTimeframe = () => {
+  if (typeof window === "undefined") return DEFAULT_TIMEFRAME;
+
+  try {
+    const savedTimeframe = localStorage.getItem(LAST_TIMEFRAME_STORAGE_KEY);
+    return savedTimeframe && isSupportedTimeframe(savedTimeframe)
+      ? savedTimeframe
+      : DEFAULT_TIMEFRAME;
+  } catch {
+    return DEFAULT_TIMEFRAME;
+  }
+};
+
+export const persistLastTimeframe = (timeframe: string) => {
+  if (typeof window === "undefined" || !isSupportedTimeframe(timeframe)) return;
+
+  try {
+    localStorage.setItem(LAST_TIMEFRAME_STORAGE_KEY, timeframe);
+  } catch {
+    // Ignore unavailable or quota-limited browser storage.
+  }
+};
+
 export type InstrumentContext = {
   symbol: string;
   assetType: string | null;

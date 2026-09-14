@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
 import {
@@ -22,6 +23,8 @@ import {
   Play,
   ChartSpline,
   ChartNoAxesCombined,
+  TriangleAlert,
+  X,
 } from "lucide-react";
 
 export const TopBar = ({
@@ -62,19 +65,19 @@ export const TopBar = ({
   initialVisibleCount = 200,
   minForwardCandles = 2000,
 }: any) => {
+  const [isExitBacktestConfirmOpen, setIsExitBacktestConfirmOpen] =
+    useState(false);
+  const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
   const canEnterBacktest =
     !isDataLoading &&
     !isHistoryLoading &&
     !dataError &&
     totalCandles >= minBacktestCandles;
-  const isBacktestToggleDisabled = !isBacktestMode && !canEnterBacktest;
+  const isBacktestToggleDisabled = !canEnterBacktest;
 
   let backtestButtonLabel = "开启逐K回测";
   let backtestButtonTitle = `开启逐K回测模式：将从随机合法时间点开始（初始约 ${initialVisibleCount} 根上下文，前方至少保留 ${minForwardCandles} 根可播放）`;
-  if (isBacktestMode) {
-    backtestButtonLabel = "退出逐K回测";
-    backtestButtonTitle = "退出逐K回测模式";
-  } else if (isDataLoading) {
+  if (isDataLoading) {
     backtestButtonLabel = "行情加载中，暂不可开启回测";
     backtestButtonTitle =
       "当前品种/周期的 K 线仍在加载，请等待完成后再开启逐K回测";
@@ -90,189 +93,227 @@ export const TopBar = ({
     backtestButtonTitle = `当前品种/周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
   }
 
-  const compactBacktestButtonLabel = isBacktestMode
-    ? "退出回测"
-    : isDataLoading
-      ? "行情加载中"
-      : isHistoryLoading
-        ? "历史加载中"
-        : dataError || totalCandles === 0
-          ? "暂不可回测"
-          : totalCandles < minBacktestCandles
-            ? "历史不足"
-            : "逐K回测";
+  const compactBacktestButtonLabel = isDataLoading
+    ? "行情加载中"
+    : isHistoryLoading
+      ? "历史加载中"
+      : dataError || totalCandles === 0
+        ? "暂不可回测"
+        : totalCandles < minBacktestCandles
+          ? "历史不足"
+          : "逐K回测";
+
+  useEffect(() => {
+    if (!isExitBacktestConfirmOpen || !isBacktestMode) return;
+
+    const previouslyFocusedElement = document.activeElement as HTMLElement;
+    const previousBodyOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsExitBacktestConfirmOpen(false);
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    continueBacktestButtonRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+      previouslyFocusedElement?.focus();
+    };
+  }, [isBacktestMode, isExitBacktestConfirmOpen]);
+
+  const handleEnterBacktest = () => {
+    if (!canEnterBacktest) return;
+
+    setIsExitBacktestConfirmOpen(false);
+    setIsBacktestMode(true);
+  };
+
+  const confirmExitBacktest = () => {
+    setIsExitBacktestConfirmOpen(false);
+    setIsPlaying(false);
+    setIsBacktestMode(false);
+  };
 
   return (
-    <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-gray-800 bg-gray-900 px-3 py-2 lg:h-16 lg:flex-nowrap lg:gap-6 lg:px-6 lg:py-0">
-      <div className="order-2 flex w-full min-w-0 basis-full items-center gap-3 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:order-1 lg:w-auto lg:flex-1 lg:basis-auto lg:gap-4 lg:pb-0 2xl:overflow-visible">
-        <Link
-          href="/"
-          className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4"
-          title="返回主页"
-        >
-          <CircleDollarSign size={28} className="text-blue-500" />
-          <span className="hidden sm:inline">复盘模拟交易</span>
-        </Link>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <SymbolSearchSelect value={symbol} onChange={setSymbol} />
-          <select
-            value={timeframe}
-            onChange={(e) => setTimeframe(e.target.value)}
-            className="h-[50px] cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 text-[15px] text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:h-[42px]"
+    <>
+      <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-gray-800 bg-gray-900 px-3 py-2 lg:h-16 lg:flex-nowrap lg:gap-6 lg:px-6 lg:py-0">
+        <div className="order-2 flex w-full min-w-0 basis-full items-center gap-3 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:order-1 lg:w-auto lg:flex-1 lg:basis-auto lg:gap-4 lg:pb-0 2xl:overflow-visible">
+          <Link
+            href="/"
+            className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4"
+            title="返回主页"
           >
-            {timeframeOptions.map((option: any) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <SymbolFavoriteButton symbol={symbol} />
-        </div>
+            <CircleDollarSign size={28} className="text-blue-500" />
+            <span className="hidden sm:inline">复盘模拟交易</span>
+          </Link>
 
-        {isDataLoading ? (
-          <div className="text-xs text-blue-400 shrink-0">
-            加载真实行情中...
+          <div className="flex shrink-0 items-center gap-2">
+            <SymbolSearchSelect value={symbol} onChange={setSymbol} />
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="h-[50px] cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 text-[15px] text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:h-[42px]"
+            >
+              {timeframeOptions.map((option: any) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <SymbolFavoriteButton symbol={symbol} />
           </div>
-        ) : !isHistoryLoading && dataError ? (
-          <div
-            className="max-w-56 truncate text-xs text-red-400"
-            title={dataError}
-          >
-            {dataError}
+
+          {isDataLoading ? (
+            <div className="text-xs text-blue-400 shrink-0">
+              加载真实行情中...
+            </div>
+          ) : !isHistoryLoading && dataError ? (
+            <div
+              className="max-w-56 truncate text-xs text-red-400"
+              title={dataError}
+            >
+              {dataError}
+            </div>
+          ) : null}
+
+          <div className="ml-1 flex h-[50px] shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 sm:h-[42px] lg:ml-2">
+            <button
+              onClick={() => setMode("idle")}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "idle"
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title="指针模式 (平移/选中/右键配置)"
+            >
+              <MousePointer2 size={20} />
+            </button>
+            <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
+            <button
+              onClick={() => setDrawingTool("line")}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "draw" && drawType === "line"
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title="画直线 (Trend Line)"
+            >
+              <Minus size={20} />
+            </button>
+            <button
+              onClick={() => setDrawingTool("rectangle")}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "draw" && drawType === "rectangle"
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title="画阻力矩形 (Rectangle)"
+            >
+              <Square size={18} />
+            </button>
+            <button
+              onClick={() => setDrawingTool("fib")}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "draw" && drawType === "fib"
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title="斐波那契回调 (Fib Retracement)"
+            >
+              <AlignJustify size={20} />
+            </button>
+            <button
+              onClick={drawAutomaticPens}
+              disabled={
+                isDataLoading || Boolean(dataError) || totalCandles === 0
+              }
+              aria-pressed={automaticPenCount > 0}
+              className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+                automaticPenCount > 0
+                  ? "bg-gray-700 text-yellow-300"
+                  : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
+              }`}
+              title={
+                automaticPenCount > 0
+                  ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
+                  : "自动绘制当前可视区 Pens（快捷键 F）"
+              }
+            >
+              <ChartSpline size={20} />
+            </button>
+            <button
+              onClick={drawAutomaticSegments}
+              disabled={
+                isDataLoading || Boolean(dataError) || totalCandles === 0
+              }
+              aria-pressed={automaticSegmentCount > 0}
+              className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+                automaticSegmentCount > 0
+                  ? "bg-gray-700 text-green-400"
+                  : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
+              }`}
+              title={
+                automaticSegmentCount > 0
+                  ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
+                  : "自动绘制 Segments（快捷键 R）"
+              }
+            >
+              <ChartNoAxesCombined size={20} />
+            </button>
+            <button
+              onClick={clearLines}
+              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
+              title="清空画线"
+            >
+              <Trash2 size={20} />
+            </button>
+            <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
+
+            <button
+              onClick={() => setIsMagnetEnabled(!isMagnetEnabled)}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                isMagnetEnabled
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title={
+                isMagnetEnabled ? "关闭磁力吸附" : "开启磁力吸附 (快捷精准画图)"
+              }
+            >
+              <Magnet size={20} />
+            </button>
+            <button
+              onClick={() =>
+                setIsRightPriceAutoScaleEnabled(!isRightPriceAutoScaleEnabled)
+              }
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                isRightPriceAutoScaleEnabled
+                  ? "bg-gray-700 text-blue-400"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title={
+                isRightPriceAutoScaleEnabled
+                  ? "关闭右侧价格轴自动缩放"
+                  : "开启右侧价格轴自动缩放"
+              }
+            >
+              <ArrowUpDown size={20} />
+            </button>
+            <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
+            <button
+              onClick={() => setIsIndicatorModalOpen(true)}
+              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-blue-400 sm:p-2"
+              title="指标配置中心 (Indicators)"
+            >
+              <BarChart2 size={20} />
+            </button>
           </div>
-        ) : null}
 
-        <div className="ml-1 flex h-[50px] shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 sm:h-[42px] lg:ml-2">
-          <button
-            onClick={() => setMode("idle")}
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              mode === "idle"
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title="指针模式 (平移/选中/右键配置)"
-          >
-            <MousePointer2 size={20} />
-          </button>
-          <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
-          <button
-            onClick={() => setDrawingTool("line")}
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              mode === "draw" && drawType === "line"
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title="画直线 (Trend Line)"
-          >
-            <Minus size={20} />
-          </button>
-          <button
-            onClick={() => setDrawingTool("rectangle")}
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              mode === "draw" && drawType === "rectangle"
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title="画阻力矩形 (Rectangle)"
-          >
-            <Square size={18} />
-          </button>
-          <button
-            onClick={() => setDrawingTool("fib")}
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              mode === "draw" && drawType === "fib"
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title="斐波那契回调 (Fib Retracement)"
-          >
-            <AlignJustify size={20} />
-          </button>
-          <button
-            onClick={drawAutomaticPens}
-            disabled={isDataLoading || Boolean(dataError) || totalCandles === 0}
-            aria-pressed={automaticPenCount > 0}
-            className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-              automaticPenCount > 0
-                ? "bg-gray-700 text-yellow-300"
-                : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
-            }`}
-            title={
-              automaticPenCount > 0
-                ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
-                : "自动绘制当前可视区 Pens（快捷键 F）"
-            }
-          >
-            <ChartSpline size={20} />
-          </button>
-          <button
-            onClick={drawAutomaticSegments}
-            disabled={isDataLoading || Boolean(dataError) || totalCandles === 0}
-            aria-pressed={automaticSegmentCount > 0}
-            className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-              automaticSegmentCount > 0
-                ? "bg-gray-700 text-green-400"
-                : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
-            }`}
-            title={
-              automaticSegmentCount > 0
-                ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
-                : "自动绘制 Segments（快捷键 R）"
-            }
-          >
-            <ChartNoAxesCombined size={20} />
-          </button>
-          <button
-            onClick={clearLines}
-            className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
-            title="清空画线"
-          >
-            <Trash2 size={20} />
-          </button>
-          <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
-
-          <button
-            onClick={() => setIsMagnetEnabled(!isMagnetEnabled)}
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              isMagnetEnabled
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title={
-              isMagnetEnabled ? "关闭磁力吸附" : "开启磁力吸附 (快捷精准画图)"
-            }
-          >
-            <Magnet size={20} />
-          </button>
-          <button
-            onClick={() =>
-              setIsRightPriceAutoScaleEnabled(!isRightPriceAutoScaleEnabled)
-            }
-            className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
-              isRightPriceAutoScaleEnabled
-                ? "bg-gray-700 text-blue-400"
-                : "hover:bg-gray-700 text-gray-400"
-            }`}
-            title={
-              isRightPriceAutoScaleEnabled
-                ? "关闭右侧价格轴自动缩放"
-                : "开启右侧价格轴自动缩放"
-            }
-          >
-            <ArrowUpDown size={20} />
-          </button>
-          <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
-          <button
-            onClick={() => setIsIndicatorModalOpen(true)}
-            className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-blue-400 sm:p-2"
-            title="指标配置中心 (Indicators)"
-          >
-            <BarChart2 size={20} />
-          </button>
-        </div>
-
-        {/* <button
+          {/* <button
           onClick={handleAIChartAnalysis}
           disabled={isAIAnalyzing || isDataLoading || totalCandles === 0}
           className="flex items-center gap-1.5 ml-3 px-3 py-1.5 rounded-lg bg-linear-to-r from-indigo-600/20 to-purple-600/20 hover:from-indigo-600 hover:to-purple-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.15)] disabled:opacity-50"
@@ -286,89 +327,166 @@ export const TopBar = ({
           AI 智能扫描
         </button> */}
 
-        <button
-          onClick={() => {
-            if (!isBacktestMode && !canEnterBacktest) return;
-            setIsBacktestMode(!isBacktestMode);
-          }}
-          disabled={isBacktestToggleDisabled}
-          className={`ml-1 flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 lg:ml-3 ${
-            isBacktestMode
-              ? "border-blue-500/50 bg-blue-600/20 text-blue-200 hover:bg-blue-600/30"
-              : "border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
-          }`}
-          title={backtestButtonTitle}
-        >
-          {!isBacktestMode && (isDataLoading || isHistoryLoading) ? (
-            <Loader2 size={16} className="animate-spin shrink-0" />
+          {!isBacktestMode ? (
+            <>
+              <button
+                onClick={handleEnterBacktest}
+                disabled={isBacktestToggleDisabled}
+                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 lg:ml-3"
+                title={backtestButtonTitle}
+              >
+                {isDataLoading || isHistoryLoading ? (
+                  <Loader2 size={16} className="shrink-0 animate-spin" />
+                ) : (
+                  <StepForward size={16} className="shrink-0" />
+                )}
+                <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
+                <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
+              </button>
+
+              {isHistoryLoading && (
+                <div className="ml-1 shrink-0 text-xs text-blue-300">
+                  加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
+                </div>
+              )}
+            </>
           ) : (
-            <StepForward size={16} className="shrink-0" />
+            <div className="ml-1 flex shrink-0 items-center gap-3 rounded-full border border-gray-700 bg-gray-800 px-4 py-1.5 lg:ml-3">
+              <span className="text-sm text-gray-400 w-32 text-center">
+                K线: {currentIndex} / {totalCandles.toLocaleString()}
+              </span>
+              <button
+                onClick={handleNextCandle}
+                disabled={
+                  isDataLoading || isPlaying || currentIndex >= totalCandles
+                }
+                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+                title="步进一根 K 线（快捷键 D）"
+              >
+                <StepForward size={18} />
+              </button>
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                disabled={isDataLoading || currentIndex >= totalCandles}
+                className={`p-1.5 rounded text-white disabled:opacity-50 ${
+                  isPlaying
+                    ? "bg-amber-600 hover:bg-amber-500"
+                    : "bg-blue-600 hover:bg-blue-500"
+                }`}
+                title={
+                  isPlaying ? "暂停播放（快捷键 P）" : "自动播放（快捷键 P）"
+                }
+              >
+                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+              </button>
+              <div className="h-5 w-px bg-gray-600" />
+              <button
+                type="button"
+                onClick={() => setIsExitBacktestConfirmOpen(true)}
+                className="rounded bg-red-500/15 p-1.5 text-red-400 transition-colors hover:bg-red-500/25 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400"
+                title="退出逐K回测"
+                aria-label="退出逐K回测"
+                aria-haspopup="dialog"
+                aria-expanded={isExitBacktestConfirmOpen}
+              >
+                <Square size={18} fill="currentColor" />
+              </button>
+            </div>
           )}
-          <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
-          <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
-        </button>
+        </div>
 
-        {isHistoryLoading && (
-          <div className="ml-1 shrink-0 text-xs text-blue-300">
-            加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
-          </div>
-        )}
-
-        {isBacktestMode && (
-          <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700 shrink-0">
-            <span className="text-xs text-gray-400 w-32 text-center">
-              K线: {currentIndex} / {totalCandles.toLocaleString()}
+        <div className="order-1 ml-auto flex w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:w-auto lg:gap-6">
+          <div className="flex flex-col items-end leading-tight">
+            <span className="hidden text-xs text-gray-500 sm:inline">
+              账户余额
             </span>
-            <button
-              onClick={handleNextCandle}
-              disabled={
-                isDataLoading || isPlaying || currentIndex >= totalCandles
-              }
-              className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-              title="步进一根 K 线（快捷键 D）"
-            >
-              <StepForward size={18} />
-            </button>
-            <button
-              onClick={() => setIsPlaying(!isPlaying)}
-              disabled={isDataLoading || currentIndex >= totalCandles}
-              className={`p-1.5 rounded text-white disabled:opacity-50 ${
-                isPlaying
-                  ? "bg-amber-600 hover:bg-amber-500"
-                  : "bg-blue-600 hover:bg-blue-500"
-              }`}
-              title={
-                isPlaying
-                  ? "暂停播放（快捷键 P）"
-                  : "自动播放（快捷键 P）"
-              }
-            >
-              {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-            </button>
+            <span className="font-mono text-sm font-bold text-white sm:text-base">
+              ${balance.toFixed(2)}
+            </span>
           </div>
-        )}
-      </div>
+          <div className="flex flex-col items-end leading-tight">
+            <span className="hidden text-xs text-gray-500 sm:inline">
+              未结盈亏
+            </span>
+            <span
+              className={`font-mono text-sm font-bold sm:text-base ${
+                totalFloatingPnl >= 0 ? "text-emerald-400" : "text-red-400"
+              }`}
+            >
+              {totalFloatingPnl > 0 ? "+" : ""}
+              {totalFloatingPnl.toFixed(2)}
+            </span>
+          </div>
+          <UserHeaderActions simpleMode={true} />
+        </div>
+      </header>
 
-      <div className="order-1 ml-auto flex w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:w-auto lg:gap-6">
-        <div className="flex flex-col items-end leading-tight">
-          <span className="hidden text-xs text-gray-500 sm:inline">账户余额</span>
-          <span className="font-mono text-sm font-bold text-white sm:text-base">
-            ${balance.toFixed(2)}
-          </span>
-        </div>
-        <div className="flex flex-col items-end leading-tight">
-          <span className="hidden text-xs text-gray-500 sm:inline">未结盈亏</span>
-          <span
-            className={`font-mono text-sm font-bold sm:text-base ${
-              totalFloatingPnl >= 0 ? "text-emerald-400" : "text-red-400"
-            }`}
+      {isExitBacktestConfirmOpen &&
+        isBacktestMode &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-200 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={() => setIsExitBacktestConfirmOpen(false)}
           >
-            {totalFloatingPnl > 0 ? "+" : ""}
-            {totalFloatingPnl.toFixed(2)}
-          </span>
-        </div>
-        <UserHeaderActions simpleMode={true} />
-      </div>
-    </header>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="exit-backtest-dialog-title"
+              aria-describedby="exit-backtest-dialog-description"
+              className="w-full max-w-md overflow-hidden rounded-lg border border-gray-700 bg-gray-900 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-gray-700 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <TriangleAlert size={20} className="text-amber-400" />
+                  <h2
+                    id="exit-backtest-dialog-title"
+                    className="text-base font-bold text-white"
+                  >
+                    确认退出逐K回测？
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsExitBacktestConfirmOpen(false)}
+                  className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+                  aria-label="关闭确认弹窗"
+                  title="关闭"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div
+                id="exit-backtest-dialog-description"
+                className="space-y-2 px-5 py-5 text-sm leading-6 text-gray-300"
+              >
+                <p>退出后将结束当前逐K回测，并返回最新行情。</p>
+                <p className="text-gray-400">当前回测播放位置将不会保留。</p>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-700 px-5 py-4">
+                <button
+                  ref={continueBacktestButtonRef}
+                  type="button"
+                  onClick={() => setIsExitBacktestConfirmOpen(false)}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  继续回测
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmExitBacktest}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-400"
+                >
+                  确认退出
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 };
