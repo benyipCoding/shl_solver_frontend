@@ -352,7 +352,7 @@ export const TopBar = ({
             </>
           ) : (
             <div className="ml-1 flex shrink-0 items-center gap-3 rounded-full border border-gray-700 bg-gray-800 px-4 py-1.5 lg:ml-3">
-              <span className="text-sm text-gray-400 w-32 text-center">
+              <span className="text-sm text-gray-400 w-36 text-center">
                 K线: {currentIndex} / {totalCandles.toLocaleString()}
               </span>
               <button
