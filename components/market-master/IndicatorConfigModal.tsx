@@ -26,7 +26,7 @@ export const IndicatorConfigModal = ({
         top: indicatorModalPos.y,
         position: "absolute",
       }}
-      className="z-50 flex w-137.5 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl max-md:!fixed max-md:!bottom-2 max-md:!left-2 max-md:!right-2 max-md:!top-2 max-md:!w-auto"
+      className="z-50 flex max-h-[calc(100vh-2rem)] w-180 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-900 shadow-2xl max-lg:!fixed max-lg:!bottom-2 max-lg:!left-2 max-lg:!right-2 max-lg:!top-2 max-lg:!w-auto"
     >
       <div
         onMouseDown={handleIndDragStart}
@@ -46,7 +46,7 @@ export const IndicatorConfigModal = ({
         </button>
       </div>
 
-      <div className="flex h-72 min-h-0 max-md:h-auto max-md:flex-1 max-md:flex-col">
+      <div className="flex h-104 min-h-0 max-lg:h-auto max-lg:flex-1 max-md:flex-col">
         <div className="w-32 space-y-1 border-r border-gray-800 bg-gray-900/50 p-2 max-md:flex max-md:w-full max-md:space-y-0 max-md:border-b max-md:border-r-0">
           <button
             onClick={() => setSelectedIndTab("EMA")}

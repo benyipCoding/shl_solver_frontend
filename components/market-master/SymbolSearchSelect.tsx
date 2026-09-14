@@ -214,7 +214,7 @@ export const SymbolFavoriteButton = ({ symbol }: { symbol: string }) => {
         );
       }}
       disabled={!canonicalValue}
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:h-[34px] sm:w-[34px] ${
+      className={`flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 sm:h-[42px] sm:w-[42px] ${
         isCurrentFavorite
           ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20"
           : "border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600 hover:bg-gray-700 hover:text-yellow-400"
@@ -540,11 +540,11 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
         <button
           ref={triggerRef}
           type="button"
-          className="flex w-full items-center justify-between gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:border-gray-600 focus:border-blue-500 focus:outline-none sm:py-1.5"
+          className="flex h-[50px] w-full items-center justify-between gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-[15px] font-semibold text-gray-200 transition-colors hover:border-gray-600 focus:border-blue-500 focus:outline-none sm:h-[42px]"
           onClick={() => setIsOpen((prev) => !prev)}
         >
           <span className="truncate">{canonicalValue}</span>
-          <ChevronDown size={14} className="text-gray-500 shrink-0" />
+          <ChevronDown size={16} className="shrink-0 text-gray-500" />
         </button>
 
         {isOpen &&

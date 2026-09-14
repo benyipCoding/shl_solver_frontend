@@ -110,7 +110,7 @@ export const TopBar = ({
           className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4"
           title="返回主页"
         >
-          <CircleDollarSign className="text-blue-500" />
+          <CircleDollarSign size={28} className="text-blue-500" />
           <span className="hidden sm:inline">复盘模拟交易</span>
         </Link>
 
@@ -119,7 +119,7 @@ export const TopBar = ({
           <select
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value)}
-            className="cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 py-2 text-sm text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:py-1"
+            className="h-[50px] cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 text-[15px] text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:h-[42px]"
           >
             {timeframeOptions.map((option: any) => (
               <option key={option.value} value={option.value}>
@@ -134,11 +134,7 @@ export const TopBar = ({
           <div className="text-xs text-blue-400 shrink-0">
             加载真实行情中...
           </div>
-        ) : isHistoryLoading ? (
-          <div className="text-xs text-blue-300 shrink-0">
-            加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
-          </div>
-        ) : dataError ? (
+        ) : !isHistoryLoading && dataError ? (
           <div
             className="max-w-56 truncate text-xs text-red-400"
             title={dataError}
@@ -147,7 +143,7 @@ export const TopBar = ({
           </div>
         ) : null}
 
-        <div className="ml-1 flex shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 lg:ml-2">
+        <div className="ml-1 flex h-[50px] shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 sm:h-[42px] lg:ml-2">
           <button
             onClick={() => setMode("idle")}
             className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
@@ -157,7 +153,7 @@ export const TopBar = ({
             }`}
             title="指针模式 (平移/选中/右键配置)"
           >
-            <MousePointer2 size={16} />
+            <MousePointer2 size={20} />
           </button>
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
           <button
@@ -169,7 +165,7 @@ export const TopBar = ({
             }`}
             title="画直线 (Trend Line)"
           >
-            <Minus size={16} />
+            <Minus size={20} />
           </button>
           <button
             onClick={() => setDrawingTool("rectangle")}
@@ -180,7 +176,7 @@ export const TopBar = ({
             }`}
             title="画阻力矩形 (Rectangle)"
           >
-            <Square size={14} />
+            <Square size={18} />
           </button>
           <button
             onClick={() => setDrawingTool("fib")}
@@ -191,7 +187,7 @@ export const TopBar = ({
             }`}
             title="斐波那契回调 (Fib Retracement)"
           >
-            <AlignJustify size={16} />
+            <AlignJustify size={20} />
           </button>
           <button
             onClick={drawAutomaticPens}
@@ -208,7 +204,7 @@ export const TopBar = ({
                 : "自动绘制当前可视区 Pens（快捷键 F）"
             }
           >
-            <ChartSpline size={16} />
+            <ChartSpline size={20} />
           </button>
           <button
             onClick={drawAutomaticSegments}
@@ -225,14 +221,14 @@ export const TopBar = ({
                 : "自动绘制 Segments（快捷键 R）"
             }
           >
-            <ChartNoAxesCombined size={16} />
+            <ChartNoAxesCombined size={20} />
           </button>
           <button
             onClick={clearLines}
             className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
             title="清空画线"
           >
-            <Trash2 size={18} />
+            <Trash2 size={20} />
           </button>
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
 
@@ -247,7 +243,7 @@ export const TopBar = ({
               isMagnetEnabled ? "关闭磁力吸附" : "开启磁力吸附 (快捷精准画图)"
             }
           >
-            <Magnet size={16} />
+            <Magnet size={20} />
           </button>
           <button
             onClick={() =>
@@ -264,7 +260,7 @@ export const TopBar = ({
                 : "开启右侧价格轴自动缩放"
             }
           >
-            <ArrowUpDown size={16} />
+            <ArrowUpDown size={20} />
           </button>
           <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
           <button
@@ -272,7 +268,7 @@ export const TopBar = ({
             className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-blue-400 sm:p-2"
             title="指标配置中心 (Indicators)"
           >
-            <BarChart2 size={18} />
+            <BarChart2 size={20} />
           </button>
         </div>
 
@@ -304,13 +300,19 @@ export const TopBar = ({
           title={backtestButtonTitle}
         >
           {!isBacktestMode && (isDataLoading || isHistoryLoading) ? (
-            <Loader2 size={14} className="animate-spin shrink-0" />
+            <Loader2 size={16} className="animate-spin shrink-0" />
           ) : (
-            <StepForward size={14} className="shrink-0" />
+            <StepForward size={16} className="shrink-0" />
           )}
           <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
           <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
         </button>
+
+        {isHistoryLoading && (
+          <div className="ml-1 shrink-0 text-xs text-blue-300">
+            加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
+          </div>
+        )}
 
         {isBacktestMode && (
           <div className="flex items-center gap-3 bg-gray-800 px-4 py-1.5 rounded-full border border-gray-700 shrink-0">
@@ -325,7 +327,7 @@ export const TopBar = ({
               className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
               title="步进一根 K 线（快捷键 D）"
             >
-              <StepForward size={16} />
+              <StepForward size={18} />
             </button>
             <button
               onClick={() => setIsPlaying(!isPlaying)}
@@ -341,7 +343,7 @@ export const TopBar = ({
                   : "自动播放（快捷键 P）"
               }
             >
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+              {isPlaying ? <Pause size={18} /> : <Play size={18} />}
             </button>
           </div>
         )}
