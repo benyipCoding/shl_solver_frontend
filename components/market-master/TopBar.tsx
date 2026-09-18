@@ -48,6 +48,7 @@ export const TopBar = ({
   automaticPenCount = 0,
   drawAutomaticSegments,
   automaticSegmentCount = 0,
+  isAutomaticSegmentBusy = false,
   clearLines,
   isBacktestMode,
   setIsBacktestMode,
@@ -248,26 +249,41 @@ export const TopBar = ({
             <button
               onClick={drawAutomaticSegments}
               disabled={
-                isDataLoading || Boolean(dataError) || totalCandles === 0
+                isDataLoading ||
+                Boolean(dataError) ||
+                totalCandles === 0 ||
+                isAutomaticSegmentBusy
               }
               aria-pressed={automaticSegmentCount > 0}
+              aria-busy={isAutomaticSegmentBusy}
               className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
                 automaticSegmentCount > 0
                   ? "bg-gray-700 text-green-400"
                   : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
               }`}
               title={
-                automaticSegmentCount > 0
+                isAutomaticSegmentBusy
+                  ? "正在分批更新 Segments，请稍候..."
+                  : automaticSegmentCount > 0
                   ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
                   : "自动绘制 Segments（快捷键 R）"
               }
             >
-              <ChartNoAxesCombined size={20} />
+              {isAutomaticSegmentBusy ? (
+                <Loader2 size={20} className="animate-spin" />
+              ) : (
+                <ChartNoAxesCombined size={20} />
+              )}
             </button>
             <button
               onClick={clearLines}
-              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
-              title="清空画线"
+              disabled={isAutomaticSegmentBusy}
+              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 sm:p-2"
+              title={
+                isAutomaticSegmentBusy
+                  ? "正在更新 Segments，请稍候..."
+                  : "清空画线"
+              }
             >
               <Trash2 size={20} />
             </button>

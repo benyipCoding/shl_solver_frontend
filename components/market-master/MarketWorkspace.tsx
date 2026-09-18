@@ -165,7 +165,7 @@ export function MarketWorkspace({
             </div>
           )}
           {legendData && (
-            <div className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2 py-1.5 font-mono text-[10px] backdrop-blur-sm sm:left-4 sm:top-3 sm:gap-4 sm:px-3 sm:text-xs">
+            <div className="pointer-events-none absolute left-2 top-2 z-10 flex max-w-[calc(100%-1rem)] items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2.5 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:top-3 sm:gap-4 sm:px-3 sm:text-sm">
               <div className="font-semibold tracking-wider text-gray-400">
                 {symbol}
               </div>
@@ -265,7 +265,7 @@ export function MarketWorkspace({
         {indConfig.macd.enabled && (
           <div className="relative h-36 shrink-0 border-t border-gray-800 bg-[#111827] sm:h-48">
             {legendData && (
-              <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2 py-1.5 font-mono text-[10px] backdrop-blur-sm sm:left-4 sm:right-auto sm:gap-4 sm:px-3 sm:text-xs">
+              <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2.5 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:right-auto sm:gap-4 sm:px-3 sm:text-sm">
                 <div className="font-semibold tracking-wider text-gray-400">
                   MACD ({indConfig.macd.fast},{indConfig.macd.slow},
                   {indConfig.macd.signal})

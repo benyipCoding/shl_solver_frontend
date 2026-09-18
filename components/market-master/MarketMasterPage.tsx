@@ -36,9 +36,7 @@ import {
   calculateMACD,
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
-import {
-  useAutomaticPens,
-} from "@/hooks/useAutomaticPens";
+import { useAutomaticPens } from "@/hooks/useAutomaticPens";
 import { useAutomaticSegments } from "@/hooks/useAutomaticSegments";
 import {
   AI_ZONE_STYLES,
@@ -111,6 +109,7 @@ export function MarketMasterPage() {
   } = useAutomaticPens({ chartRef, seriesRef });
   const {
     automaticSegmentCount,
+    isAutomaticSegmentBusy,
     clearAutomaticSegments,
     drawAutomaticSegments,
     resetAutomaticSegmentsState,
@@ -678,8 +677,7 @@ export function MarketMasterPage() {
           bollingerPoint?.middle != null
             ? {
                 period: activeConfig.bollinger.period,
-                standardDeviation:
-                  activeConfig.bollinger.standardDeviation,
+                standardDeviation: activeConfig.bollinger.standardDeviation,
                 middleColor: activeConfig.bollinger.middleColor,
                 upperColor: activeConfig.bollinger.upperColor,
                 lowerColor: activeConfig.bollinger.lowerColor,
@@ -2324,11 +2322,7 @@ export function MarketMasterPage() {
         return;
       }
 
-      if (
-        key === "p" &&
-        !isDataLoading &&
-        currentIndex < totalCandles
-      ) {
+      if (key === "p" && !isDataLoading && currentIndex < totalCandles) {
         event.preventDefault();
         setIsPlaying((playing) => !playing);
       }
@@ -2806,6 +2800,7 @@ export function MarketMasterPage() {
         automaticPenCount={automaticPenCount}
         drawAutomaticSegments={drawAutomaticSegments}
         automaticSegmentCount={automaticSegmentCount}
+        isAutomaticSegmentBusy={isAutomaticSegmentBusy}
         clearLines={clearAllLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}
