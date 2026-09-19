@@ -17,6 +17,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 30m
           # 登录后要执行的命令
           script: |
             # 进入前端目录并拉取最新代码
