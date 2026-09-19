@@ -29,6 +29,7 @@ import {
   persistLastSymbol,
 } from "@/components/market-master/SymbolSearchSelect";
 import { useFetch } from "@/context/FetchContext";
+import toast from "react-hot-toast";
 import {
   ShapePrimitive,
   calculateBollingerBands,
@@ -185,6 +186,8 @@ export function MarketMasterPage() {
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isSyncingLatest, setIsSyncingLatest] = useState(false);
+  const [marketDataEpoch, setMarketDataEpoch] = useState(0);
   const [totalCandles, setTotalCandles] = useState(0);
   const [dataError, setDataError] = useState("");
   const [instrumentContext, setInstrumentContext] = useState<InstrumentContext>(
@@ -1155,6 +1158,7 @@ export function MarketMasterPage() {
     timeframe,
     syncDisplayedData,
     clearAutomaticSegments,
+    marketDataEpoch,
   ]);
 
   useEffect(() => {
@@ -2469,6 +2473,49 @@ export function MarketMasterPage() {
     [applyMarketChange, isBacktestMode, symbol, timeframe]
   );
 
+  const handleSyncLatestKline = useCallback(async () => {
+    if (isSyncingLatest || isBacktestMode) return;
+
+    const interval = getIntervalByTimeframe(timeframe);
+    setIsSyncingLatest(true);
+    try {
+      const response = await customFetch(
+        `/api/market_master/sync/latest?symbol=${encodeURIComponent(
+          symbol
+        )}&interval=${encodeURIComponent(interval)}`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const statusMessage =
+          response.status === 401
+            ? "请先登录后再同步最新 K 线"
+            : response.status === 403
+              ? "仅超级管理员可同步最新 K 线"
+              : payload?.message ||
+                payload?.error ||
+                payload?.detail ||
+                "同步最新 K 线失败";
+        throw new Error(statusMessage);
+      }
+
+      const result = payload?.data || {};
+      const rowsUpserted = Number(result.rows_upserted || 0);
+      if (rowsUpserted > 0) {
+        toast.success(
+          `已将 ${symbol} ${timeframe} 同步到最新，写入 ${rowsUpserted} 根 K 线`
+        );
+      } else {
+        toast.success(`${symbol} ${timeframe} 已是最新`);
+      }
+      setMarketDataEpoch((current) => current + 1);
+    } catch (error: any) {
+      toast.error(error?.message || "同步最新 K 线失败");
+    } finally {
+      setIsSyncingLatest(false);
+    }
+  }, [customFetch, isBacktestMode, isSyncingLatest, symbol, timeframe]);
+
   const confirmPendingMarketChange = useCallback(() => {
     if (!pendingMarketChange) return;
     const { kind, value, wasBacktestMode } = pendingMarketChange;
@@ -2812,6 +2859,8 @@ export function MarketMasterPage() {
         isDataLoading={isDataLoading}
         isHistoryLoading={isHistoryLoading}
         dataError={dataError}
+        onSyncLatest={handleSyncLatestKline}
+        isSyncingLatest={isSyncingLatest}
         balance={balance}
         totalFloatingPnl={totalFloatingPnl}
         minBacktestCandles={MIN_BACKTEST_CANDLES}

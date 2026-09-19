@@ -1,11 +1,15 @@
-import type { IChartApi, ISeriesApi, SeriesType, Time } from "lightweight-charts";
+import type {
+  IChartApi,
+  ISeriesApi,
+  SeriesType,
+  Time,
+} from "lightweight-charts";
 
 export const INITIAL_VISIBLE_COUNT = 200;
 export const MIN_FORWARD_CANDLES = 2000;
-export const MIN_BACKTEST_CANDLES =
-  INITIAL_VISIBLE_COUNT + MIN_FORWARD_CANDLES;
+export const MIN_BACKTEST_CANDLES = INITIAL_VISIBLE_COUNT + MIN_FORWARD_CANDLES;
 export const SELECTED_LINE_WIDTH_BOOST = 1;
-export const RIGHT_PANEL_DEFAULT_WIDTH = 420;
+export const RIGHT_PANEL_DEFAULT_WIDTH = 480;
 export const RIGHT_PANEL_MIN_WIDTH = 260;
 export const MAIN_CONTENT_MIN_WIDTH = 520;
 export const BOTTOM_PANEL_DEFAULT_HEIGHT = 224;
@@ -105,14 +109,7 @@ export type IndicatorConfig = {
   };
 };
 
-const INTRADAY_TIMEFRAMES = new Set([
-  "m1",
-  "m5",
-  "m15",
-  "m30",
-  "H1",
-  "H4",
-]);
+const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
 
 const SYMBOL_PROFILE_OVERRIDES: Record<string, InstrumentProfile> = {
   "BTC/USD": { priceDecimals: 2, inputStep: "1", sl: 1500, tp: 3000 },
@@ -171,10 +168,7 @@ const toUtcDate = (timeValue: Time) => {
   return null;
 };
 
-export const formatChartTimeLabel = (
-  timeValue: Time,
-  timeframe: string
-) => {
+export const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
   const utcDate = toUtcDate(timeValue);
   if (!utcDate) return "";
 

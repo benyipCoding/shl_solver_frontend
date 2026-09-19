@@ -24,8 +24,10 @@ import {
   ChartSpline,
   ChartNoAxesCombined,
   TriangleAlert,
+  RefreshCw,
   X,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export const TopBar = ({
   symbol,
@@ -65,7 +67,11 @@ export const TopBar = ({
   minBacktestCandles = 2200,
   initialVisibleCount = 200,
   minForwardCandles = 2000,
+  onSyncLatest,
+  isSyncingLatest = false,
 }: any) => {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const canSyncLatest = !isAuthLoading && Boolean(user?.is_superuser);
   const [isExitBacktestConfirmOpen, setIsExitBacktestConfirmOpen] =
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
@@ -166,6 +172,28 @@ export const TopBar = ({
               ))}
             </select>
             <SymbolFavoriteButton symbol={symbol} />
+            {canSyncLatest ? (
+              <button
+                type="button"
+                onClick={onSyncLatest}
+                disabled={isSyncingLatest || isBacktestMode}
+                className="flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
+                title={
+                  isBacktestMode
+                    ? "请先退出逐K回测再同步最新 K 线"
+                    : `优先同步当前 ${symbol} ${timeframe} 到最新日期（只补最新缺口，不回补更早历史）`
+                }
+              >
+                {isSyncingLatest ? (
+                  <Loader2 size={16} className="shrink-0 animate-spin" />
+                ) : (
+                  <RefreshCw size={16} className="shrink-0" />
+                )}
+                <span className="hidden xl:inline">
+                  {isSyncingLatest ? "同步中" : "同步最新"}
+                </span>
+              </button>
+            ) : null}
           </div>
 
           {isDataLoading ? (

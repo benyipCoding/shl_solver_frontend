@@ -29,10 +29,48 @@ const buildForwardHeaders = (request: NextRequest) => {
   return headers;
 };
 
+const extractProxyErrorMessage = (payload: any, fallbackErrorMessage: string) => {
+  if (!payload) return fallbackErrorMessage;
+  if (typeof payload.message === "string" && payload.message) return payload.message;
+  if (typeof payload.error === "string" && payload.error) return payload.error;
+  if (typeof payload.detail === "string" && payload.detail) return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail[0]?.msg) {
+    return String(payload.detail[0].msg);
+  }
+  return fallbackErrorMessage;
+};
+
 export async function proxyMarketMasterGet(
   request: NextRequest,
   path: string,
   fallbackErrorMessage: string
+) {
+  return proxyMarketMasterRequest(
+    request,
+    path,
+    fallbackErrorMessage,
+    "GET"
+  );
+}
+
+export async function proxyMarketMasterPost(
+  request: NextRequest,
+  path: string,
+  fallbackErrorMessage: string
+) {
+  return proxyMarketMasterRequest(
+    request,
+    path,
+    fallbackErrorMessage,
+    "POST"
+  );
+}
+
+async function proxyMarketMasterRequest(
+  request: NextRequest,
+  path: string,
+  fallbackErrorMessage: string,
+  method: "GET" | "POST"
 ) {
   if (!apiBaseUrl) {
     return NextResponse.json(
@@ -48,7 +86,7 @@ export async function proxyMarketMasterGet(
 
   try {
     const response = await fetch(url, {
-      method: "GET",
+      method,
       headers: buildForwardHeaders(request),
       cache: "no-store",
     });
@@ -65,7 +103,8 @@ export async function proxyMarketMasterGet(
     if (!response.ok) {
       return NextResponse.json(
         {
-          error: payload?.message || payload?.error || fallbackErrorMessage,
+          error: extractProxyErrorMessage(payload, fallbackErrorMessage),
+          message: extractProxyErrorMessage(payload, fallbackErrorMessage),
         },
         { status: response.status }
       );
