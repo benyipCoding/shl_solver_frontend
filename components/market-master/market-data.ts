@@ -1,4 +1,6 @@
 export const KLINE_PAGE_SIZE = 5000;
+export const KLINE_HISTORY_EDGE_BARS = 40;
+export const KLINE_FORWARD_PREFETCH_BARS = 400;
 
 export type CandleInput = {
   datetime?: string;
@@ -23,6 +25,12 @@ export type KlinePageMeta = {
   currency: string | null;
   exchange: string | null;
   latestClose: unknown;
+  total: number;
+  offset: number;
+  hasMoreHistory: boolean;
+  hasMoreFuture: boolean;
+  earliest: string | null;
+  latest: string | null;
 };
 
 type MarketDataPayload = {
@@ -32,12 +40,24 @@ type MarketDataPayload = {
     candles?: CandleInput[];
     values?: CandleInput[];
     count?: number;
+    total?: number;
+    offset?: number;
+    has_more_history?: boolean;
+    has_more_future?: boolean;
+    earliest?: string;
+    latest?: string;
     filtering?: { reason?: string };
     meta?: {
       asset_type?: string;
       type?: string;
       currency?: string;
       exchange?: string;
+      total?: number;
+      offset?: number;
+      has_more_history?: boolean;
+      has_more_future?: boolean;
+      earliest?: string;
+      latest?: string;
     };
   };
 };
@@ -86,30 +106,70 @@ export const normalizeCandles = (
     })
     .filter((candle): candle is NormalizedCandle => candle !== null);
 
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const withWindowMeta = (
+  payload: MarketDataPayload,
+  rawCandles: CandleInput[],
+  extra: Pick<
+    KlinePageMeta,
+    "assetType" | "currency" | "exchange" | "latestClose"
+  >
+): KlinePageMeta => {
+  const total = toFiniteNumber(
+    payload.data?.total ?? payload.data?.meta?.total,
+    rawCandles.length
+  );
+  const offset = Math.max(
+    0,
+    toFiniteNumber(payload.data?.offset ?? payload.data?.meta?.offset, 0)
+  );
+  return {
+    rawCandles,
+    ...extra,
+    total: Math.max(total, rawCandles.length + offset),
+    offset,
+    hasMoreHistory: Boolean(
+      payload.data?.has_more_history ??
+        payload.data?.meta?.has_more_history ??
+        offset > 0
+    ),
+    hasMoreFuture: Boolean(
+      payload.data?.has_more_future ??
+        payload.data?.meta?.has_more_future ??
+        offset + rawCandles.length < total
+    ),
+    earliest:
+      payload.data?.earliest ?? payload.data?.meta?.earliest ?? null,
+    latest: payload.data?.latest ?? payload.data?.meta?.latest ?? null,
+  };
+};
+
 const buildDefaultsMarketData = (
   payload: MarketDataPayload
 ): KlinePageMeta => {
   const rawCandles = payload.data?.candles ?? [];
-  return {
-    rawCandles,
+  return withWindowMeta(payload, rawCandles, {
     assetType: payload.data?.meta?.asset_type ?? null,
     currency: payload.data?.meta?.currency ?? null,
     exchange: payload.data?.meta?.exchange ?? null,
     latestClose: rawCandles[0]?.close,
-  };
+  });
 };
 
 const buildTimeSeriesMarketData = (
   payload: MarketDataPayload
 ): KlinePageMeta => {
   const rawCandles = payload.data?.values ?? [];
-  return {
-    rawCandles,
+  return withWindowMeta(payload, rawCandles, {
     assetType: payload.data?.meta?.type ?? null,
     currency: payload.data?.meta?.currency ?? null,
     exchange: payload.data?.meta?.exchange ?? null,
     latestClose: rawCandles[0]?.close,
-  };
+  });
 };
 
 const shouldRetryWithTimeSeries = (
@@ -125,6 +185,17 @@ const shouldRetryWithTimeSeries = (
   );
 };
 
+export const getNewestRawDatetime = (rawCandles: CandleInput[]) => {
+  const sorted = normalizeCandles(rawCandles);
+  if (!sorted.length) return null;
+
+  const newestTime = sorted[sorted.length - 1].time;
+  const match = rawCandles.find(
+    (candle) => toUtcEpochSeconds(candle.datetime) === newestTime
+  );
+  return typeof match?.datetime === "string" ? match.datetime : null;
+};
+
 export const getOldestRawDatetime = (rawCandles: CandleInput[]) => {
   const sorted = normalizeCandles(rawCandles);
   if (!sorted.length) return null;
@@ -134,6 +205,19 @@ export const getOldestRawDatetime = (rawCandles: CandleInput[]) => {
     (candle) => toUtcEpochSeconds(candle.datetime) === oldestTime
   );
   return typeof match?.datetime === "string" ? match.datetime : null;
+};
+
+export const estimateUnixAtIndex = (
+  earliestUnix: number,
+  latestUnix: number,
+  totalCount: number,
+  index: number
+) => {
+  if (totalCount <= 1) return earliestUnix;
+  const clamped = Math.min(Math.max(index, 0), totalCount - 1);
+  return Math.round(
+    earliestUnix + ((latestUnix - earliestUnix) * clamped) / (totalCount - 1)
+  );
 };
 
 export const mergeCandleData = (
@@ -146,6 +230,17 @@ export const mergeCandleData = (
   return [...merged.values()].sort((a, b) => a.time - b.time);
 };
 
+export const windowsOverlapOrTouch = (
+  leftOffset: number,
+  leftLength: number,
+  rightOffset: number,
+  rightLength: number
+) => {
+  const leftEnd = leftOffset + leftLength;
+  const rightEnd = rightOffset + rightLength;
+  return rightOffset <= leftEnd && rightEnd >= leftOffset;
+};
+
 export const fetchKlinePage = async (
   customFetch: (
     input: RequestInfo | URL,
@@ -156,11 +251,19 @@ export const fetchKlinePage = async (
     interval,
     outputsize,
     endDate,
+    offset,
+    aroundTime,
+    beforeCount,
+    afterDate,
   }: {
     symbol: string;
     interval: string;
     outputsize: number;
     endDate?: string;
+    offset?: number;
+    aroundTime?: string | number;
+    beforeCount?: number;
+    afterDate?: string;
   }
 ): Promise<KlinePageMeta> => {
   const params = new URLSearchParams({
@@ -170,6 +273,12 @@ export const fetchKlinePage = async (
     timezone: "UTC",
   });
   if (endDate) params.set("end_date", endDate);
+  if (offset != null) params.set("offset", String(offset));
+  if (aroundTime != null && aroundTime !== "") {
+    params.set("around_time", String(aroundTime));
+  }
+  if (beforeCount != null) params.set("before_count", String(beforeCount));
+  if (afterDate) params.set("after_date", afterDate);
 
   const response = await customFetch(
     `/api/market_master/kline/defaults?${params.toString()}`

@@ -66,6 +66,7 @@ type MarketWorkspaceProps = {
   isBottomPanelOpen: boolean;
   isDataLoading: boolean;
   isHistoryLoading: boolean;
+  historyLoadKind?: "older" | "future" | "window" | null;
   isMaximized: boolean;
   isRightPanelOpen: boolean;
   layoutRef: RefObject<HTMLDivElement | null>;
@@ -115,6 +116,7 @@ export function MarketWorkspace({
   isBottomPanelOpen,
   isDataLoading,
   isHistoryLoading,
+  historyLoadKind = null,
   isMaximized,
   isRightPanelOpen,
   layoutRef,
@@ -158,7 +160,13 @@ export function MarketWorkspace({
           )}
           {!isDataLoading && isHistoryLoading && (
             <div className="absolute right-4 top-3 z-10 rounded border border-blue-500/30 bg-gray-900/80 px-3 py-1.5 text-xs text-blue-200 backdrop-blur-sm">
-              正在加载更早的历史 K 线 ({totalCandles.toLocaleString()} 根)...
+              {historyLoadKind === "older"
+                ? "正在加载更早的历史 K 线"
+                : historyLoadKind === "future"
+                  ? "正在加载后续 K 线"
+                  : historyLoadKind === "window"
+                    ? "正在加载回测窗口"
+                    : "正在按需加载历史 K 线"}
             </div>
           )}
           {!isDataLoading && dataError && (

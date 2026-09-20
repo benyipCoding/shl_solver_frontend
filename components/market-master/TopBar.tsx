@@ -90,10 +90,7 @@ export const TopBar = ({
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
   const canEnterBacktest =
-    !isDataLoading &&
-    !isHistoryLoading &&
-    !dataError &&
-    totalCandles >= minBacktestCandles;
+    !isDataLoading && !dataError && totalCandles >= minBacktestCandles;
   const isBacktestToggleDisabled = !canEnterBacktest;
 
   let backtestButtonLabel = "开启逐K回测";
@@ -102,10 +99,6 @@ export const TopBar = ({
     backtestButtonLabel = "行情加载中，暂不可开启回测";
     backtestButtonTitle =
       "当前品种/周期的 K 线仍在加载，请等待完成后再开启逐K回测";
-  } else if (isHistoryLoading) {
-    backtestButtonLabel = "历史K线加载中...";
-    backtestButtonTitle =
-      "正在分页拉取该品种当前周期的全部历史 K 线，请等待全部加载完成后再开启逐K回测";
   } else if (dataError || totalCandles === 0) {
     backtestButtonLabel = "暂无K线数据，无法开启回测";
     backtestButtonTitle = dataError || "暂无可用 K 线数据，无法开启逐K回测";
@@ -116,13 +109,11 @@ export const TopBar = ({
 
   const compactBacktestButtonLabel = isDataLoading
     ? "行情加载中"
-    : isHistoryLoading
-      ? "历史加载中"
-      : dataError || totalCandles === 0
-        ? "暂不可回测"
-        : totalCandles < minBacktestCandles
-          ? "历史不足"
-          : "逐K回测";
+    : dataError || totalCandles === 0
+      ? "暂不可回测"
+      : totalCandles < minBacktestCandles
+        ? "历史不足"
+        : "逐K回测";
 
   useEffect(() => {
     if (!isExitBacktestConfirmOpen || !isBacktestMode) return;
@@ -426,7 +417,7 @@ export const TopBar = ({
                 className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                 title={backtestButtonTitle}
               >
-                {isDataLoading || isHistoryLoading ? (
+                {isDataLoading ? (
                   <Loader2 size={16} className="shrink-0 animate-spin" />
                 ) : (
                   <StepForward size={16} className="shrink-0" />
@@ -437,7 +428,7 @@ export const TopBar = ({
 
               {isHistoryLoading && (
                 <div className="ml-1 shrink-0 text-xs text-blue-300">
-                  加载历史 K 线中 ({totalCandles.toLocaleString()} 根)...
+                  正在按需加载历史 K 线
                 </div>
               )}
             </>

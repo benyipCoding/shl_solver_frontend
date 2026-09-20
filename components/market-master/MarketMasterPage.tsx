@@ -77,15 +77,19 @@ import {
   persistLastTimeframe,
   persistIndicatorConfig,
   pickRandomBacktestStartIndex,
+  computeBacktestKlineWindow,
   resolveLastTimeframe,
   type InstrumentContext,
 } from "@/components/market-master/market-config";
 import {
+  KLINE_FORWARD_PREFETCH_BARS,
+  KLINE_HISTORY_EDGE_BARS,
   KLINE_PAGE_SIZE,
+  estimateUnixAtIndex,
   fetchKlinePage,
-  getOldestRawDatetime,
   mergeCandleData,
   normalizeCandles,
+  windowsOverlapOrTouch,
   type KlinePageMeta,
   type NormalizedCandle,
 } from "@/components/market-master/market-data";
@@ -324,12 +328,14 @@ export function MarketMasterPage() {
   const replayStartCurrentIndexRef = useRef(0);
   const replayEndCurrentIndexRef = useRef(0);
   const replayFinishedNotifiedRef = useRef(false);
+  const replayNeedsMoreFutureRef = useRef(false);
   const isReplayModeRef = useRef(false);
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [replayBounds, setReplayBounds] = useState({
     startCurrent: 0,
     endCurrent: 0,
   });
+  const [replayAwaitingFuture, setReplayAwaitingFuture] = useState(false);
   const [isBacktestHistoryOpen, setIsBacktestHistoryOpen] = useState(false);
   const [replayingSessionId, setReplayingSessionId] = useState<string | null>(
     null
@@ -438,9 +444,13 @@ export function MarketMasterPage() {
   const [isBacktestMode, setIsBacktestMode] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyLoadKind, setHistoryLoadKind] = useState<
+    "older" | "future" | "window" | null
+  >(null);
   const [isSyncingLatest, setIsSyncingLatest] = useState(false);
   const [marketDataEpoch, setMarketDataEpoch] = useState(0);
   const [totalCandles, setTotalCandles] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [dataError, setDataError] = useState("");
   const [instrumentContext, setInstrumentContext] = useState<InstrumentContext>(
     {
@@ -495,6 +505,32 @@ export function MarketMasterPage() {
   useEffect(() => {
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
+
+  const isBacktestModeRef = useRef(isBacktestMode);
+  useEffect(() => {
+    isBacktestModeRef.current = isBacktestMode;
+  }, [isBacktestMode]);
+
+  const loadedOffsetRef = useRef(0);
+  const totalCandlesRef = useRef(0);
+  const earliestUnixRef = useRef<number | null>(null);
+  const latestUnixRef = useRef<number | null>(null);
+  const isDataLoadingRef = useRef(true);
+  const historyLoadingRef = useRef(false);
+  const dataSessionRef = useRef(0);
+  const preserveVisibleRangeRef = useRef(false);
+  const loadOlderHistoryRef = useRef<() => Promise<void>>(async () => {});
+  const loadFutureHistoryRef = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    loadedOffsetRef.current = loadedOffset;
+  }, [loadedOffset]);
+  useEffect(() => {
+    totalCandlesRef.current = totalCandles;
+  }, [totalCandles]);
+  useEffect(() => {
+    isDataLoadingRef.current = isDataLoading;
+  }, [isDataLoading]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const currentPrice = fullDataRef.current[currentIndex - 1]?.close || 0;
@@ -705,7 +741,7 @@ export function MarketMasterPage() {
         persistRef.current.recordClose({
           client_trade_id: String(trade.id),
           bar_time: trade.closeTime,
-          bar_index: resolvedBarIndex,
+          bar_index: loadedOffsetRef.current + resolvedBarIndex,
           price: trade.closePrice,
           close_reason: trade.reason,
         });
@@ -730,7 +766,7 @@ export function MarketMasterPage() {
       client_trade_id: String(tradeId),
       kind: type,
       bar_time: activeCandle.time,
-      bar_index: currentIndexRef.current - 1,
+      bar_index: loadedOffsetRef.current + currentIndexRef.current - 1,
       price: newPrice,
     });
   };
@@ -1235,18 +1271,24 @@ export function MarketMasterPage() {
         return;
       }
 
-      if (prependedCount > 0 && logicalRange && chartRef.current) {
-        chartRef.current.timeScale().setVisibleLogicalRange({
-          from: logicalRange.from + prependedCount,
-          to: logicalRange.to + prependedCount,
-        });
-        if (subLogicalRange && subChartRef.current) {
-          subChartRef.current.timeScale().setVisibleLogicalRange({
-            from: subLogicalRange.from + prependedCount,
-            to: subLogicalRange.to + prependedCount,
+      if (prependedCount > 0 && chartRef.current) {
+        if (logicalRange) {
+          chartRef.current.timeScale().setVisibleLogicalRange({
+            from: logicalRange.from + prependedCount,
+            to: logicalRange.to + prependedCount,
           });
+          if (subLogicalRange && subChartRef.current) {
+            subChartRef.current.timeScale().setVisibleLogicalRange({
+              from: subLogicalRange.from + prependedCount,
+              to: subLogicalRange.to + prependedCount,
+            });
+          }
+          return;
         }
-        return;
+        if (!nextBacktestMode) {
+          focusLatestCandles(data);
+          return;
+        }
       }
 
       if (shouldFocusLatest) {
@@ -1275,6 +1317,300 @@ export function MarketMasterPage() {
       activeConfig.macd.signal
     );
   }, []);
+
+  const applyCandlePage = useCallback(
+    (
+      marketData: KlinePageMeta,
+      data: NormalizedCandle[],
+      options?: {
+        prependedCount?: number;
+        isInitialPage?: boolean;
+        shouldReplace?: boolean;
+        shouldFocusLatest?: boolean;
+        shouldFitContent?: boolean;
+        currentIndex?: number;
+        skipDisplaySync?: boolean;
+      }
+    ) => {
+      const {
+        prependedCount = 0,
+        isInitialPage = false,
+        shouldReplace = false,
+        shouldFocusLatest = false,
+        shouldFitContent = false,
+      } = options || {};
+      const { assetType, currency, exchange, latestClose } = marketData;
+
+      if (isInitialPage) {
+        setInstrumentContext({
+          symbol,
+          assetType: assetType || null,
+          currency,
+          exchange,
+        });
+        const nextRiskDistance = getDefaultRiskDistance(
+          symbol,
+          assetType,
+          Number(latestClose) || data[data.length - 1]?.close || null
+        );
+        setSlDistance(nextRiskDistance.sl);
+        setTpDistance(nextRiskDistance.tp);
+      }
+
+      fullDataRef.current = data;
+      recomputeIndicators(data);
+
+      const nextTotal = Math.max(
+        Number(marketData.total) || 0,
+        data.length + Math.max(0, Number(marketData.offset) || 0)
+      );
+      setTotalCandles(nextTotal);
+      totalCandlesRef.current = nextTotal;
+
+      const pageOffset = Math.max(0, Number(marketData.offset) || 0);
+      const nextOffset =
+        shouldReplace || isInitialPage
+          ? pageOffset
+          : Math.min(loadedOffsetRef.current, pageOffset);
+      loadedOffsetRef.current = nextOffset;
+      setLoadedOffset(nextOffset);
+
+      const earliestUnix = toUnixSeconds(marketData.earliest);
+      const latestUnix = toUnixSeconds(marketData.latest);
+      if (earliestUnix != null) earliestUnixRef.current = earliestUnix;
+      if (latestUnix != null) latestUnixRef.current = latestUnix;
+
+      const inBacktest = isBacktestModeRef.current;
+      let nextCurrentIndex = currentIndexRef.current;
+      if (options?.currentIndex != null) {
+        nextCurrentIndex = Math.min(
+          Math.max(options.currentIndex, 0),
+          data.length
+        );
+        setCurrentIndex(nextCurrentIndex);
+      } else if (isInitialPage || shouldReplace) {
+        nextCurrentIndex = inBacktest
+          ? Math.min(currentIndexRef.current, data.length)
+          : data.length;
+        setCurrentIndex(nextCurrentIndex);
+      } else if (prependedCount > 0 && inBacktest) {
+        nextCurrentIndex = Math.min(
+          currentIndexRef.current + prependedCount,
+          data.length
+        );
+        setCurrentIndex(nextCurrentIndex);
+      } else if (!inBacktest) {
+        nextCurrentIndex = data.length;
+        setCurrentIndex(nextCurrentIndex);
+      }
+
+      if (isReplayModeRef.current && replayNeedsMoreFutureRef.current) {
+        const cursorUnix = replayCursorUnixRef.current;
+        const lastTime = data[data.length - 1]?.time;
+        const exact =
+          cursorUnix == null
+            ? -1
+            : data.findIndex((candle) => candle.time === cursorUnix);
+        if (exact >= 0) {
+          replayNeedsMoreFutureRef.current = false;
+          setReplayAwaitingFuture(false);
+          const endCurrent = Math.min(exact + 1, data.length);
+          replayEndCurrentIndexRef.current = endCurrent;
+          setReplayBounds((prev) => ({ ...prev, endCurrent }));
+        } else if (cursorUnix != null && lastTime != null && cursorUnix > lastTime) {
+          const endCurrent = data.length;
+          replayEndCurrentIndexRef.current = endCurrent;
+          setReplayBounds((prev) => ({ ...prev, endCurrent }));
+        }
+      }
+
+      if (!options?.skipDisplaySync) {
+        syncDisplayedData(
+          data,
+          nextCurrentIndex,
+          inBacktest,
+          shouldFitContent,
+          {
+            prependedCount,
+            shouldFocusLatest: isInitialPage || shouldFocusLatest,
+          }
+        );
+      }
+    },
+    [recomputeIndicators, symbol, syncDisplayedData]
+  );
+
+  const fetchSymbolPage = useCallback(
+    (params: {
+      outputsize: number;
+      offset?: number;
+      aroundTime?: string | number;
+      beforeCount?: number;
+      endDate?: string;
+      afterDate?: string;
+    }) =>
+      fetchKlinePage(customFetch, {
+        symbol,
+        interval: getIntervalByTimeframe(timeframe),
+        ...params,
+      }),
+    [customFetch, symbol, timeframe]
+  );
+
+  const loadOlderHistory = useCallback(async () => {
+    if (isDataLoadingRef.current || historyLoadingRef.current) return;
+    const offset = loadedOffsetRef.current;
+    if (offset <= 0) return;
+    const oldestTime = fullDataRef.current[0]?.time;
+    if (oldestTime == null) return;
+
+    historyLoadingRef.current = true;
+    setIsHistoryLoading(true);
+    setHistoryLoadKind("older");
+    const session = dataSessionRef.current;
+    try {
+      const page = await fetchSymbolPage({
+        outputsize: KLINE_PAGE_SIZE,
+        endDate: new Date(oldestTime * 1000).toISOString(),
+      });
+      if (session !== dataSessionRef.current) return;
+      const olderData = normalizeCandles(page.rawCandles);
+      if (!olderData.length) {
+        loadedOffsetRef.current = 0;
+        setLoadedOffset(0);
+        return;
+      }
+
+      const previousLength = fullDataRef.current.length;
+      if (
+        !windowsOverlapOrTouch(
+          loadedOffsetRef.current,
+          previousLength,
+          page.offset,
+          olderData.length
+        )
+      ) {
+        applyCandlePage(page, olderData, { shouldReplace: true });
+        return;
+      }
+
+      const merged = mergeCandleData(fullDataRef.current, olderData);
+      const prependedCount = merged.length - previousLength;
+      if (prependedCount <= 0) {
+        loadedOffsetRef.current = Math.min(loadedOffsetRef.current, page.offset);
+        setLoadedOffset(loadedOffsetRef.current);
+        return;
+      }
+
+      preserveVisibleRangeRef.current = true;
+      applyCandlePage(page, merged, { prependedCount });
+      requestAnimationFrame(() => {
+        preserveVisibleRangeRef.current = false;
+      });
+    } catch (error: any) {
+      if (session === dataSessionRef.current) {
+        toast.error(error?.message || "加载更早 K 线失败");
+      }
+    } finally {
+      if (session === dataSessionRef.current) {
+        historyLoadingRef.current = false;
+        setIsHistoryLoading(false);
+        setHistoryLoadKind(null);
+      }
+    }
+  }, [applyCandlePage, fetchSymbolPage]);
+
+  const loadFutureHistory = useCallback(async () => {
+    if (isDataLoadingRef.current || historyLoadingRef.current) return;
+    const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
+    const total = totalCandlesRef.current;
+    if (total > 0 && loadedEnd >= total) return;
+    const newestTime = fullDataRef.current[fullDataRef.current.length - 1]?.time;
+    if (newestTime == null) return;
+
+    historyLoadingRef.current = true;
+    setIsHistoryLoading(true);
+    setHistoryLoadKind("future");
+    const session = dataSessionRef.current;
+    try {
+      const page = await fetchSymbolPage({
+        outputsize: KLINE_PAGE_SIZE,
+        afterDate: new Date(newestTime * 1000).toISOString(),
+      });
+      if (session !== dataSessionRef.current) return;
+      const newerData = normalizeCandles(page.rawCandles);
+      if (!newerData.length) return;
+
+      if (
+        !windowsOverlapOrTouch(
+          loadedOffsetRef.current,
+          fullDataRef.current.length,
+          page.offset,
+          newerData.length
+        )
+      ) {
+        applyCandlePage(page, newerData, { shouldReplace: true });
+        return;
+      }
+
+      const merged = mergeCandleData(fullDataRef.current, newerData);
+      if (merged.length <= fullDataRef.current.length) return;
+      applyCandlePage(page, merged, {
+        skipDisplaySync: isBacktestModeRef.current,
+      });
+    } catch (error: any) {
+      if (session === dataSessionRef.current) {
+        toast.error(error?.message || "加载后续 K 线失败");
+      }
+    } finally {
+      if (session === dataSessionRef.current) {
+        historyLoadingRef.current = false;
+        setIsHistoryLoading(false);
+        setHistoryLoadKind(null);
+      }
+    }
+  }, [applyCandlePage, fetchSymbolPage]);
+
+  const restoreLatestWindow = useCallback(async () => {
+    const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
+    const total = totalCandlesRef.current;
+    if (fullDataRef.current.length && (total <= 0 || loadedEnd >= total)) {
+      const nextIndex = fullDataRef.current.length;
+      setCurrentIndex(nextIndex);
+      syncDisplayedData(fullDataRef.current, nextIndex, false, false, {
+        shouldFocusLatest: true,
+      });
+      return;
+    }
+
+    historyLoadingRef.current = true;
+    setIsHistoryLoading(true);
+    setHistoryLoadKind("window");
+    const session = dataSessionRef.current;
+    try {
+      const page = await fetchSymbolPage({ outputsize: KLINE_PAGE_SIZE });
+      if (session !== dataSessionRef.current) return;
+      const data = normalizeCandles(page.rawCandles);
+      if (!data.length) return;
+      applyCandlePage(page, data, {
+        shouldReplace: true,
+        shouldFocusLatest: true,
+      });
+    } catch (error: any) {
+      if (session === dataSessionRef.current) {
+        toast.error(error?.message || "恢复最新 K 线失败");
+      }
+    } finally {
+      if (session === dataSessionRef.current) {
+        historyLoadingRef.current = false;
+        setIsHistoryLoading(false);
+        setHistoryLoadKind(null);
+      }
+    }
+  }, [applyCandlePage, fetchSymbolPage, syncDisplayedData]);
+
+  loadOlderHistoryRef.current = loadOlderHistory;
+  loadFutureHistoryRef.current = loadFutureHistory;
 
   const handleIndDragStart = (e: any) => {
     indDragRef.current = {
@@ -1352,6 +1688,11 @@ export function MarketMasterPage() {
       fullMacdDataRef.current = [];
       setCurrentIndex(0);
       setTotalCandles(0);
+      setLoadedOffset(0);
+      loadedOffsetRef.current = 0;
+      totalCandlesRef.current = 0;
+      earliestUnixRef.current = null;
+      latestUnixRef.current = null;
       setLegendData(null);
 
       if (seriesRef.current) {
@@ -1385,128 +1726,11 @@ export function MarketMasterPage() {
       orderLinesRef.current = {};
     };
 
-    const applyLoadedMarketData = (
-      marketData: KlinePageMeta,
-      data: NormalizedCandle[],
-      options?: { prependedCount?: number; isInitialPage?: boolean }
-    ) => {
-      const { prependedCount = 0, isInitialPage = false } = options || {};
-      const { assetType, currency, exchange, latestClose } = marketData;
-
-      if (isInitialPage) {
-        setInstrumentContext({
-          symbol,
-          assetType: assetType || null,
-          currency,
-          exchange,
-        });
-        const nextRiskDistance = getDefaultRiskDistance(
-          symbol,
-          assetType,
-          Number(latestClose) || data[data.length - 1]?.close || null
-        );
-        setSlDistance(nextRiskDistance.sl);
-        setTpDistance(nextRiskDistance.tp);
-      }
-
-      fullDataRef.current = data;
-      recomputeIndicators(data);
-      setTotalCandles(data.length);
-
-      let nextCurrentIndex = currentIndexRef.current;
-      let nextBacktestMode = isBacktestMode;
-
-      if (isInitialPage) {
-        if (isBacktestMode) {
-          const randomStart = pickRandomBacktestStartIndex(data.length);
-          if (randomStart == null) {
-            // 新品种/周期历史不足，自动退出回测
-            nextBacktestMode = false;
-            setIsBacktestMode(false);
-            nextCurrentIndex = data.length;
-          } else {
-            nextCurrentIndex = randomStart;
-          }
-        } else {
-          nextCurrentIndex = data.length;
-        }
-        setCurrentIndex(nextCurrentIndex);
-      } else if (prependedCount > 0 && nextBacktestMode) {
-        nextCurrentIndex = Math.min(
-          currentIndexRef.current + prependedCount,
-          data.length
-        );
-        setCurrentIndex(nextCurrentIndex);
-      } else if (!nextBacktestMode) {
-        nextCurrentIndex = data.length;
-        setCurrentIndex(nextCurrentIndex);
-      }
-
-      syncDisplayedData(
-        data,
-        nextCurrentIndex,
-        nextBacktestMode,
-        isInitialPage && nextBacktestMode,
-        {
-          prependedCount,
-          shouldFocusLatest: isInitialPage,
-        }
-      );
-    };
-
-    const loadHistoricalPages = async (
-      interval: string,
-      initialPage: KlinePageMeta,
-      initialData: NormalizedCandle[]
-    ) => {
-      if (initialPage.rawCandles.length < KLINE_PAGE_SIZE) {
-        return;
-      }
-
-      setIsHistoryLoading(true);
-      let mergedData = initialData;
-      let cursorEndDate = getOldestRawDatetime(initialPage.rawCandles);
-
-      try {
-        while (!cancelled && cursorEndDate) {
-          const nextPage = await fetchKlinePage(customFetch, {
-            symbol,
-            interval,
-            outputsize: KLINE_PAGE_SIZE,
-            endDate: cursorEndDate,
-          });
-
-          if (cancelled) return;
-
-          const olderData = normalizeCandles(nextPage.rawCandles);
-          if (!olderData.length) {
-            break;
-          }
-
-          const previousLength = mergedData.length;
-          mergedData = mergeCandleData(mergedData, olderData);
-          const prependedCount = mergedData.length - previousLength;
-
-          if (prependedCount <= 0) {
-            break;
-          }
-
-          applyLoadedMarketData(nextPage, mergedData, { prependedCount });
-
-          if (nextPage.rawCandles.length < KLINE_PAGE_SIZE) {
-            break;
-          }
-
-          cursorEndDate = getOldestRawDatetime(nextPage.rawCandles);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsHistoryLoading(false);
-        }
-      }
-    };
+    const applyLoadedMarketData = applyCandlePage;
 
     const loadMarketData = async () => {
+      dataSessionRef.current += 1;
+      const session = dataSessionRef.current;
       setIsPlaying(false);
       clearAllSelections();
       tradesRef.current = [];
@@ -1515,8 +1739,16 @@ export function MarketMasterPage() {
       clearClosedTradeMarkers();
       setDataError("");
       setIsDataLoading(true);
+      isDataLoadingRef.current = true;
       setIsHistoryLoading(false);
+      historyLoadingRef.current = false;
+      setHistoryLoadKind(null);
       setTotalCandles(0);
+      setLoadedOffset(0);
+      loadedOffsetRef.current = 0;
+      totalCandlesRef.current = 0;
+      earliestUnixRef.current = null;
+      latestUnixRef.current = null;
       setLegendData(null);
       setInstrumentContext({
         symbol: "",
@@ -1530,10 +1762,9 @@ export function MarketMasterPage() {
       setTpDistance(tp);
 
       try {
-        const interval = getIntervalByTimeframe(timeframe);
         const firstPage = await fetchKlinePage(customFetch, {
           symbol,
-          interval,
+          interval: getIntervalByTimeframe(timeframe),
           outputsize: KLINE_PAGE_SIZE,
         });
 
@@ -1544,21 +1775,23 @@ export function MarketMasterPage() {
           );
         }
 
-        if (cancelled) return;
+        if (cancelled || session !== dataSessionRef.current) return;
 
         applyLoadedMarketData(firstPage, newData, { isInitialPage: true });
         setIsDataLoading(false);
-
-        await loadHistoricalPages(interval, firstPage, newData);
+        isDataLoadingRef.current = false;
       } catch (error: any) {
-        if (cancelled) return;
+        if (cancelled || session !== dataSessionRef.current) return;
 
         clearChartData();
         setDataError(error?.message || "获取 K 线数据失败");
       } finally {
-        if (!cancelled) {
+        if (!cancelled && session === dataSessionRef.current) {
           setIsDataLoading(false);
+          isDataLoadingRef.current = false;
           setIsHistoryLoading(false);
+          historyLoadingRef.current = false;
+          setHistoryLoadKind(null);
         }
       }
     };
@@ -1570,6 +1803,7 @@ export function MarketMasterPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    applyCandlePage,
     clearAllSelections,
     customFetch,
     isMounted,
@@ -1603,12 +1837,27 @@ export function MarketMasterPage() {
       if (startBarIndex < 0) return false;
 
       const cursorUnix = toUnixSeconds(detail?.cursor_bar_time) ?? startUnix;
-      let endBarIndex = findCandleIndexByTime(data, cursorUnix);
-      if (endBarIndex < startBarIndex) endBarIndex = startBarIndex;
+      const lastTime = data[data.length - 1]?.time;
+      const exactCursor =
+        cursorUnix == null
+          ? -1
+          : data.findIndex((candle) => candle.time === cursorUnix);
+      let endBarIndex = exactCursor;
+      let awaitingFuture = false;
+      if (endBarIndex < startBarIndex) {
+        if (cursorUnix != null && lastTime != null && cursorUnix > lastTime) {
+          endBarIndex = data.length - 1;
+          awaitingFuture =
+            loadedOffsetRef.current + data.length < totalCandlesRef.current;
+        } else {
+          endBarIndex = findCandleIndexByTime(data, cursorUnix);
+          if (endBarIndex < startBarIndex) endBarIndex = startBarIndex;
+        }
+      }
 
       const startCurrent = startBarIndex + 1;
       const endCurrent = Math.min(endBarIndex + 1, data.length);
-      const hasPlayableCandles = endCurrent > startCurrent;
+      const hasPlayableCandles = endCurrent > startCurrent || awaitingFuture;
 
       replayDetailRef.current = detail;
       replayAllEventsRef.current = sortReplayEvents(detail.events || []);
@@ -1616,7 +1865,9 @@ export function MarketMasterPage() {
       replayCursorUnixRef.current = cursorUnix;
       replayStartCurrentIndexRef.current = startCurrent;
       replayEndCurrentIndexRef.current = endCurrent;
+      replayNeedsMoreFutureRef.current = awaitingFuture;
       replayFinishedNotifiedRef.current = !hasPlayableCandles;
+      setReplayAwaitingFuture(awaitingFuture);
 
       isReplayModeRef.current = true;
       setIsReplayMode(true);
@@ -1660,71 +1911,215 @@ export function MarketMasterPage() {
     if (isBacktestMode) {
       if (wasBacktestModeRef.current) return;
 
-      const replayDetail = replayDetailRef.current;
-      if (replayDetail) {
-        if (!applyReplayWindow(replayDetail, { announce: true })) {
-          toast.error("当前 K 线无法覆盖该回测起点，无法还原播放");
-          replayDetailRef.current = null;
-          replayEventsRef.current = [];
-          replayAllEventsRef.current = [];
-          replayCursorUnixRef.current = null;
-          replayStartCurrentIndexRef.current = 0;
-          replayEndCurrentIndexRef.current = 0;
-          setReplayBounds({ startCurrent: 0, endCurrent: 0 });
-          isReplayModeRef.current = false;
-          setIsReplayMode(false);
+      let cancelled = false;
+      const enterBacktest = async () => {
+        const replayDetail = replayDetailRef.current;
+        if (replayDetail) {
+          const startUnix = toUnixSeconds(replayDetail.start_bar_time);
+          const hasStart = findCandleIndexByTime(
+            fullDataRef.current,
+            startUnix
+          );
+          if (hasStart < 0) {
+            historyLoadingRef.current = true;
+            setIsHistoryLoading(true);
+            setHistoryLoadKind("window");
+            try {
+              const aroundTime =
+                replayDetail.start_bar_time ?? startUnix ?? undefined;
+              const page = await fetchSymbolPage({
+                outputsize: KLINE_PAGE_SIZE,
+                aroundTime,
+                beforeCount: Math.max(0, INITIAL_VISIBLE_COUNT - 1),
+              });
+              if (cancelled || !isBacktestModeRef.current) return;
+              const data = normalizeCandles(page.rawCandles);
+              if (!data.length) {
+                throw new Error("无法加载该回测起点附近的 K 线");
+              }
+              applyCandlePage(page, data, { shouldReplace: true });
+            } catch (error: any) {
+              if (cancelled) return;
+              toast.error(error?.message || "当前 K 线无法覆盖该回测起点，无法还原播放");
+              replayDetailRef.current = null;
+              replayEventsRef.current = [];
+              replayAllEventsRef.current = [];
+              replayCursorUnixRef.current = null;
+              replayStartCurrentIndexRef.current = 0;
+              replayEndCurrentIndexRef.current = 0;
+              replayNeedsMoreFutureRef.current = false;
+              setReplayAwaitingFuture(false);
+              setReplayBounds({ startCurrent: 0, endCurrent: 0 });
+              isReplayModeRef.current = false;
+              setIsReplayMode(false);
+              setIsBacktestMode(false);
+              return;
+            } finally {
+              if (!cancelled) {
+                historyLoadingRef.current = false;
+                setIsHistoryLoading(false);
+                setHistoryLoadKind(null);
+              }
+            }
+          }
+
+          if (cancelled || !isBacktestModeRef.current) return;
+          if (!applyReplayWindow(replayDetail, { announce: true })) {
+            toast.error("当前 K 线无法覆盖该回测起点，无法还原播放");
+            replayDetailRef.current = null;
+            replayEventsRef.current = [];
+            replayAllEventsRef.current = [];
+            replayCursorUnixRef.current = null;
+            replayStartCurrentIndexRef.current = 0;
+            replayEndCurrentIndexRef.current = 0;
+            replayNeedsMoreFutureRef.current = false;
+            setReplayAwaitingFuture(false);
+            setReplayBounds({ startCurrent: 0, endCurrent: 0 });
+            isReplayModeRef.current = false;
+            setIsReplayMode(false);
+            setIsBacktestMode(false);
+            return;
+          }
+
+          wasBacktestModeRef.current = true;
+          clientSessionIdRef.current = null;
+          return;
+        }
+
+        const total =
+          totalCandlesRef.current || fullDataRef.current.length;
+        const randomStart = pickRandomBacktestStartIndex(total);
+        if (randomStart == null) {
           setIsBacktestMode(false);
           return;
         }
 
+        const windowSpec = computeBacktestKlineWindow(
+          total,
+          randomStart,
+          KLINE_PAGE_SIZE
+        );
+        const loadedStart = loadedOffsetRef.current;
+        const loadedEnd = loadedStart + fullDataRef.current.length;
+        const neededEnd = Math.min(
+          total,
+          windowSpec.offset + windowSpec.outputsize
+        );
+        const coversWindow =
+          loadedStart <= windowSpec.offset && loadedEnd >= neededEnd;
+
         wasBacktestModeRef.current = true;
-        clientSessionIdRef.current = null;
-        return;
-      }
+        isReplayModeRef.current = false;
+        setIsReplayMode(false);
+        clientSessionIdRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `session-${Date.now()}`;
+        setIsPlaying(false);
+        resetBacktestAccount();
+        clearAutomaticPens();
+        clearAutomaticSegments();
 
-      const randomStart = pickRandomBacktestStartIndex(
-        fullDataRef.current.length
-      );
-      if (randomStart == null) {
-        setIsBacktestMode(false);
-        return;
-      }
+        if (!coversWindow) {
+          historyLoadingRef.current = true;
+          setIsHistoryLoading(true);
+          setHistoryLoadKind("window");
+          try {
+            const earliestUnix = earliestUnixRef.current;
+            const latestUnix = latestUnixRef.current;
+            const aroundTime =
+              earliestUnix != null && latestUnix != null
+                ? estimateUnixAtIndex(
+                    earliestUnix,
+                    latestUnix,
+                    total,
+                    randomStart - 1
+                  )
+                : undefined;
+            const page = await fetchSymbolPage({
+              outputsize: windowSpec.outputsize,
+              aroundTime,
+              beforeCount: Math.max(
+                0,
+                randomStart - 1 - windowSpec.offset
+              ),
+            });
+            if (cancelled || !isBacktestModeRef.current) return;
+            const data = normalizeCandles(page.rawCandles);
+            if (!data.length) {
+              throw new Error("无法加载回测窗口 K 线");
+            }
+            const aroundUnix =
+              typeof aroundTime === "number"
+                ? aroundTime
+                : toUnixSeconds(aroundTime);
+            let focusIdx = findCandleIndexByTime(data, aroundUnix);
+            if (focusIdx < 0) {
+              focusIdx = Math.min(
+                Math.max(windowSpec.localCurrentIndex - 1, 0),
+                data.length - 1
+              );
+            }
+            const localCurrent = Math.max(
+              INITIAL_VISIBLE_COUNT,
+              Math.min(focusIdx + 1, Math.max(data.length - MIN_FORWARD_CANDLES, 1))
+            );
+            applyCandlePage(page, data, {
+              shouldReplace: true,
+              shouldFitContent: true,
+              currentIndex: localCurrent,
+            });
+          } catch (error: any) {
+            if (cancelled) return;
+            toast.error(error?.message || "定位回测起点失败");
+            wasBacktestModeRef.current = false;
+            clientSessionIdRef.current = null;
+            setIsBacktestMode(false);
+            return;
+          } finally {
+            if (!cancelled) {
+              historyLoadingRef.current = false;
+              setIsHistoryLoading(false);
+              setHistoryLoadKind(null);
+            }
+          }
+        } else {
+          const localCurrent = randomStart - loadedOffsetRef.current;
+          setCurrentIndex(localCurrent);
+          syncDisplayedData(fullDataRef.current, localCurrent, true, true);
+        }
 
-      wasBacktestModeRef.current = true;
-      isReplayModeRef.current = false;
-      setIsReplayMode(false);
-      clientSessionIdRef.current =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `session-${Date.now()}`;
-      setIsPlaying(false);
-      resetBacktestAccount();
-      clearAutomaticPens();
-      clearAutomaticSegments();
-      setCurrentIndex(randomStart);
-      syncDisplayedData(fullDataRef.current, randomStart, true, true);
+        if (cancelled || !isBacktestModeRef.current) return;
 
-      const startCandle = fullDataRef.current[randomStart - 1];
-      if (startCandle?.time == null) {
-        wasBacktestModeRef.current = false;
-        clientSessionIdRef.current = null;
-        setIsBacktestMode(false);
-        return;
-      }
+        const startCandle =
+          fullDataRef.current[currentIndexRef.current - 1];
+        if (startCandle?.time == null) {
+          wasBacktestModeRef.current = false;
+          clientSessionIdRef.current = null;
+          setIsBacktestMode(false);
+          return;
+        }
 
-      persistRef.current.startSession({
-        client_session_id: clientSessionIdRef.current,
-        symbol,
-        interval: getIntervalByTimeframe(timeframe),
-        timeframe,
-        start_bar_time: startCandle?.time,
-        start_bar_index: randomStart - 1,
-        initial_visible_bars: INITIAL_VISIBLE_COUNT,
-        cursor_bar_time: startCandle?.time,
-        cursor_bar_index: randomStart - 1,
-        initial_balance: INITIAL_BACKTEST_BALANCE,
-      });
-      return;
+        persistRef.current.startSession({
+          client_session_id: clientSessionIdRef.current,
+          symbol,
+          interval: getIntervalByTimeframe(timeframe),
+          timeframe,
+          start_bar_time: startCandle?.time,
+          start_bar_index:
+            loadedOffsetRef.current + currentIndexRef.current - 1,
+          initial_visible_bars: INITIAL_VISIBLE_COUNT,
+          cursor_bar_time: startCandle?.time,
+          cursor_bar_index:
+            loadedOffsetRef.current + currentIndexRef.current - 1,
+          initial_balance: INITIAL_BACKTEST_BALANCE,
+        });
+      };
+
+      void enterBacktest();
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (wasBacktestModeRef.current) {
@@ -1733,7 +2128,7 @@ export function MarketMasterPage() {
       if (!isReplayModeRef.current) {
         persistRef.current.completeSession({
           cursor_bar_time: candle?.time ?? null,
-          cursor_bar_index: barIndex,
+          cursor_bar_index: loadedOffsetRef.current + barIndex,
           ending_balance: balanceRef.current,
           mark_price: candle?.close || 0,
         });
@@ -1748,9 +2143,17 @@ export function MarketMasterPage() {
       replayCursorUnixRef.current = null;
       replayStartCurrentIndexRef.current = 0;
       replayEndCurrentIndexRef.current = 0;
+      replayNeedsMoreFutureRef.current = false;
       replayFinishedNotifiedRef.current = false;
+      setReplayAwaitingFuture(false);
       setReplayBounds({ startCurrent: 0, endCurrent: 0 });
       resetBacktestAccount();
+      setIsPlaying(false);
+      clearAutomaticPens();
+      clearAutomaticSegments();
+      clearClosedTradeMarkers();
+      void restoreLatestWindow();
+      return;
     }
 
     setIsPlaying(false);
@@ -1762,13 +2165,16 @@ export function MarketMasterPage() {
     setCurrentIndex(nextCurrentIndex);
     syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
   }, [
+    applyCandlePage,
     applyReplayWindow,
     clearAutomaticPens,
     clearAutomaticSegments,
     clearClosedTradeMarkers,
+    fetchSymbolPage,
     isBacktestMode,
     isDataLoading,
     resetBacktestAccount,
+    restoreLatestWindow,
     symbol,
     syncDisplayedData,
     timeframe,
@@ -1797,7 +2203,7 @@ export function MarketMasterPage() {
       return;
     }
 
-    if (isDataLoading || isHistoryLoading || !fullDataRef.current.length) {
+    if (isDataLoading || !fullDataRef.current.length) {
       return;
     }
 
@@ -1811,7 +2217,6 @@ export function MarketMasterPage() {
     dataError,
     isBacktestMode,
     isDataLoading,
-    isHistoryLoading,
     pendingReplayToken,
     symbol,
     timeframe,
@@ -1825,7 +2230,7 @@ export function MarketMasterPage() {
       const candle = fullDataRef.current[barIndex];
       persistRef.current.completeSession({
         cursor_bar_time: candle?.time ?? null,
-        cursor_bar_index: barIndex,
+        cursor_bar_index: loadedOffsetRef.current + barIndex,
         ending_balance: balanceRef.current,
         mark_price: candle?.close || 0,
       });
@@ -2630,6 +3035,18 @@ export function MarketMasterPage() {
     chart.subscribeCrosshairMove(crosshairMoveHandler);
     chart.subscribeClick(clickHandler);
 
+    const handleVisibleLogicalRangeChange = (range) => {
+      if (!range || preserveVisibleRangeRef.current) return;
+      if (isDataLoadingRef.current) return;
+      if (range.from > KLINE_HISTORY_EDGE_BARS) return;
+      const loadedCount = fullDataRef.current.length;
+      if (loadedCount > 0 && range.to - range.from >= loadedCount - 2) return;
+      void loadOlderHistoryRef.current();
+    };
+    chart
+      .timeScale()
+      .subscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
+
     const containerEl = chartContainerRef.current;
     if (containerEl) {
       containerEl.addEventListener("mousedown", mousedownHandler);
@@ -2644,6 +3061,9 @@ export function MarketMasterPage() {
       if (ro) ro.disconnect();
       chart.unsubscribeCrosshairMove(crosshairMoveHandler);
       chart.unsubscribeClick(clickHandler);
+      chart
+        .timeScale()
+        .unsubscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
       if (containerEl) {
         containerEl.removeEventListener("mousedown", mousedownHandler);
         containerEl.removeEventListener("contextmenu", contextMenuHandler);
@@ -2886,11 +3306,23 @@ export function MarketMasterPage() {
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
     const replayEndCurrent = replayEndCurrentIndexRef.current;
+    const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
+    const hasMoreFuture =
+      totalCandlesRef.current > 0 && loadedEnd < totalCandlesRef.current;
+    const remaining = fullDataRef.current.length - currentIndex;
+    if (remaining <= KLINE_FORWARD_PREFETCH_BARS && hasMoreFuture) {
+      void loadFutureHistoryRef.current();
+    }
+
     if (
       isReplayModeRef.current &&
       replayEndCurrent > 0 &&
       currentIndex >= replayEndCurrent
     ) {
+      if (replayNeedsMoreFutureRef.current && hasMoreFuture) {
+        void loadFutureHistoryRef.current();
+        return;
+      }
       setIsPlaying(false);
       if (!replayFinishedNotifiedRef.current) {
         replayFinishedNotifiedRef.current = true;
@@ -2900,6 +3332,10 @@ export function MarketMasterPage() {
     }
 
     if (currentIndex >= fullDataRef.current.length) {
+      if (hasMoreFuture) {
+        void loadFutureHistoryRef.current();
+        return;
+      }
       setIsPlaying(false);
       return;
     }
@@ -2955,10 +3391,14 @@ export function MarketMasterPage() {
     if (isReplayModeRef.current) {
       applyReplayEventsUpTo(nextCandle.time);
       if (replayEndCurrent > 0 && currentIndex + 1 >= replayEndCurrent) {
-        setIsPlaying(false);
-        if (!replayFinishedNotifiedRef.current) {
-          replayFinishedNotifiedRef.current = true;
-          toast("回放已结束，可点击从头播放再看一遍");
+        if (replayNeedsMoreFutureRef.current && hasMoreFuture) {
+          void loadFutureHistoryRef.current();
+        } else if (!replayNeedsMoreFutureRef.current) {
+          setIsPlaying(false);
+          if (!replayFinishedNotifiedRef.current) {
+            replayFinishedNotifiedRef.current = true;
+            toast("回放已结束，可点击从头播放再看一遍");
+          }
         }
       }
     } else {
@@ -3068,11 +3508,17 @@ export function MarketMasterPage() {
         return;
       }
 
+      const globalCurrentIndex = loadedOffset + currentIndex;
       const playbackLimit = isReplayMode
-        ? replayBounds.endCurrent
+        ? replayAwaitingFuture
+          ? Number.POSITIVE_INFINITY
+          : replayBounds.endCurrent
         : totalCandles;
       const canAdvancePlayback =
-        playbackLimit > 0 && currentIndex < playbackLimit;
+        playbackLimit > 0 &&
+        (isReplayMode
+          ? currentIndex < playbackLimit
+          : globalCurrentIndex < playbackLimit);
 
       const key = event.key.toLowerCase();
       if (key === "d" && !isDataLoading && !isPlaying && canAdvancePlayback) {
@@ -3096,6 +3542,8 @@ export function MarketMasterPage() {
     isDataLoading,
     isPlaying,
     isReplayMode,
+    loadedOffset,
+    replayAwaitingFuture,
     replayBounds.endCurrent,
     totalCandles,
   ]);
@@ -3140,7 +3588,7 @@ export function MarketMasterPage() {
       persistRef.current.recordOpen({
         client_trade_id: String(newTrade.id),
         bar_time: newTrade.entryTime,
-        bar_index: currentIndexRef.current - 1,
+        bar_index: loadedOffsetRef.current + currentIndexRef.current - 1,
         side: toPersistSide(type),
         units: orderUnits,
         price: entry,
@@ -3703,7 +4151,7 @@ export function MarketMasterPage() {
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}
         onExitBacktest={handleExitBacktest}
-        currentIndex={currentIndex}
+        currentIndex={loadedOffset + currentIndex}
         totalCandles={totalCandles}
         handleNextCandle={handleNextCandle}
         isPlaying={isPlaying}
@@ -3723,7 +4171,8 @@ export function MarketMasterPage() {
         isReplayFinished={
           isReplayMode &&
           replayBounds.endCurrent > 0 &&
-          currentIndex >= replayBounds.endCurrent
+          currentIndex >= replayBounds.endCurrent &&
+          !replayAwaitingFuture
         }
         replayPlayed={Math.max(0, currentIndex - replayBounds.startCurrent)}
         replayTotal={Math.max(
@@ -3754,6 +4203,7 @@ export function MarketMasterPage() {
         isBottomPanelOpen={isBottomPanelOpen}
         isDataLoading={isDataLoading}
         isHistoryLoading={isHistoryLoading}
+        historyLoadKind={historyLoadKind}
         isMaximized={isMaximized}
         isRightPanelOpen={isRightPanelOpen}
         layoutRef={layoutRef}

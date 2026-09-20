@@ -140,6 +140,24 @@ export const pickRandomBacktestStartIndex = (totalCount: number) => {
   return minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
 };
 
+export const computeBacktestKlineWindow = (
+  totalCount: number,
+  startCurrentIndex: number,
+  pageSize: number
+) => {
+  const focusBarIndex = Math.max(0, startCurrentIndex - 1);
+  const beforeBudget = Math.max(0, pageSize - 1 - MIN_FORWARD_CANDLES);
+  let offset = Math.max(0, focusBarIndex - beforeBudget);
+  if (offset + pageSize > totalCount) {
+    offset = Math.max(0, totalCount - pageSize);
+  }
+  return {
+    offset,
+    outputsize: Math.min(pageSize, Math.max(0, totalCount - offset)),
+    localCurrentIndex: startCurrentIndex - offset,
+  };
+};
+
 const padTimePart = (value: number) => String(value).padStart(2, "0");
 
 const toUtcDate = (timeValue: Time) => {
