@@ -160,7 +160,7 @@ export const computeBacktestKlineWindow = (
 
 const padTimePart = (value: number) => String(value).padStart(2, "0");
 
-const toUtcDate = (timeValue: Time) => {
+const toUtcDate = (timeValue: Time | number) => {
   if (typeof timeValue === "number") {
     return new Date(timeValue * 1000);
   }
@@ -204,7 +204,7 @@ export const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
   )}`;
 };
 
-export const formatCandleTooltipTime = (timeValue: Time) => {
+export const formatCandleTooltipTime = (timeValue: Time | number) => {
   const utcDate = toUtcDate(timeValue);
   if (!utcDate) return "";
 
