@@ -100,6 +100,7 @@ import {
 import {
   createBacktestPersistClient,
   toPersistSide,
+  type BacktestSessionStartPayload,
 } from "@/components/market-master/backtest-persistence";
 import { BacktestHistoryModal } from "@/components/market-master/BacktestHistoryModal";
 import {
@@ -324,6 +325,10 @@ export function MarketMasterPage() {
   const persistRef = useRef(createBacktestPersistClient());
   const wasBacktestModeRef = useRef(false);
   const clientSessionIdRef = useRef<string | null>(null);
+  /** 进入回测时缓存；首次下单再建 session，无下单退出则不落库 */
+  const pendingSessionStartRef = useRef<BacktestSessionStartPayload | null>(
+    null
+  );
   const replayDetailRef = useRef<any>(null);
   const pendingReplayRef = useRef<any>(null);
   const replayEventsRef = useRef<any[]>([]);
@@ -1991,6 +1996,7 @@ export function MarketMasterPage() {
 
           wasBacktestModeRef.current = true;
           clientSessionIdRef.current = null;
+          pendingSessionStartRef.current = null;
           return;
         }
 
@@ -2082,6 +2088,7 @@ export function MarketMasterPage() {
             toast.error(error?.message || "定位回测起点失败");
             wasBacktestModeRef.current = false;
             clientSessionIdRef.current = null;
+            pendingSessionStartRef.current = null;
             setIsBacktestMode(false);
             return;
           } finally {
@@ -2104,24 +2111,27 @@ export function MarketMasterPage() {
         if (startCandle?.time == null) {
           wasBacktestModeRef.current = false;
           clientSessionIdRef.current = null;
+          pendingSessionStartRef.current = null;
           setIsBacktestMode(false);
           return;
         }
 
-        persistRef.current.startSession({
-          client_session_id: clientSessionIdRef.current,
+        // 延迟到首次下单再建 session，避免无成交回测占历史名额
+        pendingSessionStartRef.current = {
+          client_session_id:
+            clientSessionIdRef.current ?? `session-${Date.now()}`,
           symbol,
           interval: getIntervalByTimeframe(timeframe),
           timeframe,
-          start_bar_time: startCandle?.time,
+          start_bar_time: startCandle.time,
           start_bar_index:
             loadedOffsetRef.current + currentIndexRef.current - 1,
           initial_visible_bars: INITIAL_VISIBLE_COUNT,
-          cursor_bar_time: startCandle?.time,
+          cursor_bar_time: startCandle.time,
           cursor_bar_index:
             loadedOffsetRef.current + currentIndexRef.current - 1,
           initial_balance: INITIAL_BACKTEST_BALANCE,
-        });
+        };
       };
 
       void enterBacktest();
@@ -2134,12 +2144,16 @@ export function MarketMasterPage() {
       const barIndex = currentIndexRef.current - 1;
       const candle = fullDataRef.current[barIndex];
       if (!isReplayModeRef.current) {
+        // 无下单则从未 startSession，completeSession 会因无 publicId 直接跳过
+        pendingSessionStartRef.current = null;
         persistRef.current.completeSession({
           cursor_bar_time: candle?.time ?? null,
           cursor_bar_index: loadedOffsetRef.current + barIndex,
           ending_balance: balanceRef.current,
           mark_price: candle?.close || 0,
         });
+      } else {
+        pendingSessionStartRef.current = null;
       }
       wasBacktestModeRef.current = false;
       clientSessionIdRef.current = null;
@@ -3593,6 +3607,11 @@ export function MarketMasterPage() {
     commitTrades([newTrade, ...tradesRef.current]);
     syncTradeMarkers(tradesRef.current);
     if (newTrade.entryTime != null) {
+      const pendingStart = pendingSessionStartRef.current;
+      if (pendingStart) {
+        pendingSessionStartRef.current = null;
+        persistRef.current.startSession(pendingStart);
+      }
       persistRef.current.recordOpen({
         client_trade_id: String(newTrade.id),
         bar_time: newTrade.entryTime,
