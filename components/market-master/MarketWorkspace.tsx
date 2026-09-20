@@ -1,6 +1,7 @@
 import type {
   Dispatch,
   MouseEventHandler,
+  ReactNode,
   RefObject,
   SetStateAction,
 } from "react";
@@ -95,6 +96,7 @@ type MarketWorkspaceProps = {
   tpDistance: number;
   tpEnabled: boolean;
   trades: unknown[];
+  children?: ReactNode;
 };
 
 export function MarketWorkspace({
@@ -145,6 +147,7 @@ export function MarketWorkspace({
   tpDistance,
   tpEnabled,
   trades,
+  children,
 }: MarketWorkspaceProps) {
   return (
     <div ref={layoutRef} className="relative flex flex-1 overflow-hidden">
@@ -236,6 +239,7 @@ export function MarketWorkspace({
             </div>
           )}
           <div ref={chartContainerRef} className="absolute inset-0" />
+          {children}
           {candleTooltip?.data && (
             <div
               ref={candleTooltipElRef}

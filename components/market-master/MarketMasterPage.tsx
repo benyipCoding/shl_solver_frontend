@@ -20,6 +20,10 @@ import {
 import { MarketMasterOverlays } from "@/components/market-master/MarketMasterOverlays";
 import { MarketWorkspace } from "@/components/market-master/MarketWorkspace";
 import {
+  KlineRepairSelectOverlay,
+  type KlineRepairRange,
+} from "@/components/market-master/KlineRepairSelectOverlay";
+import {
   PendingMarketChangeDialog,
   type PendingMarketChange,
 } from "@/components/market-master/PendingMarketChangeDialog";
@@ -448,6 +452,10 @@ export function MarketMasterPage() {
     "older" | "future" | "window" | null
   >(null);
   const [isSyncingLatest, setIsSyncingLatest] = useState(false);
+  const [isRepairSelecting, setIsRepairSelecting] = useState(false);
+  const [isRepairingKline, setIsRepairingKline] = useState(false);
+  const [pendingRepairRange, setPendingRepairRange] =
+    useState<KlineRepairRange | null>(null);
   const [marketDataEpoch, setMarketDataEpoch] = useState(0);
   const [totalCandles, setTotalCandles] = useState(0);
   const [loadedOffset, setLoadedOffset] = useState(0);
@@ -3753,6 +3761,133 @@ export function MarketMasterPage() {
     }
   }, [customFetch, isBacktestMode, isSyncingLatest, symbol, timeframe]);
 
+  const exitKlineRepairSelect = useCallback(() => {
+    setIsRepairSelecting(false);
+    setPendingRepairRange(null);
+    if (stateRef.current.mode === "repairSelect") {
+      stateRef.current.mode = "idle";
+      setMode("idle");
+    }
+  }, []);
+
+  const handleBeginKlineRepair = useCallback(() => {
+    if (
+      isRepairingKline ||
+      isSyncingLatest ||
+      isBacktestMode ||
+      isDataLoading ||
+      dataError ||
+      totalCandles === 0
+    ) {
+      return;
+    }
+    if (isRepairSelecting) {
+      exitKlineRepairSelect();
+      return;
+    }
+    hideCandleTooltip();
+    setPendingRepairRange(null);
+    setIsRepairSelecting(true);
+    setMode("repairSelect");
+    stateRef.current.mode = "repairSelect";
+  }, [
+    dataError,
+    exitKlineRepairSelect,
+    hideCandleTooltip,
+    isBacktestMode,
+    isDataLoading,
+    isRepairSelecting,
+    isRepairingKline,
+    isSyncingLatest,
+    totalCandles,
+  ]);
+
+  const resolveRepairTimeAtX = useCallback((x: number) => {
+    const chart = chartRef.current;
+    if (!chart) return null;
+    const timeScale = chart.timeScale?.();
+    if (!timeScale) return null;
+    const time = timeScale.coordinateToTime(x);
+    if (typeof time === "number") return time;
+    const logical = timeScale.coordinateToLogical?.(x);
+    if (logical == null) return null;
+    const logicalTime = timeScale.logicalToTime?.(logical);
+    return typeof logicalTime === "number" ? logicalTime : null;
+  }, []);
+
+  const resolveRepairXAtTime = useCallback((time: number) => {
+    const chart = chartRef.current;
+    if (!chart) return null;
+    const x = chart.timeScale?.().timeToCoordinate(time);
+    return typeof x === "number" ? x : null;
+  }, []);
+
+  const handleConfirmKlineRepair = useCallback(async () => {
+    if (!pendingRepairRange || isRepairingKline) return;
+    const interval = getIntervalByTimeframe(timeframe);
+    const startDate = new Date(pendingRepairRange.from * 1000).toISOString();
+    const endDate = new Date(pendingRepairRange.to * 1000).toISOString();
+    setIsRepairingKline(true);
+    try {
+      const response = await customFetch(
+        `/api/market_master/sync/repair?symbol=${encodeURIComponent(
+          symbol
+        )}&interval=${encodeURIComponent(
+          interval
+        )}&start_date=${encodeURIComponent(
+          startDate
+        )}&end_date=${encodeURIComponent(endDate)}`,
+        { method: "POST" }
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const statusMessage =
+          response.status === 401
+            ? "请先登录后再修复 K 线"
+            : response.status === 403
+              ? "仅超级管理员可修复 K 线"
+              : payload?.message ||
+                payload?.error ||
+                payload?.detail ||
+                "修复框选 K 线失败";
+        throw new Error(statusMessage);
+      }
+
+      const result = payload?.data || {};
+      const inserted = Number(result.rows_inserted || 0);
+      const updated = Number(result.rows_updated || 0);
+      const deleted = Number(result.rows_deleted || 0);
+      if (inserted + updated + deleted > 0) {
+        toast.success(
+          `${symbol} ${timeframe} 已按福汇新数据修复：新增 ${inserted}，更新 ${updated}，删除 ${deleted}`
+        );
+        setMarketDataEpoch((current) => current + 1);
+      } else {
+        toast.success(`${symbol} ${timeframe} 框选区间与福汇数据一致，无需覆盖`);
+      }
+      exitKlineRepairSelect();
+    } catch (error: any) {
+      toast.error(error?.message || "修复框选 K 线失败");
+    } finally {
+      setIsRepairingKline(false);
+    }
+  }, [
+    customFetch,
+    exitKlineRepairSelect,
+    isRepairingKline,
+    pendingRepairRange,
+    symbol,
+    timeframe,
+  ]);
+
+  useEffect(() => {
+    exitKlineRepairSelect();
+  }, [symbol, timeframe]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (isBacktestMode) exitKlineRepairSelect();
+  }, [exitKlineRepairSelect, isBacktestMode]);
+
   const handleExitBacktest = useCallback(() => {
     forceCloseAllOpenTrades();
     setIsPlaying(false);
@@ -3897,6 +4032,8 @@ export function MarketMasterPage() {
 
   const setDrawingTool = (type) => {
     hideCandleTooltip();
+    setIsRepairSelecting(false);
+    setPendingRepairRange(null);
     setMode("draw");
     setDrawType(type);
     stateRef.current.mode = "draw";
@@ -4071,6 +4208,10 @@ export function MarketMasterPage() {
   };
 
   const setInteractionMode = (nextMode: string) => {
+    if (nextMode !== "repairSelect") {
+      setIsRepairSelecting(false);
+      setPendingRepairRange(null);
+    }
     setMode(nextMode);
     stateRef.current.mode = nextMode;
     if (nextMode !== "idle") hideCandleTooltip();
@@ -4161,6 +4302,9 @@ export function MarketMasterPage() {
         dataError={dataError}
         onSyncLatest={handleSyncLatestKline}
         isSyncingLatest={isSyncingLatest}
+        onStartKlineRepair={handleBeginKlineRepair}
+        isRepairSelecting={isRepairSelecting}
+        isRepairingKline={isRepairingKline}
         balance={balance}
         totalFloatingPnl={totalFloatingPnl}
         minBacktestCandles={MIN_BACKTEST_CANDLES}
@@ -4232,7 +4376,21 @@ export function MarketMasterPage() {
         tpDistance={tpDistance}
         tpEnabled={tpEnabled}
         trades={trades}
-      />
+      >
+        <KlineRepairSelectOverlay
+          active={isRepairSelecting}
+          symbol={symbol}
+          timeframe={timeframe}
+          isSubmitting={isRepairingKline}
+          pendingRange={pendingRepairRange}
+          resolveTimeAtX={resolveRepairTimeAtX}
+          resolveXAtTime={resolveRepairXAtTime}
+          onRangeSelected={setPendingRepairRange}
+          onCancel={exitKlineRepairSelect}
+          onConfirm={handleConfirmKlineRepair}
+          onClearPending={() => setPendingRepairRange(null)}
+        />
+      </MarketWorkspace>
 
       <BacktestHistoryModal
         isOpen={isBacktestHistoryOpen}

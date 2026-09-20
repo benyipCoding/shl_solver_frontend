@@ -26,6 +26,7 @@ import {
   ChartNoAxesCombined,
   TriangleAlert,
   RefreshCw,
+  Scan,
   X,
   History,
   RotateCcw,
@@ -73,6 +74,9 @@ export const TopBar = ({
   minForwardCandles = 2000,
   onSyncLatest,
   isSyncingLatest = false,
+  onStartKlineRepair,
+  isRepairSelecting = false,
+  isRepairingKline = false,
   onOpenBacktestHistory,
   isReplayMode = false,
   isReplayFinished = false,
@@ -197,26 +201,65 @@ export const TopBar = ({
             </select>
             <SymbolFavoriteButton symbol={symbol} />
             {canSyncLatest ? (
-              <button
-                type="button"
-                onClick={onSyncLatest}
-                disabled={isSyncingLatest || isBacktestMode}
-                className="flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
-                title={
-                  isBacktestMode
-                    ? "请先退出逐K回测再同步最新 K 线"
-                    : `优先同步当前 ${symbol} ${timeframe} 到最新日期（只补最新缺口，不回补更早历史）`
-                }
-              >
-                {isSyncingLatest ? (
-                  <Loader2 size={16} className="shrink-0 animate-spin" />
-                ) : (
-                  <RefreshCw size={16} className="shrink-0" />
-                )}
-                <span className="hidden xl:inline">
-                  {isSyncingLatest ? "同步中" : "同步最新"}
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onSyncLatest}
+                  disabled={isSyncingLatest || isBacktestMode || isRepairingKline}
+                  className="flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
+                  title={
+                    isBacktestMode
+                      ? "请先退出逐K回测再同步最新 K 线"
+                      : `优先同步当前 ${symbol} ${timeframe} 到最新日期（只补最新缺口，不回补更早历史）`
+                  }
+                >
+                  {isSyncingLatest ? (
+                    <Loader2 size={16} className="shrink-0 animate-spin" />
+                  ) : (
+                    <RefreshCw size={16} className="shrink-0" />
+                  )}
+                  <span className="hidden xl:inline">
+                    {isSyncingLatest ? "同步中" : "同步最新"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onStartKlineRepair}
+                  disabled={
+                    isSyncingLatest ||
+                    isRepairingKline ||
+                    isBacktestMode ||
+                    isDataLoading ||
+                    Boolean(dataError) ||
+                    totalCandles === 0
+                  }
+                  className={`flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px] ${
+                    isRepairSelecting
+                      ? "border-amber-400 bg-amber-500/30 text-amber-100"
+                      : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                  }`}
+                  title={
+                    isBacktestMode
+                      ? "请先退出逐K回测再修复 K 线"
+                      : isRepairSelecting
+                        ? "正在框选时间段，再次点击可取消"
+                        : "框选可能有问题的 K 线时间段，优先向福汇重采并以新数据覆盖差异"
+                  }
+                >
+                  {isRepairingKline ? (
+                    <Loader2 size={16} className="shrink-0 animate-spin" />
+                  ) : (
+                    <Scan size={16} className="shrink-0" />
+                  )}
+                  <span className="hidden xl:inline">
+                    {isRepairingKline
+                      ? "修复中"
+                      : isRepairSelecting
+                        ? "框选中"
+                        : "修复K线"}
+                  </span>
+                </button>
+              </>
             ) : null}
           </div>
 
