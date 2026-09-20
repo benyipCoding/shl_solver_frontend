@@ -29,3 +29,18 @@ export async function GET(
     return toErrorResponse(error, "获取回测详情失败");
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ publicId: string }> }
+) {
+  try {
+    const { publicId } = await params;
+    const res = await apiClient.delete(
+      `/market_master/backtest/sessions/${publicId}`
+    );
+    return NextResponse.json(res.data);
+  } catch (error: any) {
+    return toErrorResponse(error, "删除回测记录失败");
+  }
+}

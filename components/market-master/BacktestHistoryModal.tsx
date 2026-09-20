@@ -2,7 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { History, Loader2, Play, X } from "lucide-react";
+import { History, Loader2, Play, Trash2, X } from "lucide-react";
+import toast from "react-hot-toast";
 import { useFetch } from "@/context/FetchContext";
 import { TIMEFRAME_OPTIONS } from "@/components/market-master/market-config";
 import { createBacktestPersistClient } from "@/components/market-master/backtest-persistence";
@@ -62,6 +63,9 @@ export function BacktestHistoryModal({
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] =
+    useState<BacktestSessionListItem | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const isLoadingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -97,7 +101,11 @@ export function BacktestHistoryModal({
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setPendingDelete(null);
+      setDeletingId(null);
+      return;
+    }
     setItems([]);
     setPage(1);
     setHasMore(true);
@@ -109,6 +117,25 @@ export function BacktestHistoryModal({
     if (!container || !hasMore || isLoadingRef.current) return;
     if (container.scrollHeight - container.scrollTop - container.clientHeight < 48) {
       void fetchPage(page + 1, true);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete || deletingId) return;
+    const publicId = pendingDelete.public_id;
+    setDeletingId(publicId);
+    try {
+      await persistRef.current.deleteSession(publicId);
+      setPendingDelete(null);
+      toast.success("已删除回测记录");
+      setItems([]);
+      setPage(1);
+      setHasMore(true);
+      void fetchPage(1, false);
+    } catch (err: any) {
+      toast.error(err?.message || "删除回测记录失败");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -159,6 +186,7 @@ export function BacktestHistoryModal({
               {items.map((item) => {
                 const pnl = Number(item.realized_pnl || 0);
                 const isReplaying = replayingId === item.public_id;
+                const isDeleting = deletingId === item.public_id;
                 return (
                   <article
                     key={item.public_id}
@@ -201,19 +229,34 @@ export function BacktestHistoryModal({
                           </span>
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        disabled={Boolean(replayingId)}
-                        onClick={() => onReplay(item.public_id)}
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isReplaying ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Play size={14} />
-                        )}
-                        还原播放
-                      </button>
+                      <div className="flex shrink-0 flex-col items-stretch gap-2">
+                        <button
+                          type="button"
+                          disabled={Boolean(replayingId) || Boolean(deletingId)}
+                          onClick={() => onReplay(item.public_id)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isReplaying ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Play size={14} />
+                          )}
+                          还原播放
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(deletingId)}
+                          onClick={() => setPendingDelete(item)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isDeleting ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                          删除
+                        </button>
+                      </div>
                     </div>
                   </article>
                 );
@@ -228,6 +271,66 @@ export function BacktestHistoryModal({
           )}
         </div>
       </div>
+
+      {pendingDelete ? (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center bg-black/50 p-4"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!deletingId) setPendingDelete(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="backtest-delete-title"
+            className="w-full max-w-sm rounded-xl border border-gray-700 bg-gray-900 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-gray-700 px-5 py-4">
+              <h3
+                id="backtest-delete-title"
+                className="text-base font-bold text-white"
+              >
+                确认删除回测记录？
+              </h3>
+            </div>
+            <div className="space-y-2 px-5 py-4 text-sm leading-relaxed text-gray-300">
+              <p>
+                将删除{" "}
+                <span className="font-semibold text-white">
+                  {pendingDelete.symbol}
+                </span>{" "}
+                · {timeframeLabel(pendingDelete)} 这场回测。
+              </p>
+              <p className="text-gray-400">删除后无法还原播放，此操作无法撤销。</p>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-700 px-5 py-4">
+              <button
+                type="button"
+                disabled={Boolean(deletingId)}
+                onClick={() => setPendingDelete(null)}
+                className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(deletingId)}
+                onClick={() => void handleConfirmDelete()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deletingId ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>,
     document.body
   );

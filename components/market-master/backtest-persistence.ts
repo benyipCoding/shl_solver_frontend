@@ -219,5 +219,13 @@ export const createBacktestPersistClient = () => {
         )
       );
     },
+    async deleteSession(publicIdValue: string) {
+      return parsePayload(
+        await fetchFn(
+          `/api/market_master/backtest/sessions/${publicIdValue}`,
+          { method: "DELETE" }
+        )
+      );
+    },
   };
 };
