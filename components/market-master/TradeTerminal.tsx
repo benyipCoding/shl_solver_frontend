@@ -24,6 +24,7 @@ type TradeTerminalProps = {
   isMaximized: boolean;
   panelWidth: number;
   canPlaceOrder?: boolean;
+  isReplayMode?: boolean;
 };
 
 const roundTo = (value: number, decimals: number) => {
@@ -110,6 +111,7 @@ export const TradeTerminal = ({
   isMaximized,
   panelWidth,
   canPlaceOrder = false,
+  isReplayMode = false,
 }: TradeTerminalProps) => {
   const [riskInputMode, setRiskInputMode] = useState<RiskInputMode>("points");
   const [slInput, setSlInput] = useState(() =>
@@ -380,9 +382,11 @@ export const TradeTerminal = ({
               </div>
 
               <div className="text-center text-base leading-6 text-gray-400">
-                {canPlaceOrder
-                  ? "提示：建仓后可直接在图表上拖拽止损止盈线"
-                  : "提示：请先开启逐K回测后再下单（做多/做空）"}
+                {isReplayMode
+                  ? "提示：回放模式下只可观看，不可下单"
+                  : canPlaceOrder
+                    ? "提示：建仓后可直接在图表上拖拽止损止盈线"
+                    : "提示：请先开启逐K回测后再下单（做多/做空）"}
               </div>
             </div>
 
@@ -393,7 +397,9 @@ export const TradeTerminal = ({
                 title={
                   canPlaceOrder
                     ? "做空"
-                    : "仅在逐K回测模式下可下单，请先开启逐K回测"
+                    : isReplayMode
+                      ? "回放模式下不可下单"
+                      : "仅在逐K回测模式下可下单，请先开启逐K回测"
                 }
                 className="flex-1 rounded-lg bg-red-600 py-3 text-lg font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600 disabled:active:scale-100"
               >
@@ -405,7 +411,9 @@ export const TradeTerminal = ({
                 title={
                   canPlaceOrder
                     ? "做多"
-                    : "仅在逐K回测模式下可下单，请先开启逐K回测"
+                    : isReplayMode
+                      ? "回放模式下不可下单"
+                      : "仅在逐K回测模式下可下单，请先开启逐K回测"
                 }
                 className="flex-1 rounded-lg bg-emerald-600 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
               >

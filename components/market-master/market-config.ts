@@ -6,6 +6,7 @@ import type {
 } from "lightweight-charts";
 
 export const INITIAL_VISIBLE_COUNT = 200;
+export const INITIAL_BACKTEST_BALANCE = 10000;
 export const MIN_FORWARD_CANDLES = 2000;
 export const MIN_BACKTEST_CANDLES = INITIAL_VISIBLE_COUNT + MIN_FORWARD_CANDLES;
 export const SELECTED_LINE_WIDTH_BOOST = 1;
@@ -546,3 +547,7 @@ export const clamp = (value: number, min: number, max: number) =>
 export const getIntervalByTimeframe = (timeframe: string) =>
   TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.interval ??
   "1day";
+
+export const getTimeframeByInterval = (interval: string) =>
+  TIMEFRAME_OPTIONS.find((option) => option.interval === interval)?.value ??
+  DEFAULT_TIMEFRAME;

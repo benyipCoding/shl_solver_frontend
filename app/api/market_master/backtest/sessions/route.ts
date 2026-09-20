@@ -15,6 +15,21 @@ const toErrorResponse = (error: any, fallback: string) => {
   );
 };
 
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const res = await apiClient.get("/market_master/backtest/sessions", {
+      params: {
+        page: searchParams.get("page") || "1",
+        size: searchParams.get("size") || "20",
+      },
+    });
+    return NextResponse.json(res.data);
+  } catch (error: any) {
+    return toErrorResponse(error, "获取回测记录失败");
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
 import {
   SymbolFavoriteButton,
@@ -26,6 +27,8 @@ import {
   TriangleAlert,
   RefreshCw,
   X,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -70,7 +73,15 @@ export const TopBar = ({
   minForwardCandles = 2000,
   onSyncLatest,
   isSyncingLatest = false,
+  onOpenBacktestHistory,
+  isReplayMode = false,
+  isReplayFinished = false,
+  replayPlayed = 0,
+  replayTotal = 0,
+  onRestartReplay,
 }: any) => {
+  const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoading: isAuthLoading } = useAuth();
   const isSuperuser = !isAuthLoading && Boolean(user?.is_superuser);
   const canSyncLatest = isSuperuser;
@@ -135,11 +146,26 @@ export const TopBar = ({
     };
   }, [isBacktestMode, isExitBacktestConfirmOpen]);
 
+  const requireAuthForBacktest = () => {
+    if (isAuthLoading) return false;
+    if (user) return true;
+    const params = new URLSearchParams();
+    params.set("callbackUrl", pathname || "/market-master");
+    router.push(`/auth?${params.toString()}`);
+    return false;
+  };
+
   const handleEnterBacktest = () => {
     if (!canEnterBacktest) return;
+    if (!requireAuthForBacktest()) return;
 
     setIsExitBacktestConfirmOpen(false);
     setIsBacktestMode(true);
+  };
+
+  const handleOpenBacktestHistory = () => {
+    if (!requireAuthForBacktest()) return;
+    onOpenBacktestHistory?.();
   };
 
   const confirmExitBacktest = () => {
@@ -385,9 +411,19 @@ export const TopBar = ({
           {!isBacktestMode ? (
             <>
               <button
+                type="button"
+                onClick={handleOpenBacktestHistory}
+                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 lg:ml-3"
+                title="查看回测记录并还原播放"
+              >
+                <History size={16} className="shrink-0" />
+                <span className="2xl:hidden">记录</span>
+                <span className="hidden 2xl:inline">回测记录</span>
+              </button>
+              <button
                 onClick={handleEnterBacktest}
                 disabled={isBacktestToggleDisabled}
-                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 lg:ml-3"
+                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
                 title={backtestButtonTitle}
               >
                 {isDataLoading || isHistoryLoading ? (
@@ -407,40 +443,79 @@ export const TopBar = ({
             </>
           ) : (
             <div className="ml-1 flex shrink-0 items-center gap-3 rounded-full border border-gray-700 bg-gray-800 px-4 py-1.5 lg:ml-3">
-              <span className="text-sm text-gray-400 w-36 text-center">
-                K线: {currentIndex} / {totalCandles.toLocaleString()}
+              <span
+                className={`min-w-36 text-center text-sm ${
+                  isReplayMode && isReplayFinished
+                    ? "font-semibold text-amber-300"
+                    : "text-gray-400"
+                }`}
+              >
+                {isReplayMode
+                  ? isReplayFinished
+                    ? "回放已结束"
+                    : `回放 ${replayPlayed} / ${replayTotal}`
+                  : `K线: ${currentIndex} / ${totalCandles.toLocaleString()}`}
               </span>
               <button
                 onClick={handleNextCandle}
                 disabled={
-                  isDataLoading || isPlaying || currentIndex >= totalCandles
+                  isDataLoading ||
+                  isPlaying ||
+                  (isReplayMode
+                    ? isReplayFinished
+                    : currentIndex >= totalCandles)
                 }
                 className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
-                title="步进一根 K 线（快捷键 D）"
+                title={
+                  isReplayMode && isReplayFinished
+                    ? "回放已结束"
+                    : "步进一根 K 线（快捷键 D）"
+                }
               >
                 <StepForward size={18} />
               </button>
               <button
                 onClick={() => setIsPlaying(!isPlaying)}
-                disabled={isDataLoading || currentIndex >= totalCandles}
+                disabled={
+                  isDataLoading ||
+                  (isReplayMode
+                    ? isReplayFinished
+                    : currentIndex >= totalCandles)
+                }
                 className={`p-1.5 rounded text-white disabled:opacity-50 ${
                   isPlaying
                     ? "bg-amber-600 hover:bg-amber-500"
                     : "bg-blue-600 hover:bg-blue-500"
                 }`}
                 title={
-                  isPlaying ? "暂停播放（快捷键 P）" : "自动播放（快捷键 P）"
+                  isReplayMode && isReplayFinished
+                    ? "回放已结束"
+                    : isPlaying
+                      ? "暂停播放（快捷键 P）"
+                      : "自动播放（快捷键 P）"
                 }
               >
                 {isPlaying ? <Pause size={18} /> : <Play size={18} />}
               </button>
+              {isReplayMode ? (
+                <button
+                  type="button"
+                  onClick={onRestartReplay}
+                  disabled={isDataLoading}
+                  className="rounded bg-blue-500/15 p-1.5 text-blue-300 transition-colors hover:bg-blue-500/25 hover:text-blue-200 disabled:opacity-50"
+                  title="从头播放"
+                  aria-label="从头播放"
+                >
+                  <RotateCcw size={18} />
+                </button>
+              ) : null}
               <div className="h-5 w-px bg-gray-600" />
               <button
                 type="button"
                 onClick={() => setIsExitBacktestConfirmOpen(true)}
                 className="rounded bg-red-500/15 p-1.5 text-red-400 transition-colors hover:bg-red-500/25 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400"
-                title="退出逐K回测"
-                aria-label="退出逐K回测"
+                title={isReplayMode ? "退出回测回放" : "退出逐K回测"}
+                aria-label={isReplayMode ? "退出回测回放" : "退出逐K回测"}
                 aria-haspopup="dialog"
                 aria-expanded={isExitBacktestConfirmOpen}
               >
@@ -499,7 +574,7 @@ export const TopBar = ({
                     id="exit-backtest-dialog-title"
                     className="text-base font-bold text-white"
                   >
-                    确认退出逐K回测？
+                    {isReplayMode ? "确认退出回测回放？" : "确认退出逐K回测？"}
                   </h2>
                 </div>
                 <button
@@ -517,8 +592,16 @@ export const TopBar = ({
                 id="exit-backtest-dialog-description"
                 className="space-y-2 px-5 py-5 text-sm leading-6 text-gray-300"
               >
-                <p>退出后将结束当前逐K回测，并返回最新行情。</p>
-                <p className="text-gray-400">当前回测播放位置将不会保留。</p>
+                <p>
+                  {isReplayMode
+                    ? "退出后将结束当前回测回放，并返回最新行情。"
+                    : "退出后将结束当前逐K回测，并返回最新行情。"}
+                </p>
+                <p className="text-gray-400">
+                  {isReplayMode
+                    ? "回放进度不会写入新的回测记录。"
+                    : "当前回测播放位置将不会保留。"}
+                </p>
               </div>
 
               <div className="flex justify-end gap-3 border-t border-gray-700 px-5 py-4">
@@ -528,7 +611,7 @@ export const TopBar = ({
                   onClick={() => setIsExitBacktestConfirmOpen(false)}
                   className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  继续回测
+                  {isReplayMode ? "继续回放" : "继续回测"}
                 </button>
                 <button
                   type="button"

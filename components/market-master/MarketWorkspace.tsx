@@ -50,6 +50,7 @@ type CandleTooltip = {
 type MarketWorkspaceProps = {
   bottomPanelHeight: number;
   canPlaceOrder: boolean;
+  isReplayMode?: boolean;
   candleTooltip: CandleTooltip | null;
   candleTooltipElRef: RefObject<HTMLDivElement | null>;
   chartContainerRef: RefObject<HTMLDivElement | null>;
@@ -98,6 +99,7 @@ type MarketWorkspaceProps = {
 export function MarketWorkspace({
   bottomPanelHeight,
   canPlaceOrder,
+  isReplayMode = false,
   candleTooltip,
   candleTooltipElRef,
   chartContainerRef,
@@ -308,6 +310,7 @@ export function MarketWorkspace({
           handleAIReview={handleAIReview}
           isMaximized={isMaximized}
           panelHeight={bottomPanelHeight}
+          isReplayMode={isReplayMode}
         />
       </div>
 
@@ -340,6 +343,7 @@ export function MarketWorkspace({
         isMaximized={isMaximized}
         panelWidth={rightPanelWidth}
         canPlaceOrder={canPlaceOrder}
+        isReplayMode={isReplayMode}
       />
     </div>
   );

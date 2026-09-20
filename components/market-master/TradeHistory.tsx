@@ -19,6 +19,7 @@ export const TradeHistory = ({
   handleAIReview,
   isMaximized,
   panelHeight,
+  isReplayMode = false,
 }: any) => {
   if (isMaximized) return null;
 
@@ -152,12 +153,14 @@ export const TradeHistory = ({
                         )}
                         {trade.visibleOnChart === false ? "显示标线" : "隐藏标线"}
                       </button>
-                      <button
-                        onClick={() => handleCloseMarket(trade.id)}
-                        className="min-h-9 rounded bg-gray-700 px-4 text-xs text-white transition-colors hover:bg-gray-600"
-                      >
-                        市价平仓
-                      </button>
+                      {!isReplayMode && (
+                        <button
+                          onClick={() => handleCloseMarket(trade.id)}
+                          className="min-h-9 rounded bg-gray-700 px-4 text-xs text-white transition-colors hover:bg-gray-600"
+                        >
+                          市价平仓
+                        </button>
+                      )}
                     </div>
                   )}
                 </article>
@@ -267,12 +270,14 @@ export const TradeHistory = ({
                               <Eye size={16} />
                             )}
                           </button>
-                          <button
-                            onClick={() => handleCloseMarket(trade.id)}
-                            className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition-colors"
-                          >
-                            市价平仓
-                          </button>
+                          {!isReplayMode && (
+                            <button
+                              onClick={() => handleCloseMarket(trade.id)}
+                              className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition-colors"
+                            >
+                              市价平仓
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center justify-center gap-2">

@@ -69,14 +69,15 @@ type FetchLike = (
   init?: RequestInit
 ) => Promise<Response>;
 
-const parsePayload = async (response: Response) => {
-  const payload = await response.json().catch(() => null);
+const parsePayload = async (response: Response | Promise<Response>) => {
+  const resolved = await response;
+  const payload = await resolved.json().catch(() => null);
   const message =
     payload?.message ||
     payload?.error ||
     payload?.detail ||
-    `回测记录保存失败 (${response.status})`;
-  if (!response.ok) {
+    `回测记录保存失败 (${resolved.status})`;
+  if (!resolved.ok) {
     throw new Error(message);
   }
   if (payload?.code && payload.code !== 200) {
@@ -203,6 +204,20 @@ export const createBacktestPersistClient = () => {
     },
     reset() {
       publicId = null;
+    },
+    async listSessions(page = 1, size = 20) {
+      return parsePayload(
+        await fetchFn(
+          `/api/market_master/backtest/sessions?page=${page}&size=${size}`
+        )
+      );
+    },
+    async getSession(publicIdValue: string) {
+      return parsePayload(
+        await fetchFn(
+          `/api/market_master/backtest/sessions/${publicIdValue}`
+        )
+      );
     },
   };
 };

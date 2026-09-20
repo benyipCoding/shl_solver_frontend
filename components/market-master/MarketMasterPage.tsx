@@ -57,6 +57,7 @@ import {
 import {
   CANDLE_TOOLTIP_OFFSET,
   DEFAULT_TIMEFRAME,
+  INITIAL_BACKTEST_BALANCE,
   INITIAL_VISIBLE_COUNT,
   MIN_BACKTEST_CANDLES,
   MIN_FORWARD_CANDLES,
@@ -71,6 +72,7 @@ import {
   getDefaultRiskDistance,
   getInstrumentProfile,
   getIntervalByTimeframe,
+  getTimeframeByInterval,
   loadPersistedIndicatorConfig,
   persistLastTimeframe,
   persistIndicatorConfig,
@@ -91,6 +93,15 @@ import {
   createBacktestPersistClient,
   toPersistSide,
 } from "@/components/market-master/backtest-persistence";
+import { BacktestHistoryModal } from "@/components/market-master/BacktestHistoryModal";
+import {
+  findCandleIndexByTime,
+  fromPersistCloseReason,
+  fromPersistSide,
+  parseReplayTradeId,
+  sortReplayEvents,
+  toUnixSeconds,
+} from "@/components/market-master/backtest-replay";
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 
 const BOLLINGER_LINE_DEFINITIONS = [
@@ -305,11 +316,30 @@ export function MarketMasterPage() {
   const persistRef = useRef(createBacktestPersistClient());
   const wasBacktestModeRef = useRef(false);
   const clientSessionIdRef = useRef<string | null>(null);
+  const replayDetailRef = useRef<any>(null);
+  const pendingReplayRef = useRef<any>(null);
+  const replayEventsRef = useRef<any[]>([]);
+  const replayAllEventsRef = useRef<any[]>([]);
+  const replayCursorUnixRef = useRef<number | null>(null);
+  const replayStartCurrentIndexRef = useRef(0);
+  const replayEndCurrentIndexRef = useRef(0);
+  const replayFinishedNotifiedRef = useRef(false);
+  const isReplayModeRef = useRef(false);
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [replayBounds, setReplayBounds] = useState({
+    startCurrent: 0,
+    endCurrent: 0,
+  });
+  const [isBacktestHistoryOpen, setIsBacktestHistoryOpen] = useState(false);
+  const [replayingSessionId, setReplayingSessionId] = useState<string | null>(
+    null
+  );
+  const [pendingReplayToken, setPendingReplayToken] = useState(0);
 
   useEffect(() => {
     persistRef.current.configure({
       enabled: !isAuthLoading && Boolean(user),
-      fetchFn: customFetch,
+      fetchFn: (input, init) => customFetch(input, init, true),
     });
   }, [customFetch, isAuthLoading, user]);
   const chartContainerRef = useRef<any>(null);
@@ -601,7 +631,7 @@ export function MarketMasterPage() {
     hideCandleTooltip();
   }, [symbol, timeframe, hideCandleTooltip]);
 
-  const [balance, setBalance] = useState(10000);
+  const [balance, setBalance] = useState(INITIAL_BACKTEST_BALANCE);
   const balanceRef = useRef(balance);
   useEffect(() => {
     balanceRef.current = balance;
@@ -641,6 +671,14 @@ export function MarketMasterPage() {
     seriesMarkersRef.current?.setMarkers([]);
   }, []);
 
+  const resetBacktestAccount = useCallback(() => {
+    balanceRef.current = INITIAL_BACKTEST_BALANCE;
+    setBalance(INITIAL_BACKTEST_BALANCE);
+    tradesRef.current = [];
+    setTrades([]);
+    clearClosedTradeMarkers();
+  }, [clearClosedTradeMarkers]);
+
   const commitTrades = useCallback((nextTrades: any[]) => {
     tradesRef.current = nextTrades;
     setTrades(nextTrades);
@@ -655,7 +693,12 @@ export function MarketMasterPage() {
     ) => {
       commitTrades(nextTrades);
       syncTradeMarkers(nextTrades);
-      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
+      if (balanceChange !== 0) {
+        const nextBalance = balanceRef.current + balanceChange;
+        balanceRef.current = nextBalance;
+        setBalance(nextBalance);
+      }
+      if (isReplayModeRef.current) return;
       const resolvedBarIndex = barIndex ?? currentIndexRef.current - 1;
       newlyClosed.forEach((trade) => {
         if (trade?.closeTime == null || trade?.closePrice == null) return;
@@ -672,6 +715,7 @@ export function MarketMasterPage() {
   );
 
   updateTradePriceRef.current = (tradeId: any, type: any, newPrice: any) => {
+    if (isReplayModeRef.current) return;
     commitTrades(
       tradesRef.current.map((t) =>
         t.id === tradeId ? { ...t, [type]: newPrice } : t
@@ -690,6 +734,87 @@ export function MarketMasterPage() {
       price: newPrice,
     });
   };
+
+  const applyReplayEventsUpTo = useCallback(
+    (barTimeUnix: number) => {
+      if (!isReplayModeRef.current) return;
+      const remaining: any[] = [];
+      const due: any[] = [];
+      replayEventsRef.current.forEach((event) => {
+        const eventTime = toUnixSeconds(event.bar_time);
+        if (eventTime != null && eventTime <= barTimeUnix) due.push(event);
+        else remaining.push(event);
+      });
+      replayEventsRef.current = remaining;
+      if (!due.length) return;
+
+      let nextTrades = [...tradesRef.current];
+      let balanceChange = 0;
+      due.forEach((event) => {
+        const tradeId = parseReplayTradeId(event.client_trade_id);
+        if (event.event_type === "OPEN") {
+          nextTrades = [
+            {
+              id: tradeId,
+              type: fromPersistSide(event.side),
+              entry: Number(event.price),
+              sl: event.sl_price != null ? Number(event.sl_price) : null,
+              tp: event.tp_price != null ? Number(event.tp_price) : null,
+              units: Number(event.units || 0),
+              status: "Open",
+              pnl: 0,
+              visibleOnChart: true,
+              entryTime: toUnixSeconds(event.bar_time),
+            },
+            ...nextTrades,
+          ];
+          return;
+        }
+
+        if (event.event_type === "MODIFY_SL") {
+          nextTrades = nextTrades.map((trade) =>
+            String(trade.id) === String(tradeId)
+              ? { ...trade, sl: Number(event.price) }
+              : trade
+          );
+          return;
+        }
+
+        if (event.event_type === "MODIFY_TP") {
+          nextTrades = nextTrades.map((trade) =>
+            String(trade.id) === String(tradeId)
+              ? { ...trade, tp: Number(event.price) }
+              : trade
+          );
+          return;
+        }
+
+        if (event.event_type !== "CLOSE") return;
+        nextTrades = nextTrades.map((trade) => {
+          if (String(trade.id) !== String(tradeId) || trade.status !== "Open") {
+            return trade;
+          }
+          const closedTrade = closeTradeRecord(
+            trade,
+            Number(event.price),
+            fromPersistCloseReason(event.close_reason),
+            toUnixSeconds(event.bar_time)
+          );
+          balanceChange += closedTrade.pnl;
+          return closedTrade;
+        });
+      });
+
+      commitTrades(nextTrades);
+      syncTradeMarkers(nextTrades);
+      if (balanceChange !== 0) {
+        const nextBalance = balanceRef.current + balanceChange;
+        balanceRef.current = nextBalance;
+        setBalance(nextBalance);
+      }
+    },
+    [commitTrades, syncTradeMarkers]
+  );
 
   const [aiReviewModal, setAiReviewModal] = useState(
     createInitialAiReviewModal
@@ -1470,11 +1595,92 @@ export function MarketMasterPage() {
     trades,
   ]);
 
+  const applyReplayWindow = useCallback(
+    (detail: any, options?: { announce?: boolean; restarted?: boolean }) => {
+      const data = fullDataRef.current;
+      const startUnix = toUnixSeconds(detail?.start_bar_time);
+      const startBarIndex = findCandleIndexByTime(data, startUnix);
+      if (startBarIndex < 0) return false;
+
+      const cursorUnix = toUnixSeconds(detail?.cursor_bar_time) ?? startUnix;
+      let endBarIndex = findCandleIndexByTime(data, cursorUnix);
+      if (endBarIndex < startBarIndex) endBarIndex = startBarIndex;
+
+      const startCurrent = startBarIndex + 1;
+      const endCurrent = Math.min(endBarIndex + 1, data.length);
+      const hasPlayableCandles = endCurrent > startCurrent;
+
+      replayDetailRef.current = detail;
+      replayAllEventsRef.current = sortReplayEvents(detail.events || []);
+      replayEventsRef.current = [...replayAllEventsRef.current];
+      replayCursorUnixRef.current = cursorUnix;
+      replayStartCurrentIndexRef.current = startCurrent;
+      replayEndCurrentIndexRef.current = endCurrent;
+      replayFinishedNotifiedRef.current = !hasPlayableCandles;
+
+      isReplayModeRef.current = true;
+      setIsReplayMode(true);
+      setIsPlaying(false);
+      resetBacktestAccount();
+      clearAutomaticPens();
+      clearAutomaticSegments();
+      currentIndexRef.current = startCurrent;
+      setCurrentIndex(startCurrent);
+      setReplayBounds({ startCurrent, endCurrent });
+      syncDisplayedData(data, startCurrent, true, true);
+
+      const startCandle = data[startBarIndex];
+      if (startCandle?.time != null) {
+        applyReplayEventsUpTo(startCandle.time);
+      }
+
+      if (options?.restarted) {
+        toast.success("已从头开始回放");
+      } else if (options?.announce) {
+        if (!hasPlayableCandles) {
+          toast("回放已结束：原回测未推进 K 线");
+        } else {
+          toast.success("已还原回测，可播放或步进查看成交");
+        }
+      }
+      return true;
+    },
+    [
+      applyReplayEventsUpTo,
+      clearAutomaticPens,
+      clearAutomaticSegments,
+      resetBacktestAccount,
+      syncDisplayedData,
+    ]
+  );
+
   useEffect(() => {
     if (isDataLoading || !fullDataRef.current.length) return;
 
     if (isBacktestMode) {
       if (wasBacktestModeRef.current) return;
+
+      const replayDetail = replayDetailRef.current;
+      if (replayDetail) {
+        if (!applyReplayWindow(replayDetail, { announce: true })) {
+          toast.error("当前 K 线无法覆盖该回测起点，无法还原播放");
+          replayDetailRef.current = null;
+          replayEventsRef.current = [];
+          replayAllEventsRef.current = [];
+          replayCursorUnixRef.current = null;
+          replayStartCurrentIndexRef.current = 0;
+          replayEndCurrentIndexRef.current = 0;
+          setReplayBounds({ startCurrent: 0, endCurrent: 0 });
+          isReplayModeRef.current = false;
+          setIsReplayMode(false);
+          setIsBacktestMode(false);
+          return;
+        }
+
+        wasBacktestModeRef.current = true;
+        clientSessionIdRef.current = null;
+        return;
+      }
 
       const randomStart = pickRandomBacktestStartIndex(
         fullDataRef.current.length
@@ -1485,14 +1691,14 @@ export function MarketMasterPage() {
       }
 
       wasBacktestModeRef.current = true;
+      isReplayModeRef.current = false;
+      setIsReplayMode(false);
       clientSessionIdRef.current =
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : `session-${Date.now()}`;
       setIsPlaying(false);
-      tradesRef.current = [];
-      setTrades([]);
-      clearClosedTradeMarkers();
+      resetBacktestAccount();
       clearAutomaticPens();
       clearAutomaticSegments();
       setCurrentIndex(randomStart);
@@ -1516,7 +1722,7 @@ export function MarketMasterPage() {
         initial_visible_bars: INITIAL_VISIBLE_COUNT,
         cursor_bar_time: startCandle?.time,
         cursor_bar_index: randomStart - 1,
-        initial_balance: balanceRef.current,
+        initial_balance: INITIAL_BACKTEST_BALANCE,
       });
       return;
     }
@@ -1524,14 +1730,27 @@ export function MarketMasterPage() {
     if (wasBacktestModeRef.current) {
       const barIndex = currentIndexRef.current - 1;
       const candle = fullDataRef.current[barIndex];
-      persistRef.current.completeSession({
-        cursor_bar_time: candle?.time ?? null,
-        cursor_bar_index: barIndex,
-        ending_balance: balanceRef.current,
-        mark_price: candle?.close || 0,
-      });
+      if (!isReplayModeRef.current) {
+        persistRef.current.completeSession({
+          cursor_bar_time: candle?.time ?? null,
+          cursor_bar_index: barIndex,
+          ending_balance: balanceRef.current,
+          mark_price: candle?.close || 0,
+        });
+      }
       wasBacktestModeRef.current = false;
       clientSessionIdRef.current = null;
+      isReplayModeRef.current = false;
+      setIsReplayMode(false);
+      replayDetailRef.current = null;
+      replayEventsRef.current = [];
+      replayAllEventsRef.current = [];
+      replayCursorUnixRef.current = null;
+      replayStartCurrentIndexRef.current = 0;
+      replayEndCurrentIndexRef.current = 0;
+      replayFinishedNotifiedRef.current = false;
+      setReplayBounds({ startCurrent: 0, endCurrent: 0 });
+      resetBacktestAccount();
     }
 
     setIsPlaying(false);
@@ -1543,19 +1762,65 @@ export function MarketMasterPage() {
     setCurrentIndex(nextCurrentIndex);
     syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
   }, [
+    applyReplayWindow,
     clearAutomaticPens,
     clearAutomaticSegments,
     clearClosedTradeMarkers,
     isBacktestMode,
     isDataLoading,
+    resetBacktestAccount,
     symbol,
     syncDisplayedData,
     timeframe,
   ]);
 
   useEffect(() => {
+    const detail = pendingReplayRef.current;
+    if (!detail) return;
+    if (isBacktestMode) return;
+
+    const nextTimeframe =
+      detail.timeframe || getTimeframeByInterval(detail.interval);
+    const onTargetMarket =
+      symbol === detail.symbol && timeframe === nextTimeframe;
+
+    if (!onTargetMarket) {
+      if (symbol !== detail.symbol) setSymbol(detail.symbol);
+      if (timeframe !== nextTimeframe) setTimeframe(nextTimeframe);
+      return;
+    }
+
+    if (dataError) {
+      pendingReplayRef.current = null;
+      setReplayingSessionId(null);
+      toast.error(dataError || "无法加载该回测对应的 K 线数据");
+      return;
+    }
+
+    if (isDataLoading || isHistoryLoading || !fullDataRef.current.length) {
+      return;
+    }
+
+    pendingReplayRef.current = null;
+    replayDetailRef.current = detail;
+    isReplayModeRef.current = true;
+    setIsReplayMode(true);
+    setReplayingSessionId(null);
+    setIsBacktestMode(true);
+  }, [
+    dataError,
+    isBacktestMode,
+    isDataLoading,
+    isHistoryLoading,
+    pendingReplayToken,
+    symbol,
+    timeframe,
+    totalCandles,
+  ]);
+
+  useEffect(() => {
     const onPageHide = () => {
-      if (!wasBacktestModeRef.current) return;
+      if (!wasBacktestModeRef.current || isReplayModeRef.current) return;
       const barIndex = currentIndexRef.current - 1;
       const candle = fullDataRef.current[barIndex];
       persistRef.current.completeSession({
@@ -2620,6 +2885,20 @@ export function MarketMasterPage() {
 
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
+    const replayEndCurrent = replayEndCurrentIndexRef.current;
+    if (
+      isReplayModeRef.current &&
+      replayEndCurrent > 0 &&
+      currentIndex >= replayEndCurrent
+    ) {
+      setIsPlaying(false);
+      if (!replayFinishedNotifiedRef.current) {
+        replayFinishedNotifiedRef.current = true;
+        toast("回放已结束，可点击从头播放再看一遍");
+      }
+      return;
+    }
+
     if (currentIndex >= fullDataRef.current.length) {
       setIsPlaying(false);
       return;
@@ -2673,44 +2952,56 @@ export function MarketMasterPage() {
 
     let newlyClosed: any[] = [];
     let balanceChange = 0;
-    const nextTrades = tradesRef.current.map((trade) => {
-      if (trade.status !== "Open") return trade;
-      let closePrice = null;
-      let reason = "";
-      if (trade.type === "Buy") {
-        if (trade.sl !== null && nextCandle.low <= trade.sl) {
-          closePrice = trade.sl;
-          reason = "SL Hit";
-        } else if (trade.tp !== null && nextCandle.high >= trade.tp) {
-          closePrice = trade.tp;
-          reason = "TP Hit";
-        }
-      } else if (trade.type === "Sell") {
-        if (trade.sl !== null && nextCandle.high >= trade.sl) {
-          closePrice = trade.sl;
-          reason = "SL Hit";
-        } else if (trade.tp !== null && nextCandle.low <= trade.tp) {
-          closePrice = trade.tp;
-          reason = "TP Hit";
+    if (isReplayModeRef.current) {
+      applyReplayEventsUpTo(nextCandle.time);
+      if (replayEndCurrent > 0 && currentIndex + 1 >= replayEndCurrent) {
+        setIsPlaying(false);
+        if (!replayFinishedNotifiedRef.current) {
+          replayFinishedNotifiedRef.current = true;
+          toast("回放已结束，可点击从头播放再看一遍");
         }
       }
-      if (closePrice !== null) {
-        const closedTrade = closeTradeRecord(
-          trade,
-          closePrice,
-          reason,
-          nextCandle.time
-        );
-        newlyClosed.push(closedTrade);
-        balanceChange += closedTrade.pnl;
-        return closedTrade;
-      }
-      return trade;
-    });
-    settleClosedTrades(nextTrades, newlyClosed, balanceChange, currentIndex);
+    } else {
+      const nextTrades = tradesRef.current.map((trade) => {
+        if (trade.status !== "Open") return trade;
+        let closePrice = null;
+        let reason = "";
+        if (trade.type === "Buy") {
+          if (trade.sl !== null && nextCandle.low <= trade.sl) {
+            closePrice = trade.sl;
+            reason = "SL Hit";
+          } else if (trade.tp !== null && nextCandle.high >= trade.tp) {
+            closePrice = trade.tp;
+            reason = "TP Hit";
+          }
+        } else if (trade.type === "Sell") {
+          if (trade.sl !== null && nextCandle.high >= trade.sl) {
+            closePrice = trade.sl;
+            reason = "SL Hit";
+          } else if (trade.tp !== null && nextCandle.low <= trade.tp) {
+            closePrice = trade.tp;
+            reason = "TP Hit";
+          }
+        }
+        if (closePrice !== null) {
+          const closedTrade = closeTradeRecord(
+            trade,
+            closePrice,
+            reason,
+            nextCandle.time
+          );
+          newlyClosed.push(closedTrade);
+          balanceChange += closedTrade.pnl;
+          return closedTrade;
+        }
+        return trade;
+      });
+      settleClosedTrades(nextTrades, newlyClosed, balanceChange, currentIndex);
+    }
 
     setCurrentIndex((prev) => prev + 1);
   }, [
+    applyReplayEventsUpTo,
     settleClosedTrades,
     currentIndex,
     indConfig,
@@ -2777,19 +3068,20 @@ export function MarketMasterPage() {
         return;
       }
 
+      const playbackLimit = isReplayMode
+        ? replayBounds.endCurrent
+        : totalCandles;
+      const canAdvancePlayback =
+        playbackLimit > 0 && currentIndex < playbackLimit;
+
       const key = event.key.toLowerCase();
-      if (
-        key === "d" &&
-        !isDataLoading &&
-        !isPlaying &&
-        currentIndex < totalCandles
-      ) {
+      if (key === "d" && !isDataLoading && !isPlaying && canAdvancePlayback) {
         event.preventDefault();
         handleNextCandle();
         return;
       }
 
-      if (key === "p" && !isDataLoading && currentIndex < totalCandles) {
+      if (key === "p" && !isDataLoading && canAdvancePlayback) {
         event.preventDefault();
         setIsPlaying((playing) => !playing);
       }
@@ -2803,6 +3095,8 @@ export function MarketMasterPage() {
     isBacktestMode,
     isDataLoading,
     isPlaying,
+    isReplayMode,
+    replayBounds.endCurrent,
     totalCandles,
   ]);
 
@@ -2813,7 +3107,7 @@ export function MarketMasterPage() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type) => {
-    if (!isBacktestMode) return;
+    if (!isBacktestMode || isReplayModeRef.current) return;
     if (!fullDataRef.current.length || currentPrice <= 0) return;
 
     const entry = currentPrice;
@@ -2857,6 +3151,7 @@ export function MarketMasterPage() {
   };
 
   const handleCloseMarket = (tradeId) => {
+    if (isReplayModeRef.current) return;
     const activeCandle = getActiveCandle(
       fullDataRef.current,
       currentIndexRef.current
@@ -2885,6 +3180,7 @@ export function MarketMasterPage() {
   };
 
   requestCloseTradeFromMarkerRef.current = (tradeId) => {
+    if (isReplayModeRef.current) return;
     const trade = tradesRef.current.find(
       (item) => String(item.id) === String(tradeId) && item.status === "Open"
     );
@@ -3014,6 +3310,36 @@ export function MarketMasterPage() {
     setIsPlaying(false);
     setIsBacktestMode(false);
   }, [forceCloseAllOpenTrades]);
+
+  const handleRestartReplay = useCallback(() => {
+    const detail = replayDetailRef.current;
+    if (!detail || !isReplayModeRef.current) return;
+    applyReplayWindow(detail, { restarted: true });
+  }, [applyReplayWindow]);
+
+  const handleReplaySession = useCallback(
+    async (publicId: string) => {
+      if (!user) return;
+      setIsBacktestHistoryOpen(false);
+      setReplayingSessionId(publicId);
+      try {
+        const detail = await persistRef.current.getSession(publicId);
+        if (!detail?.public_id) {
+          throw new Error("回测记录不存在");
+        }
+        pendingReplayRef.current = detail;
+        setPendingReplayToken((token) => token + 1);
+        if (isBacktestMode) {
+          handleExitBacktest();
+        }
+      } catch (error: any) {
+        pendingReplayRef.current = null;
+        setReplayingSessionId(null);
+        toast.error(error?.message || "加载回测记录失败");
+      }
+    },
+    [handleExitBacktest, isBacktestMode, user]
+  );
 
   const confirmPendingMarketChange = useCallback(() => {
     if (!pendingMarketChange) return;
@@ -3147,6 +3473,7 @@ export function MarketMasterPage() {
 
   const handleMenuCloseAll = () => {
     setContextMenu(null);
+    if (isReplayModeRef.current) return;
     const openCount = tradesRef.current.filter(
       (trade) => trade.status === "Open"
     ).length;
@@ -3319,7 +3646,9 @@ export function MarketMasterPage() {
       <MarketMasterOverlays
         aiReviewModal={aiReviewModal}
         applyIndicatorConfig={applyIndicatorConfig}
-        canCloseAllOpenTrades={isBacktestMode && openTrades.length > 0}
+        canCloseAllOpenTrades={
+          isBacktestMode && !isReplayMode && openTrades.length > 0
+        }
         contextMenu={contextMenu}
         draftConfig={draftConfig}
         handleAddDraftEma={handleAddDraftEma}
@@ -3389,11 +3718,27 @@ export function MarketMasterPage() {
         minBacktestCandles={MIN_BACKTEST_CANDLES}
         initialVisibleCount={INITIAL_VISIBLE_COUNT}
         minForwardCandles={MIN_FORWARD_CANDLES}
+        onOpenBacktestHistory={() => setIsBacktestHistoryOpen(true)}
+        isReplayMode={isReplayMode}
+        isReplayFinished={
+          isReplayMode &&
+          replayBounds.endCurrent > 0 &&
+          currentIndex >= replayBounds.endCurrent
+        }
+        replayPlayed={Math.max(0, currentIndex - replayBounds.startCurrent)}
+        replayTotal={Math.max(
+          0,
+          replayBounds.endCurrent - replayBounds.startCurrent
+        )}
+        onRestartReplay={handleRestartReplay}
       />
 
       <MarketWorkspace
         bottomPanelHeight={bottomPanelHeight}
-        canPlaceOrder={isBacktestMode && !isDataLoading && !dataError}
+        canPlaceOrder={
+          isBacktestMode && !isReplayMode && !isDataLoading && !dataError
+        }
+        isReplayMode={isReplayMode}
         candleTooltip={candleTooltip}
         candleTooltipElRef={candleTooltipElRef}
         chartContainerRef={chartContainerRef}
@@ -3437,6 +3782,13 @@ export function MarketMasterPage() {
         tpDistance={tpDistance}
         tpEnabled={tpEnabled}
         trades={trades}
+      />
+
+      <BacktestHistoryModal
+        isOpen={isBacktestHistoryOpen}
+        onClose={() => setIsBacktestHistoryOpen(false)}
+        onReplay={handleReplaySession}
+        replayingId={replayingSessionId}
       />
 
       <PendingMarketChangeDialog
