@@ -13,6 +13,7 @@ import {
   HistogramSeries,
   LineSeries,
   createChart,
+  createSeriesMarkers,
   type Time,
 } from "lightweight-charts";
 
@@ -22,12 +23,17 @@ import {
   PendingMarketChangeDialog,
   type PendingMarketChange,
 } from "@/components/market-master/PendingMarketChangeDialog";
+import {
+  TradeCloseConfirmDialog,
+  type PendingTradeClose,
+} from "@/components/market-master/TradeCloseConfirmDialog";
 import { TopBar } from "@/components/market-master/TopBar";
 import {
   getDefaultSymbol,
   INITIAL_FAVORITES,
   persistLastSymbol,
 } from "@/components/market-master/SymbolSearchSelect";
+import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import toast from "react-hot-toast";
 import {
@@ -81,6 +87,10 @@ import {
   type KlinePageMeta,
   type NormalizedCandle,
 } from "@/components/market-master/market-data";
+import {
+  createBacktestPersistClient,
+  toPersistSide,
+} from "@/components/market-master/backtest-persistence";
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 
 const BOLLINGER_LINE_DEFINITIONS = [
@@ -96,8 +106,212 @@ const toBollingerLineData = (data: any[], key: string) =>
       : { time: point.time, value: point[key] }
   );
 
+const CLOSED_TRADE_PROFIT_COLOR = "#15803d";
+const CLOSED_TRADE_LOSS_COLOR = "#b91c1c";
+const CLOSED_TRADE_MARKER_SIZE = 2.4;
+
+const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
+  data[currentIndex - 1] ?? null;
+
+const closeTradeRecord = (
+  trade: any,
+  closePrice: number,
+  reason: string,
+  closeTime: any
+) => {
+  const pnl =
+    trade.type === "Buy"
+      ? (closePrice - trade.entry) * trade.units
+      : (trade.entry - closePrice) * trade.units;
+
+  return {
+    ...trade,
+    status: "Closed",
+    closePrice,
+    pnl,
+    reason,
+    closeTime,
+  };
+};
+
+const getTradeMarkerColor = (trade: any, markPrice = 0) => {
+  if (trade?.status === "Closed") {
+    return Number(trade.pnl) >= 0
+      ? CLOSED_TRADE_PROFIT_COLOR
+      : CLOSED_TRADE_LOSS_COLOR;
+  }
+
+  const price = markPrice || trade?.entry || 0;
+  const pnl =
+    trade?.type === "Buy"
+      ? (price - trade.entry) * trade.units
+      : (trade.entry - price) * trade.units;
+
+  return pnl >= 0 ? CLOSED_TRADE_PROFIT_COLOR : CLOSED_TRADE_LOSS_COLOR;
+};
+
+const buildTradeMarkers = (trade: any, markPrice = 0) => {
+  if (trade?.entryTime == null) return [];
+
+  const isBuy = trade.type === "Buy";
+  const color = getTradeMarkerColor(trade, markPrice);
+  const markers = [
+    {
+      time: trade.entryTime,
+      position: isBuy ? "belowBar" : "aboveBar",
+      shape: isBuy ? "arrowUp" : "arrowDown",
+      color,
+      size: CLOSED_TRADE_MARKER_SIZE,
+      id: `${trade.id}-entry`,
+    },
+  ];
+
+  if (trade.status === "Closed" && trade.closeTime != null) {
+    markers.push({
+      time: trade.closeTime,
+      position: isBuy ? "aboveBar" : "belowBar",
+      shape: isBuy ? "arrowDown" : "arrowUp",
+      color,
+      size: CLOSED_TRADE_MARKER_SIZE,
+      id: `${trade.id}-exit`,
+    });
+  }
+
+  return markers;
+};
+
+const parseTradeMarkerId = (objectId: unknown) => {
+  const raw = String(objectId ?? "");
+  if (raw.endsWith("-entry")) {
+    return { tradeId: raw.slice(0, -"-entry".length), kind: "entry" as const };
+  }
+  if (raw.endsWith("-exit")) {
+    return { tradeId: raw.slice(0, -"-exit".length), kind: "exit" as const };
+  }
+  return null;
+};
+
+const ceiledEven = (value: number) => {
+  const ceiled = Math.ceil(value);
+  return ceiled % 2 !== 0 ? ceiled - 1 : ceiled;
+};
+
+const ceiledOdd = (value: number) => {
+  const ceiled = Math.ceil(value);
+  return ceiled % 2 === 0 ? ceiled - 1 : ceiled;
+};
+
+const getTradeMarkerLayout = (barSpacing = 6, sizeMultiplier = CLOSED_TRADE_MARKER_SIZE) => {
+  const clamped = Math.min(Math.max(barSpacing, 12), 30);
+  const shapeSize = ceiledEven(ceiledOdd(clamped)) * sizeMultiplier;
+  const shapeMargin = Math.max(ceiledOdd(clamped * 0.1), 3);
+  return { shapeSize, shapeMargin };
+};
+
+const findCandleByTime = (candles: any[] = [], time: unknown) => {
+  for (let index = candles.length - 1; index >= 0; index -= 1) {
+    if (candles[index]?.time === time) return candles[index];
+  }
+  return null;
+};
+
+const findTradeMarkerAtPoint = (
+  chart: any,
+  series: any,
+  candles: any[] = [],
+  trades: any[] = [],
+  point: { x: number; y: number } | null | undefined
+) => {
+  if (!chart || !series || !point) return null;
+
+  const timeScale = chart.timeScale?.();
+  if (!timeScale) return null;
+
+  const { shapeSize, shapeMargin } = getTradeMarkerLayout(
+    timeScale.options?.().barSpacing
+  );
+  const halfSize = shapeSize / 2;
+  const hitRadiusX = Math.max(halfSize, 16) + 8;
+  const hitRadiusY = halfSize + shapeMargin + 10;
+  const orderedTrades = [...trades].sort((left, right) => {
+    if (left?.status === "Open" && right?.status !== "Open") return -1;
+    if (right?.status === "Open" && left?.status !== "Open") return 1;
+    return 0;
+  });
+
+  for (const trade of orderedTrades) {
+    const isBuy = trade?.type === "Buy";
+    const candidates = [
+      {
+        time: trade?.entryTime,
+        kind: "entry" as const,
+        belowBar: isBuy,
+      },
+      trade?.status === "Closed" && trade?.closeTime != null
+        ? {
+            time: trade.closeTime,
+            kind: "exit" as const,
+            belowBar: !isBuy,
+          }
+        : null,
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate || candidate.time == null) continue;
+      const x = timeScale.timeToCoordinate(candidate.time);
+      const candle = findCandleByTime(candles, candidate.time);
+      const anchorPrice = candidate.belowBar ? candle?.low : candle?.high;
+      const yAnchor =
+        anchorPrice == null ? null : series.priceToCoordinate(anchorPrice);
+      if (x == null || yAnchor == null) continue;
+
+      const y = candidate.belowBar
+        ? yAnchor + halfSize + shapeMargin
+        : yAnchor - halfSize - shapeMargin;
+      if (
+        Math.abs(point.x - x) <= hitRadiusX &&
+        Math.abs(point.y - y) <= hitRadiusY
+      ) {
+        return { tradeId: String(trade.id), kind: candidate.kind };
+      }
+    }
+  }
+
+  return null;
+};
+
+const resolveTradeMarkerHit = (
+  chart: any,
+  series: any,
+  candles: any[] = [],
+  trades: any[] = [],
+  param: { hoveredObjectId?: unknown; point?: { x: number; y: number } }
+) =>
+  parseTradeMarkerId(param?.hoveredObjectId) ||
+  findTradeMarkerAtPoint(chart, series, candles, trades, param?.point);
+
+const sortSeriesMarkersByTime = (markers: any[] = []) =>
+  [...markers].sort((left, right) => {
+    const leftTime = typeof left.time === "number" ? left.time : 0;
+    const rightTime = typeof right.time === "number" ? right.time : 0;
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return String(left.id || "").localeCompare(String(right.id || ""));
+  });
+
 export function MarketMasterPage() {
   const { customFetch } = useFetch();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const canUseAutomaticDraw = !isAuthLoading && Boolean(user?.is_superuser);
+  const persistRef = useRef(createBacktestPersistClient());
+  const wasBacktestModeRef = useRef(false);
+  const clientSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    persistRef.current.configure({
+      enabled: !isAuthLoading && Boolean(user),
+      fetchFn: customFetch,
+    });
+  }, [customFetch, isAuthLoading, user]);
   const chartContainerRef = useRef<any>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
@@ -116,6 +330,14 @@ export function MarketMasterPage() {
     resetAutomaticSegmentsState,
     updateAutomaticSegmentsAfterCandle,
   } = useAutomaticSegments({ chartRef, seriesRef });
+  const handleDrawAutomaticPens = useCallback(() => {
+    if (!canUseAutomaticDraw) return;
+    drawAutomaticPens();
+  }, [canUseAutomaticDraw, drawAutomaticPens]);
+  const handleDrawAutomaticSegments = useCallback(() => {
+    if (!canUseAutomaticDraw) return;
+    drawAutomaticSegments();
+  }, [canUseAutomaticDraw, drawAutomaticSegments]);
   const emaSeriesRefs = useRef<any>({});
   const bollingerSeriesRefs = useRef<any>({});
 
@@ -379,7 +601,11 @@ export function MarketMasterPage() {
     hideCandleTooltip();
   }, [symbol, timeframe, hideCandleTooltip]);
 
-  const [balance, setBalance] = useState(100000);
+  const [balance, setBalance] = useState(10000);
+  const balanceRef = useRef(balance);
+  useEffect(() => {
+    balanceRef.current = balance;
+  }, [balance]);
   const [trades, setTrades] = useState([]);
   const [orderUnits, setOrderUnits] = useState(100);
   const [slEnabled, setSlEnabled] = useState(true);
@@ -392,12 +618,77 @@ export function MarketMasterPage() {
     tradesRef.current = trades;
   }, [trades]);
   const orderLinesRef = useRef<any>({});
+  const seriesMarkersRef = useRef<any>(null);
+  const closedTradeMarkersRef = useRef<any[]>([]);
   const updateTradePriceRef = useRef<any>();
+  const requestCloseTradeFromMarkerRef = useRef<(tradeId: any) => void>(
+    () => {}
+  );
+  const ignoreContextMenuCloseRef = useRef(false);
+
+  const syncTradeMarkers = useCallback((tradeList: any[] = []) => {
+    const markPrice =
+      getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close || 0;
+    const nextMarkers = sortSeriesMarkersByTime(
+      tradeList.flatMap((trade) => buildTradeMarkers(trade, markPrice))
+    );
+    closedTradeMarkersRef.current = nextMarkers;
+    seriesMarkersRef.current?.setMarkers(nextMarkers);
+  }, []);
+
+  const clearClosedTradeMarkers = useCallback(() => {
+    closedTradeMarkersRef.current = [];
+    seriesMarkersRef.current?.setMarkers([]);
+  }, []);
+
+  const commitTrades = useCallback((nextTrades: any[]) => {
+    tradesRef.current = nextTrades;
+    setTrades(nextTrades);
+  }, []);
+
+  const settleClosedTrades = useCallback(
+    (
+      nextTrades: any[],
+      newlyClosed: any[] = [],
+      balanceChange = 0,
+      barIndex?: number
+    ) => {
+      commitTrades(nextTrades);
+      syncTradeMarkers(nextTrades);
+      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
+      const resolvedBarIndex = barIndex ?? currentIndexRef.current - 1;
+      newlyClosed.forEach((trade) => {
+        if (trade?.closeTime == null || trade?.closePrice == null) return;
+        persistRef.current.recordClose({
+          client_trade_id: String(trade.id),
+          bar_time: trade.closeTime,
+          bar_index: resolvedBarIndex,
+          price: trade.closePrice,
+          close_reason: trade.reason,
+        });
+      });
+    },
+    [commitTrades, syncTradeMarkers]
+  );
 
   updateTradePriceRef.current = (tradeId: any, type: any, newPrice: any) => {
-    setTrades((prev) =>
-      prev.map((t) => (t.id === tradeId ? { ...t, [type]: newPrice } : t))
+    commitTrades(
+      tradesRef.current.map((t) =>
+        t.id === tradeId ? { ...t, [type]: newPrice } : t
+      )
     );
+    const activeCandle = getActiveCandle(
+      fullDataRef.current,
+      currentIndexRef.current
+    );
+    if (activeCandle?.time == null || (type !== "sl" && type !== "tp")) return;
+    persistRef.current.recordModify({
+      client_trade_id: String(tradeId),
+      kind: type,
+      bar_time: activeCandle.time,
+      bar_index: currentIndexRef.current - 1,
+      price: newPrice,
+    });
   };
 
   const [aiReviewModal, setAiReviewModal] = useState(
@@ -405,6 +696,8 @@ export function MarketMasterPage() {
   );
   const [pendingMarketChange, setPendingMarketChange] =
     useState<PendingMarketChange | null>(null);
+  const [pendingTradeClose, setPendingTradeClose] =
+    useState<PendingTradeClose | null>(null);
 
   const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
 
@@ -1091,8 +1384,10 @@ export function MarketMasterPage() {
     const loadMarketData = async () => {
       setIsPlaying(false);
       clearAllSelections();
+      tradesRef.current = [];
       setTrades([]);
       removeOrderLines();
+      clearClosedTradeMarkers();
       setDataError("");
       setIsDataLoading(true);
       setIsHistoryLoading(false);
@@ -1162,13 +1457,25 @@ export function MarketMasterPage() {
   ]);
 
   useEffect(() => {
+    if (!isBacktestMode) {
+      clearClosedTradeMarkers();
+      return;
+    }
+    syncTradeMarkers(trades);
+  }, [
+    clearClosedTradeMarkers,
+    currentPrice,
+    isBacktestMode,
+    syncTradeMarkers,
+    trades,
+  ]);
+
+  useEffect(() => {
     if (isDataLoading || !fullDataRef.current.length) return;
 
-    setIsPlaying(false);
-    clearAutomaticPens();
-    clearAutomaticSegments();
-
     if (isBacktestMode) {
+      if (wasBacktestModeRef.current) return;
+
       const randomStart = pickRandomBacktestStartIndex(
         fullDataRef.current.length
       );
@@ -1177,10 +1484,60 @@ export function MarketMasterPage() {
         return;
       }
 
+      wasBacktestModeRef.current = true;
+      clientSessionIdRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `session-${Date.now()}`;
+      setIsPlaying(false);
+      tradesRef.current = [];
+      setTrades([]);
+      clearClosedTradeMarkers();
+      clearAutomaticPens();
+      clearAutomaticSegments();
       setCurrentIndex(randomStart);
       syncDisplayedData(fullDataRef.current, randomStart, true, true);
+
+      const startCandle = fullDataRef.current[randomStart - 1];
+      if (startCandle?.time == null) {
+        wasBacktestModeRef.current = false;
+        clientSessionIdRef.current = null;
+        setIsBacktestMode(false);
+        return;
+      }
+
+      persistRef.current.startSession({
+        client_session_id: clientSessionIdRef.current,
+        symbol,
+        interval: getIntervalByTimeframe(timeframe),
+        timeframe,
+        start_bar_time: startCandle?.time,
+        start_bar_index: randomStart - 1,
+        initial_visible_bars: INITIAL_VISIBLE_COUNT,
+        cursor_bar_time: startCandle?.time,
+        cursor_bar_index: randomStart - 1,
+        initial_balance: balanceRef.current,
+      });
       return;
     }
+
+    if (wasBacktestModeRef.current) {
+      const barIndex = currentIndexRef.current - 1;
+      const candle = fullDataRef.current[barIndex];
+      persistRef.current.completeSession({
+        cursor_bar_time: candle?.time ?? null,
+        cursor_bar_index: barIndex,
+        ending_balance: balanceRef.current,
+        mark_price: candle?.close || 0,
+      });
+      wasBacktestModeRef.current = false;
+      clientSessionIdRef.current = null;
+    }
+
+    setIsPlaying(false);
+    clearAutomaticPens();
+    clearAutomaticSegments();
+    clearClosedTradeMarkers();
 
     const nextCurrentIndex = fullDataRef.current.length;
     setCurrentIndex(nextCurrentIndex);
@@ -1188,10 +1545,29 @@ export function MarketMasterPage() {
   }, [
     clearAutomaticPens,
     clearAutomaticSegments,
+    clearClosedTradeMarkers,
     isBacktestMode,
     isDataLoading,
+    symbol,
     syncDisplayedData,
+    timeframe,
   ]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      if (!wasBacktestModeRef.current) return;
+      const barIndex = currentIndexRef.current - 1;
+      const candle = fullDataRef.current[barIndex];
+      persistRef.current.completeSession({
+        cursor_bar_time: candle?.time ?? null,
+        cursor_bar_index: barIndex,
+        ending_balance: balanceRef.current,
+        mark_price: candle?.close || 0,
+      });
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
 
   const applyIndicatorConfig = () => {
     const nextConfig = cloneIndicatorConfig(draftConfig);
@@ -1455,6 +1831,11 @@ export function MarketMasterPage() {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    seriesMarkersRef.current = createSeriesMarkers(
+      series,
+      closedTradeMarkersRef.current,
+      { zOrder: "top", autoScale: true }
+    );
 
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current)
@@ -1698,11 +2079,28 @@ export function MarketMasterPage() {
         state.hoveredOrderLine = foundOrderLineHover;
 
         if (chartContainerRef.current) {
+          const hoveredMarker = resolveTradeMarkerHit(
+            chart,
+            series,
+            fullDataRef.current,
+            tradesRef.current,
+            param
+          );
+          const hoveredOpenEntry =
+            hoveredMarker?.kind === "entry" &&
+            tradesRef.current.some(
+              (trade) =>
+                String(trade.id) === hoveredMarker.tradeId &&
+                trade.status === "Open"
+            );
+
           if (foundOrderLineHover) {
             chartContainerRef.current.style.cursor = "ns-resize";
           } else if (foundTrendlineHover) {
             chartContainerRef.current.style.cursor =
               hoverType === "body" ? "move" : "grab";
+          } else if (hoveredOpenEntry) {
+            chartContainerRef.current.style.cursor = "pointer";
           } else {
             chartContainerRef.current.style.cursor =
               state.mode === "draw" ? "crosshair" : "default";
@@ -1732,6 +2130,21 @@ export function MarketMasterPage() {
           setMode("idle");
           state.mode = "idle";
           setLines([...state.lines]);
+        }
+        return;
+      }
+
+      const markerHit = resolveTradeMarkerHit(
+        chart,
+        series,
+        fullDataRef.current,
+        tradesRef.current,
+        param
+      );
+      if (markerHit) {
+        hideCandleTooltip();
+        if (markerHit.kind === "entry") {
+          requestCloseTradeFromMarkerRef.current?.(markerHit.tradeId);
         }
         return;
       }
@@ -1875,6 +2288,24 @@ export function MarketMasterPage() {
 
     const contextMenuHandler = (e) => {
       e.preventDefault();
+      e.stopPropagation();
+      hideCandleTooltip();
+      ignoreContextMenuCloseRef.current = true;
+      window.setTimeout(() => {
+        ignoreContextMenuCloseRef.current = false;
+      }, 0);
+
+      const menuWidth = 188;
+      const menuHeight = 48;
+      const x = Math.max(
+        8,
+        Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+      );
+      const y = Math.max(
+        8,
+        Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+      );
+
       const hoveredShape = stateRef.current.lines.find(
         (l) => l.hoveredPoint !== null
       );
@@ -1882,16 +2313,25 @@ export function MarketMasterPage() {
         setSelectedShape(hoveredShape);
         setSelectedIndicator(null);
         setContextMenu({
-          x: e.clientX,
-          y: e.clientY,
+          kind: "shape",
+          x,
+          y,
           shapeId: hoveredShape.id,
         });
-      } else {
-        setContextMenu(null);
+        return;
       }
+
+      setContextMenu({
+        kind: "chart",
+        x,
+        y,
+      });
     };
 
-    const hideMenuOnClick = () => setContextMenu(null);
+    const hideMenuOnClick = (event) => {
+      if (event?.button === 2 || ignoreContextMenuCloseRef.current) return;
+      setContextMenu(null);
+    };
 
     const handleKeyDown = (e) => {
       if (
@@ -1900,26 +2340,6 @@ export function MarketMasterPage() {
         e.target.tagName === "SELECT"
       )
         return;
-      if (
-        e.key.toLowerCase() === "f" &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey
-      ) {
-        e.preventDefault();
-        drawAutomaticPens();
-        return;
-      }
-      if (
-        e.key.toLowerCase() === "r" &&
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey
-      ) {
-        e.preventDefault();
-        drawAutomaticSegments();
-        return;
-      }
 
       if (e.key === "Delete" || e.key === "Backspace") {
         let hoveredShapeIndex = stateRef.current.lines.findIndex(
@@ -1971,6 +2391,7 @@ export function MarketMasterPage() {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      seriesMarkersRef.current = null;
       emaSeriesRefs.current = {};
       bollingerSeriesRefs.current = {};
     };
@@ -1980,8 +2401,6 @@ export function MarketMasterPage() {
     applyIndicatorSelectionStyles,
     clearAllSelections,
     detachShapeFromMainSeries,
-    drawAutomaticPens,
-    drawAutomaticSegments,
     findClosestBollingerAtPoint,
     findClosestEmaAtPoint,
     resetAutomaticPensState,
@@ -2252,49 +2671,93 @@ export function MarketMasterPage() {
         });
     }
 
-    setTrades((prevTrades) => {
-      let balanceChange = 0;
-      const updatedTrades = prevTrades.map((trade) => {
-        if (trade.status !== "Open") return trade;
-        let closePrice = null;
-        let reason = "";
-        if (trade.type === "Buy") {
-          if (trade.sl !== null && nextCandle.low <= trade.sl) {
-            closePrice = trade.sl;
-            reason = "SL Hit";
-          } else if (trade.tp !== null && nextCandle.high >= trade.tp) {
-            closePrice = trade.tp;
-            reason = "TP Hit";
-          }
-        } else if (trade.type === "Sell") {
-          if (trade.sl !== null && nextCandle.high >= trade.sl) {
-            closePrice = trade.sl;
-            reason = "SL Hit";
-          } else if (trade.tp !== null && nextCandle.low <= trade.tp) {
-            closePrice = trade.tp;
-            reason = "TP Hit";
-          }
+    let newlyClosed: any[] = [];
+    let balanceChange = 0;
+    const nextTrades = tradesRef.current.map((trade) => {
+      if (trade.status !== "Open") return trade;
+      let closePrice = null;
+      let reason = "";
+      if (trade.type === "Buy") {
+        if (trade.sl !== null && nextCandle.low <= trade.sl) {
+          closePrice = trade.sl;
+          reason = "SL Hit";
+        } else if (trade.tp !== null && nextCandle.high >= trade.tp) {
+          closePrice = trade.tp;
+          reason = "TP Hit";
         }
-        if (closePrice !== null) {
-          const pnl =
-            trade.type === "Buy"
-              ? (closePrice - trade.entry) * trade.units
-              : (trade.entry - closePrice) * trade.units;
-          balanceChange += pnl;
-          return { ...trade, status: "Closed", closePrice, pnl, reason };
+      } else if (trade.type === "Sell") {
+        if (trade.sl !== null && nextCandle.high >= trade.sl) {
+          closePrice = trade.sl;
+          reason = "SL Hit";
+        } else if (trade.tp !== null && nextCandle.low <= trade.tp) {
+          closePrice = trade.tp;
+          reason = "TP Hit";
         }
-        return trade;
-      });
-      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
-      return updatedTrades;
+      }
+      if (closePrice !== null) {
+        const closedTrade = closeTradeRecord(
+          trade,
+          closePrice,
+          reason,
+          nextCandle.time
+        );
+        newlyClosed.push(closedTrade);
+        balanceChange += closedTrade.pnl;
+        return closedTrade;
+      }
+      return trade;
     });
+    settleClosedTrades(nextTrades, newlyClosed, balanceChange, currentIndex);
 
     setCurrentIndex((prev) => prev + 1);
   }, [
+    settleClosedTrades,
     currentIndex,
     indConfig,
     updateAutomaticPensAfterCandle,
     updateAutomaticSegmentsAfterCandle,
+  ]);
+
+  useEffect(() => {
+    if (!canUseAutomaticDraw) return;
+
+    const handleAutomaticDrawShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "f" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        handleDrawAutomaticPens();
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "r" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        handleDrawAutomaticSegments();
+      }
+    };
+
+    window.addEventListener("keydown", handleAutomaticDrawShortcut);
+    return () =>
+      window.removeEventListener("keydown", handleAutomaticDrawShortcut);
+  }, [
+    canUseAutomaticDraw,
+    handleDrawAutomaticPens,
+    handleDrawAutomaticSegments,
   ]);
 
   useEffect(() => {
@@ -2374,61 +2837,91 @@ export function MarketMasterPage() {
       status: "Open",
       pnl: 0,
       visibleOnChart: true,
+      entryTime: getActiveCandle(fullDataRef.current, currentIndexRef.current)
+        ?.time,
     };
-    setTrades([newTrade, ...trades]);
+    commitTrades([newTrade, ...tradesRef.current]);
+    syncTradeMarkers(tradesRef.current);
+    if (newTrade.entryTime != null) {
+      persistRef.current.recordOpen({
+        client_trade_id: String(newTrade.id),
+        bar_time: newTrade.entryTime,
+        bar_index: currentIndexRef.current - 1,
+        side: toPersistSide(type),
+        units: orderUnits,
+        price: entry,
+        sl_price: sl,
+        tp_price: tp,
+      });
+    }
   };
 
   const handleCloseMarket = (tradeId) => {
-    setTrades((prev) => {
-      let balanceChange = 0;
-      const updated = prev.map((t) => {
-        if (t.id === tradeId && t.status === "Open") {
-          const pnl =
-            t.type === "Buy"
-              ? (currentPrice - t.entry) * t.units
-              : (t.entry - currentPrice) * t.units;
-          balanceChange += pnl;
-          return {
-            ...t,
-            status: "Closed",
-            closePrice: currentPrice,
-            pnl,
-            reason: "Market Close",
-          };
-        }
-        return t;
-      });
-      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
-      return updated;
+    const activeCandle = getActiveCandle(
+      fullDataRef.current,
+      currentIndexRef.current
+    );
+    const closeTime = activeCandle?.time;
+    const closePrice = activeCandle?.close || 0;
+    if (closePrice <= 0) return;
+
+    let newlyClosed: any[] = [];
+    let balanceChange = 0;
+    const nextTrades = tradesRef.current.map((t) => {
+      if (t.id === tradeId && t.status === "Open") {
+        const closedTrade = closeTradeRecord(
+          t,
+          closePrice,
+          "Market Close",
+          closeTime
+        );
+        newlyClosed.push(closedTrade);
+        balanceChange += closedTrade.pnl;
+        return closedTrade;
+      }
+      return t;
+    });
+    settleClosedTrades(nextTrades, newlyClosed, balanceChange);
+  };
+
+  requestCloseTradeFromMarkerRef.current = (tradeId) => {
+    const trade = tradesRef.current.find(
+      (item) => String(item.id) === String(tradeId) && item.status === "Open"
+    );
+    if (!trade) return;
+    setPendingTradeClose({
+      kind: "single",
+      tradeId: trade.id,
+      tradeType: trade.type,
+      units: trade.units,
+      entry: trade.entry,
     });
   };
 
   const forceCloseAllOpenTrades = useCallback(() => {
-    const markPrice =
-      fullDataRef.current[currentIndexRef.current - 1]?.close || 0;
+    const activeCandle = getActiveCandle(
+      fullDataRef.current,
+      currentIndexRef.current
+    );
+    const markPrice = activeCandle?.close || 0;
     if (markPrice <= 0) return;
 
-    setTrades((prev) => {
-      let balanceChange = 0;
-      const updated = prev.map((t) => {
-        if (t.status !== "Open") return t;
-        const pnl =
-          t.type === "Buy"
-            ? (markPrice - t.entry) * t.units
-            : (t.entry - markPrice) * t.units;
-        balanceChange += pnl;
-        return {
-          ...t,
-          status: "Closed",
-          closePrice: markPrice,
-          pnl,
-          reason: "Forced Market Close",
-        };
-      });
-      if (balanceChange !== 0) setBalance((b) => b + balanceChange);
-      return updated;
+    let newlyClosed: any[] = [];
+    let balanceChange = 0;
+    const nextTrades = tradesRef.current.map((t) => {
+      if (t.status !== "Open") return t;
+      const closedTrade = closeTradeRecord(
+        t,
+        markPrice,
+        "Forced Market Close",
+        activeCandle?.time
+      );
+      newlyClosed.push(closedTrade);
+      balanceChange += closedTrade.pnl;
+      return closedTrade;
     });
-  }, []);
+    settleClosedTrades(nextTrades, newlyClosed, balanceChange);
+  }, [settleClosedTrades]);
 
   const applyMarketChange = useCallback(
     (kind: "symbol" | "timeframe", value: string) => {
@@ -2516,6 +3009,12 @@ export function MarketMasterPage() {
     }
   }, [customFetch, isBacktestMode, isSyncingLatest, symbol, timeframe]);
 
+  const handleExitBacktest = useCallback(() => {
+    forceCloseAllOpenTrades();
+    setIsPlaying(false);
+    setIsBacktestMode(false);
+  }, [forceCloseAllOpenTrades]);
+
   const confirmPendingMarketChange = useCallback(() => {
     if (!pendingMarketChange) return;
     const { kind, value, wasBacktestMode } = pendingMarketChange;
@@ -2533,8 +3032,8 @@ export function MarketMasterPage() {
   }, []);
 
   const toggleTradeVisibility = (tradeId) => {
-    setTrades((prev) =>
-      prev.map((t) =>
+    commitTrades(
+      tradesRef.current.map((t) =>
         t.id === tradeId
           ? { ...t, visibleOnChart: t.visibleOnChart === false ? true : false }
           : t
@@ -2644,6 +3143,27 @@ export function MarketMasterPage() {
       setLines([...stateRef.current.lines]);
     }
     setContextMenu(null);
+  };
+
+  const handleMenuCloseAll = () => {
+    setContextMenu(null);
+    const openCount = tradesRef.current.filter(
+      (trade) => trade.status === "Open"
+    ).length;
+    if (!isBacktestMode || openCount === 0) return;
+    setPendingTradeClose({ kind: "all", openCount });
+  };
+
+  const cancelPendingTradeClose = () => setPendingTradeClose(null);
+
+  const confirmPendingTradeClose = () => {
+    if (!pendingTradeClose) return;
+    if (pendingTradeClose.kind === "single") {
+      handleCloseMarket(pendingTradeClose.tradeId);
+    } else {
+      forceCloseAllOpenTrades();
+    }
+    setPendingTradeClose(null);
   };
 
   const handleMenuConfig = () => {
@@ -2799,10 +3319,12 @@ export function MarketMasterPage() {
       <MarketMasterOverlays
         aiReviewModal={aiReviewModal}
         applyIndicatorConfig={applyIndicatorConfig}
+        canCloseAllOpenTrades={isBacktestMode && openTrades.length > 0}
         contextMenu={contextMenu}
         draftConfig={draftConfig}
         handleAddDraftEma={handleAddDraftEma}
         handleIndDragStart={handleIndDragStart}
+        handleMenuCloseAll={handleMenuCloseAll}
         handleMenuConfig={handleMenuConfig}
         handleMenuDelete={handleMenuDelete}
         handleRemoveDraftEma={handleRemoveDraftEma}
@@ -2843,14 +3365,15 @@ export function MarketMasterPage() {
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
-        drawAutomaticPens={drawAutomaticPens}
+        drawAutomaticPens={handleDrawAutomaticPens}
         automaticPenCount={automaticPenCount}
-        drawAutomaticSegments={drawAutomaticSegments}
+        drawAutomaticSegments={handleDrawAutomaticSegments}
         automaticSegmentCount={automaticSegmentCount}
         isAutomaticSegmentBusy={isAutomaticSegmentBusy}
         clearLines={clearAllLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}
+        onExitBacktest={handleExitBacktest}
         currentIndex={currentIndex}
         totalCandles={totalCandles}
         handleNextCandle={handleNextCandle}
@@ -2920,6 +3443,14 @@ export function MarketMasterPage() {
         pendingChange={pendingMarketChange}
         onCancel={cancelPendingMarketChange}
         onConfirm={confirmPendingMarketChange}
+      />
+
+      <TradeCloseConfirmDialog
+        pendingClose={pendingTradeClose}
+        currentPrice={currentPrice}
+        priceDecimals={priceDecimals}
+        onCancel={cancelPendingTradeClose}
+        onConfirm={confirmPendingTradeClose}
       />
     </div>
   );

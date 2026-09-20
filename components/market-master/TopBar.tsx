@@ -54,6 +54,7 @@ export const TopBar = ({
   clearLines,
   isBacktestMode,
   setIsBacktestMode,
+  onExitBacktest,
   currentIndex,
   totalCandles,
   handleNextCandle,
@@ -71,7 +72,9 @@ export const TopBar = ({
   isSyncingLatest = false,
 }: any) => {
   const { user, isLoading: isAuthLoading } = useAuth();
-  const canSyncLatest = !isAuthLoading && Boolean(user?.is_superuser);
+  const isSuperuser = !isAuthLoading && Boolean(user?.is_superuser);
+  const canSyncLatest = isSuperuser;
+  const canUseAutomaticDraw = isSuperuser;
   const [isExitBacktestConfirmOpen, setIsExitBacktestConfirmOpen] =
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
@@ -142,6 +145,10 @@ export const TopBar = ({
   const confirmExitBacktest = () => {
     setIsExitBacktestConfirmOpen(false);
     setIsPlaying(false);
+    if (onExitBacktest) {
+      onExitBacktest();
+      return;
+    }
     setIsBacktestMode(false);
   };
 
@@ -255,54 +262,58 @@ export const TopBar = ({
             >
               <AlignJustify size={20} />
             </button>
-            <button
-              onClick={drawAutomaticPens}
-              disabled={
-                isDataLoading || Boolean(dataError) || totalCandles === 0
-              }
-              aria-pressed={automaticPenCount > 0}
-              className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-                automaticPenCount > 0
-                  ? "bg-gray-700 text-yellow-300"
-                  : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
-              }`}
-              title={
-                automaticPenCount > 0
-                  ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
-                  : "自动绘制当前可视区 Pens（快捷键 F）"
-              }
-            >
-              <ChartSpline size={20} />
-            </button>
-            <button
-              onClick={drawAutomaticSegments}
-              disabled={
-                isDataLoading ||
-                Boolean(dataError) ||
-                totalCandles === 0 ||
-                isAutomaticSegmentBusy
-              }
-              aria-pressed={automaticSegmentCount > 0}
-              aria-busy={isAutomaticSegmentBusy}
-              className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-                automaticSegmentCount > 0
-                  ? "bg-gray-700 text-green-400"
-                  : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
-              }`}
-              title={
-                isAutomaticSegmentBusy
-                  ? "正在分批更新 Segments，请稍候..."
-                  : automaticSegmentCount > 0
-                  ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
-                  : "自动绘制 Segments（快捷键 R）"
-              }
-            >
-              {isAutomaticSegmentBusy ? (
-                <Loader2 size={20} className="animate-spin" />
-              ) : (
-                <ChartNoAxesCombined size={20} />
-              )}
-            </button>
+            {canUseAutomaticDraw ? (
+              <>
+                <button
+                  onClick={drawAutomaticPens}
+                  disabled={
+                    isDataLoading || Boolean(dataError) || totalCandles === 0
+                  }
+                  aria-pressed={automaticPenCount > 0}
+                  className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+                    automaticPenCount > 0
+                      ? "bg-gray-700 text-yellow-300"
+                      : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
+                  }`}
+                  title={
+                    automaticPenCount > 0
+                      ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
+                      : "自动绘制当前可视区 Pens（快捷键 F）"
+                  }
+                >
+                  <ChartSpline size={20} />
+                </button>
+                <button
+                  onClick={drawAutomaticSegments}
+                  disabled={
+                    isDataLoading ||
+                    Boolean(dataError) ||
+                    totalCandles === 0 ||
+                    isAutomaticSegmentBusy
+                  }
+                  aria-pressed={automaticSegmentCount > 0}
+                  aria-busy={isAutomaticSegmentBusy}
+                  className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
+                    automaticSegmentCount > 0
+                      ? "bg-gray-700 text-green-400"
+                      : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
+                  }`}
+                  title={
+                    isAutomaticSegmentBusy
+                      ? "正在分批更新 Segments，请稍候..."
+                      : automaticSegmentCount > 0
+                        ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
+                        : "自动绘制 Segments（快捷键 R）"
+                  }
+                >
+                  {isAutomaticSegmentBusy ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <ChartNoAxesCombined size={20} />
+                  )}
+                </button>
+              </>
+            ) : null}
             <button
               onClick={clearLines}
               disabled={isAutomaticSegmentBusy}
