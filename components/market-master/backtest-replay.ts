@@ -19,7 +19,9 @@ export type BacktestSessionListItem = {
   timeframe?: string | null;
   status: string;
   start_bar_time?: string | null;
+  start_bar_index?: number | null;
   cursor_bar_time?: string | null;
+  cursor_bar_index?: number | null;
   initial_balance?: number;
   ending_balance?: number | null;
   trade_count?: number;
@@ -96,3 +98,52 @@ export const sortReplayEvents = (events: BacktestReplayEvent[] = []) =>
     const rightSeq = Number(right.sequence_no || 0);
     return leftSeq - rightSeq;
   });
+
+export type BacktestReplayTimeline = {
+  startUnix: number | null;
+  endUnix: number | null;
+  /**
+   * Older clients could persist a stale start/cursor after changing markets.
+   * In that case the earliest trustworthy point is the candle before the
+   * first event, so that the first order is still revealed by stepping.
+   */
+  startBeforeFirstEvent: boolean;
+  recoveredFromEvents: boolean;
+};
+
+export const resolveReplayTimeline = (
+  detail?: Partial<BacktestSessionDetail> | null
+): BacktestReplayTimeline => {
+  const recordedStartUnix = toUnixSeconds(detail?.start_bar_time);
+  const recordedEndUnix = toUnixSeconds(detail?.cursor_bar_time);
+  const eventTimes = (detail?.events || [])
+    .map((event) => toUnixSeconds(event.bar_time))
+    .filter((time): time is number => time != null);
+  const firstEventUnix = eventTimes.length ? Math.min(...eventTimes) : null;
+  const lastEventUnix = eventTimes.length ? Math.max(...eventTimes) : null;
+
+  const eventsPredateRecordedStart =
+    firstEventUnix != null &&
+    (recordedStartUnix == null || firstEventUnix < recordedStartUnix);
+
+  if (eventsPredateRecordedStart) {
+    return {
+      startUnix: firstEventUnix,
+      endUnix: lastEventUnix,
+      startBeforeFirstEvent: true,
+      recoveredFromEvents: true,
+    };
+  }
+
+  const startUnix = recordedStartUnix ?? firstEventUnix;
+  const endCandidates = [startUnix, recordedEndUnix, lastEventUnix].filter(
+    (time): time is number => time != null
+  );
+
+  return {
+    startUnix,
+    endUnix: endCandidates.length ? Math.max(...endCandidates) : null,
+    startBeforeFirstEvent: false,
+    recoveredFromEvents: recordedStartUnix == null && firstEventUnix != null,
+  };
+};
