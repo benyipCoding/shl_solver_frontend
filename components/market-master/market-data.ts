@@ -81,30 +81,33 @@ const toUtcEpochSeconds = (dateTimeValue?: string) => {
 
 export const normalizeCandles = (
   candles: CandleInput[] = []
-): NormalizedCandle[] =>
-  [...candles]
-    .sort(
-      (a, b) =>
-        (toUtcEpochSeconds(a.datetime) || 0) -
-        (toUtcEpochSeconds(b.datetime) || 0)
-    )
-    .map((candle) => {
-      const time = toUtcEpochSeconds(candle.datetime);
-      const open = Number(candle.open);
-      const high = Number(candle.high);
-      const low = Number(candle.low);
-      const close = Number(candle.close);
+): NormalizedCandle[] => {
+  const candlesByTime = new Map<number, NormalizedCandle>();
 
-      if (
-        time === null ||
-        [open, high, low, close].some((value) => Number.isNaN(value))
-      ) {
-        return null;
-      }
+  for (const candle of candles) {
+    const time = toUtcEpochSeconds(candle.datetime);
+    const prices = [candle.open, candle.high, candle.low, candle.close];
+    if (
+      time === null ||
+      prices.some(
+        (value) =>
+          value == null ||
+          (typeof value === "string" && value.trim() === "") ||
+          !Number.isFinite(Number(value))
+      )
+    ) {
+      continue;
+    }
 
-      return { time, open, high, low, close };
-    })
-    .filter((candle): candle is NormalizedCandle => candle !== null);
+    const [open, high, low, close] = prices.map(Number);
+    // Lightweight Charts requires strictly increasing, unique times. Deduplicate
+    // after UTC/second conversion, keeping the last valid candle for each time.
+    // Do this before indicator calculation so every series uses the same bars.
+    candlesByTime.set(time, { time, open, high, low, close });
+  }
+
+  return [...candlesByTime.values()].sort((a, b) => a.time - b.time);
+};
 
 const toFiniteNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
