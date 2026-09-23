@@ -1,4 +1,5 @@
 import React from "react";
+import type { TradePosition } from "./trade-management";
 import {
   ChevronDown,
   ChevronUp,
@@ -16,12 +17,34 @@ export const TradeHistory = ({
   priceDecimals,
   toggleTradeVisibility,
   handleCloseMarket,
+  onManageTrade,
   handleAIReview,
   isMaximized,
   panelHeight,
   isReplayMode = false,
 }: any) => {
   if (isMaximized) return null;
+
+  const rowInteractions = (trade: Pick<TradePosition, "status" | "id">) => {
+    if (trade.status !== "Open" || isReplayMode || !onManageTrade) return {};
+    return {
+      tabIndex: 0,
+      title: "点击管理订单：止损、止盈或部分平仓",
+      onClick: (event: React.MouseEvent<HTMLElement>) => {
+        if (
+          (event.target as Element).closest("button, a, input, select, textarea")
+        ) return;
+        onManageTrade(trade.id);
+      },
+      onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onManageTrade(trade.id);
+        }
+      },
+    };
+  };
 
   return (
     <div
@@ -76,7 +99,8 @@ export const TradeHistory = ({
               return (
                 <article
                   key={trade.id}
-                  className="rounded-lg border border-gray-800 bg-gray-900/80 p-3"
+                  {...rowInteractions(trade)}
+                  className={`rounded-lg border border-gray-800 bg-gray-900/80 p-3 ${isOpen && !isReplayMode ? "cursor-pointer hover:bg-gray-800/50 focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -151,14 +175,16 @@ export const TradeHistory = ({
                         ) : (
                           <Eye size={16} />
                         )}
-                        {trade.visibleOnChart === false ? "显示标线" : "隐藏标线"}
+                        {trade.visibleOnChart === false
+                          ? "显示标线"
+                          : "隐藏标线"}
                       </button>
                       {!isReplayMode && (
                         <button
                           onClick={() => handleCloseMarket(trade.id)}
                           className="min-h-9 rounded bg-gray-700 px-4 text-xs text-white transition-colors hover:bg-gray-600"
                         >
-                          市价平仓
+                          平仓
                         </button>
                       )}
                     </div>
@@ -200,7 +226,11 @@ export const TradeHistory = ({
                     : (trade.entry - currentPrice) * trade.units
                   : trade.pnl;
                 return (
-                  <tr key={trade.id} className="hover:bg-gray-800/30">
+                  <tr
+                    key={trade.id}
+                    {...rowInteractions(trade)}
+                    className={`hover:bg-gray-800/30 ${isOpen && !isReplayMode ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
+                  >
                     <td className="px-4 py-2">
                       <span
                         className={`text-xs px-2 py-0.5 rounded ${
@@ -275,7 +305,7 @@ export const TradeHistory = ({
                               onClick={() => handleCloseMarket(trade.id)}
                               className="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-white transition-colors"
                             >
-                              市价平仓
+                              平仓
                             </button>
                           )}
                         </div>

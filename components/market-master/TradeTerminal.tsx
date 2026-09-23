@@ -19,6 +19,8 @@ type TradeTerminalProps = {
   tpDistance: number;
   setTpDistance: (distance: number | ((prev: number) => number)) => void;
   handlePlaceOrder: (type: "Buy" | "Sell") => void;
+  handleCloseAll: () => void;
+  openTradeCount: number;
   priceDecimals: number;
   riskInputStep: string;
   isMaximized: boolean;
@@ -106,6 +108,8 @@ export const TradeTerminal = ({
   tpDistance,
   setTpDistance,
   handlePlaceOrder,
+  handleCloseAll,
+  openTradeCount,
   priceDecimals,
   riskInputStep,
   isMaximized,
@@ -385,12 +389,13 @@ export const TradeTerminal = ({
                 {isReplayMode
                   ? "提示：回放模式下只可观看，不可下单"
                   : canPlaceOrder
-                    ? "提示：建仓后可直接在图表上拖拽止损止盈线"
+                    ? "提示：点击建仓箭头管理订单，也可拖拽止损止盈线"
                     : "提示：请先开启逐K回测后再下单（做多/做空）"}
               </div>
             </div>
 
-            <div className="mt-auto flex gap-3 md:mb-4">
+            <div className="mt-auto space-y-2 md:mb-4">
+              <div className="flex gap-3">
               <button
                 onClick={() => handlePlaceOrder("Sell")}
                 disabled={!canPlaceOrder}
@@ -418,6 +423,16 @@ export const TradeTerminal = ({
                 className="flex-1 rounded-lg bg-emerald-600 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
               >
                 做多 (Buy)
+              </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseAll}
+                disabled={!canPlaceOrder || isReplayMode || openTradeCount === 0}
+                className="w-full rounded-lg border border-gray-600 bg-gray-800 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:border-red-400/60 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-600 disabled:hover:bg-gray-800 disabled:hover:text-gray-200"
+                title={openTradeCount === 0 ? "暂无持仓可平" : `按当前市价平掉全部 ${openTradeCount} 笔持仓`}
+              >
+                全部平仓{openTradeCount > 0 ? `（${openTradeCount} 笔）` : ""}
               </button>
             </div>
           </div>

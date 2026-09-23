@@ -61,6 +61,9 @@ type MarketWorkspaceProps = {
   formatValue: (value: number | null | undefined) => string;
   handleAIReview: (trade?: unknown) => void;
   handleCloseMarket: (tradeId: unknown) => void;
+  onManageTrade: (tradeId: unknown) => void;
+  handleCloseAll: () => void;
+  openTradeCount: number;
   handlePlaceOrder: (type: "Buy" | "Sell") => void;
   hideCandleTooltip: () => void;
   indConfig: IndicatorConfig;
@@ -112,6 +115,9 @@ export function MarketWorkspace({
   formatValue,
   handleAIReview,
   handleCloseMarket,
+  onManageTrade,
+  handleCloseAll,
+  openTradeCount,
   handlePlaceOrder,
   hideCandleTooltip,
   indConfig,
@@ -319,6 +325,7 @@ export function MarketWorkspace({
           priceDecimals={priceDecimals}
           toggleTradeVisibility={toggleTradeVisibility}
           handleCloseMarket={handleCloseMarket}
+          onManageTrade={onManageTrade}
           handleAIReview={handleAIReview}
           isMaximized={isMaximized}
           panelHeight={bottomPanelHeight}
@@ -350,6 +357,8 @@ export function MarketWorkspace({
         tpDistance={tpDistance}
         setTpDistance={setTpDistance}
         handlePlaceOrder={handlePlaceOrder}
+        handleCloseAll={handleCloseAll}
+        openTradeCount={openTradeCount}
         priceDecimals={priceDecimals}
         riskInputStep={riskInputStep}
         isMaximized={isMaximized}

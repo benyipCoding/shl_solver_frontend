@@ -43,6 +43,8 @@ export type BacktestOpenPayload = {
 
 export type BacktestClosePayload = {
   client_trade_id: string;
+  client_event_id?: string;
+  units?: number;
   bar_time: number;
   bar_index: number;
   price: number;
@@ -54,7 +56,7 @@ export type BacktestModifyPayload = {
   kind: "sl" | "tp";
   bar_time: number;
   bar_index: number;
-  price: number;
+  price: number | null;
 };
 
 export type BacktestCompletePayload = {
@@ -152,6 +154,8 @@ export const createBacktestPersistClient = () => {
               body: JSON.stringify({
                 event_type: "CLOSE",
                 client_trade_id: payload.client_trade_id,
+                client_event_id: payload.client_event_id,
+                units: payload.units,
                 bar_time: payload.bar_time,
                 bar_index: payload.bar_index,
                 price: payload.price,

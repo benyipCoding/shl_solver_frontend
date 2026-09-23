@@ -1,3 +1,5 @@
+import { closeTradeUnits, type TradePosition } from "./trade-management";
+
 export type BacktestReplayEvent = {
   sequence_no: number;
   event_type: string;
@@ -40,7 +42,9 @@ export type BacktestSessionDetail = BacktestSessionListItem & {
 export const toUnixSeconds = (value: unknown): number | null => {
   if (value == null || value === "") return null;
   if (typeof value === "number" && Number.isFinite(value)) {
-    return value > 10_000_000_000 ? Math.floor(value / 1000) : Math.floor(value);
+    return value > 10_000_000_000
+      ? Math.floor(value / 1000)
+      : Math.floor(value);
   }
   const parsed = Date.parse(String(value));
   if (Number.isNaN(parsed)) return null;
@@ -49,7 +53,7 @@ export const toUnixSeconds = (value: unknown): number | null => {
 
 export const findCandleIndexByTime = (
   data: Array<{ time?: number }> = [],
-  unixSeconds: number | null
+  unixSeconds: number | null,
 ) => {
   if (unixSeconds == null || !data.length) return -1;
   const exact = data.findIndex((candle) => candle.time === unixSeconds);
@@ -99,6 +103,59 @@ export const sortReplayEvents = (events: BacktestReplayEvent[] = []) =>
     return leftSeq - rightSeq;
   });
 
+export const applyReplayTradeEvents = (
+  trades: TradePosition[],
+  events: BacktestReplayEvent[],
+) => {
+  let nextTrades = [...trades];
+  let balanceChange = 0;
+  for (const event of events) {
+    const tradeId = parseReplayTradeId(event.client_trade_id);
+    if (event.event_type === "OPEN") {
+      nextTrades.unshift({
+        id: tradeId,
+        type: fromPersistSide(event.side),
+        entry: Number(event.price),
+        sl: event.sl_price == null ? null : Number(event.sl_price),
+        tp: event.tp_price == null ? null : Number(event.tp_price),
+        units: Number(event.units),
+        status: "Open",
+        pnl: 0,
+        visibleOnChart: true,
+        entryTime: toUnixSeconds(event.bar_time)!,
+      });
+    } else if (
+      event.event_type === "MODIFY_SL" ||
+      event.event_type === "MODIFY_TP"
+    ) {
+      const kind = event.event_type === "MODIFY_SL" ? "sl" : "tp";
+      nextTrades = nextTrades.map((trade) =>
+        String(trade.id) === String(tradeId) && trade.status === "Open"
+          ? {
+              ...trade,
+              [kind]: event.price == null ? null : Number(event.price),
+            }
+          : trade,
+      );
+    } else if (event.event_type === "CLOSE") {
+      nextTrades = nextTrades.flatMap((trade) => {
+        if (String(trade.id) !== String(tradeId) || trade.status !== "Open")
+          return [trade];
+        const { closed, remaining } = closeTradeUnits(
+          trade,
+          event.units == null ? trade.units : Number(event.units),
+          Number(event.price),
+          toUnixSeconds(event.bar_time)!,
+          fromPersistCloseReason(event.close_reason),
+        );
+        balanceChange += closed.pnl;
+        return remaining ? [remaining, closed] : [closed];
+      });
+    }
+  }
+  return { trades: nextTrades, balanceChange };
+};
+
 export type BacktestReplayTimeline = {
   startUnix: number | null;
   endUnix: number | null;
@@ -112,7 +169,7 @@ export type BacktestReplayTimeline = {
 };
 
 export const resolveReplayTimeline = (
-  detail?: Partial<BacktestSessionDetail> | null
+  detail?: Partial<BacktestSessionDetail> | null,
 ): BacktestReplayTimeline => {
   const recordedStartUnix = toUnixSeconds(detail?.start_bar_time);
   const recordedEndUnix = toUnixSeconds(detail?.cursor_bar_time);
@@ -137,7 +194,7 @@ export const resolveReplayTimeline = (
 
   const startUnix = recordedStartUnix ?? firstEventUnix;
   const endCandidates = [startUnix, recordedEndUnix, lastEventUnix].filter(
-    (time): time is number => time != null
+    (time): time is number => time != null,
   );
 
   return {

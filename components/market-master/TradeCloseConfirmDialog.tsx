@@ -79,7 +79,7 @@ export function TradeCloseConfirmDialog({
                 >
                   {pendingClose.tradeType === "Buy" ? "多单" : "空单"}
                 </span>
-                。
+                的 {pendingClose.units} Units。
               </p>
               <p className="text-gray-400">
                 开仓价 {pendingClose.entry.toFixed(priceDecimals)} · 当前市价{" "}

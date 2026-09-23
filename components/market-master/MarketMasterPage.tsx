@@ -105,14 +105,15 @@ import {
 import { BacktestHistoryModal } from "@/components/market-master/BacktestHistoryModal";
 import {
   findCandleIndexByTime,
-  fromPersistCloseReason,
-  fromPersistSide,
-  parseReplayTradeId,
+  applyReplayTradeEvents,
   resolveReplayTimeline,
   sortReplayEvents,
   toUnixSeconds,
 } from "@/components/market-master/backtest-replay";
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
+import { TradeManagementDialog } from "./TradeManagementDialog";
+import { TradeConnectionPrimitive } from "./trade-connection";
+import { closeTradeRecord, closeTradeUnits, getRiskPriceError } from "./trade-management";
 
 const BOLLINGER_LINE_DEFINITIONS = [
   { key: "upper", colorKey: "upperColor" },
@@ -133,27 +134,6 @@ const CLOSED_TRADE_MARKER_SIZE = 2.4;
 
 const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
   data[currentIndex - 1] ?? null;
-
-const closeTradeRecord = (
-  trade: any,
-  closePrice: number,
-  reason: string,
-  closeTime: any
-) => {
-  const pnl =
-    trade.type === "Buy"
-      ? (closePrice - trade.entry) * trade.units
-      : (trade.entry - closePrice) * trade.units;
-
-  return {
-    ...trade,
-    status: "Closed",
-    closePrice,
-    pnl,
-    reason,
-    closeTime,
-  };
-};
 
 const getTradeMarkerColor = (trade: any, markPrice = 0) => {
   if (trade?.status === "Closed") {
@@ -703,9 +683,11 @@ export function MarketMasterPage() {
   const seriesMarkersRef = useRef<any>(null);
   const closedTradeMarkersRef = useRef<any[]>([]);
   const updateTradePriceRef = useRef<any>();
-  const requestCloseTradeFromMarkerRef = useRef<(tradeId: any) => void>(
+  const openTradeManagementRef = useRef<(tradeId: any) => void>(
     () => {}
   );
+  const tradeConnectionRef = useRef<TradeConnectionPrimitive | null>(null);
+  const [managedTradeId, setManagedTradeId] = useState<string | number | null>(null);
   const ignoreContextMenuCloseRef = useRef(false);
 
   const syncTradeMarkers = useCallback((tradeList: any[] = []) => {
@@ -719,11 +701,13 @@ export function MarketMasterPage() {
   }, []);
 
   const clearClosedTradeMarkers = useCallback(() => {
+    tradeConnectionRef.current?.setTrade(null);
     closedTradeMarkersRef.current = [];
     seriesMarkersRef.current?.setMarkers([]);
   }, []);
 
   const resetBacktestAccount = useCallback(() => {
+    setManagedTradeId(null);
     balanceRef.current = INITIAL_BACKTEST_BALANCE;
     setBalance(INITIAL_BACKTEST_BALANCE);
     tradesRef.current = [];
@@ -776,7 +760,9 @@ export function MarketMasterPage() {
       newlyClosed.forEach((trade) => {
         if (trade?.closeTime == null || trade?.closePrice == null) return;
         persistRef.current.recordClose({
-          client_trade_id: String(trade.id),
+          client_trade_id: String(trade.parentTradeId ?? trade.id),
+          client_event_id: `close:${trade.id}`,
+          units: trade.units,
           bar_time: trade.closeTime,
           bar_index: loadedOffsetRef.current + resolvedBarIndex,
           price: trade.closePrice,
@@ -789,6 +775,16 @@ export function MarketMasterPage() {
 
   updateTradePriceRef.current = (tradeId: any, type: any, newPrice: any) => {
     if (isReplayModeRef.current) return;
+    if (type !== "sl" && type !== "tp") return;
+    const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
+    if (!trade) return;
+    const markPrice = getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close;
+    const error = getRiskPriceError(trade.type, type, newPrice, markPrice);
+    if (error) {
+      orderLinesRef.current[tradeId]?.[type]?.applyOptions({ price: trade[type] });
+      toast.error(error);
+      return;
+    }
     commitTrades(
       tradesRef.current.map((t) =>
         t.id === tradeId ? { ...t, [type]: newPrice } : t
@@ -821,62 +817,7 @@ export function MarketMasterPage() {
       replayEventsRef.current = remaining;
       if (!due.length) return;
 
-      let nextTrades = [...tradesRef.current];
-      let balanceChange = 0;
-      due.forEach((event) => {
-        const tradeId = parseReplayTradeId(event.client_trade_id);
-        if (event.event_type === "OPEN") {
-          nextTrades = [
-            {
-              id: tradeId,
-              type: fromPersistSide(event.side),
-              entry: Number(event.price),
-              sl: event.sl_price != null ? Number(event.sl_price) : null,
-              tp: event.tp_price != null ? Number(event.tp_price) : null,
-              units: Number(event.units || 0),
-              status: "Open",
-              pnl: 0,
-              visibleOnChart: true,
-              entryTime: toUnixSeconds(event.bar_time),
-            },
-            ...nextTrades,
-          ];
-          return;
-        }
-
-        if (event.event_type === "MODIFY_SL") {
-          nextTrades = nextTrades.map((trade) =>
-            String(trade.id) === String(tradeId)
-              ? { ...trade, sl: Number(event.price) }
-              : trade
-          );
-          return;
-        }
-
-        if (event.event_type === "MODIFY_TP") {
-          nextTrades = nextTrades.map((trade) =>
-            String(trade.id) === String(tradeId)
-              ? { ...trade, tp: Number(event.price) }
-              : trade
-          );
-          return;
-        }
-
-        if (event.event_type !== "CLOSE") return;
-        nextTrades = nextTrades.map((trade) => {
-          if (String(trade.id) !== String(tradeId) || trade.status !== "Open") {
-            return trade;
-          }
-          const closedTrade = closeTradeRecord(
-            trade,
-            Number(event.price),
-            fromPersistCloseReason(event.close_reason),
-            toUnixSeconds(event.bar_time)
-          );
-          balanceChange += closedTrade.pnl;
-          return closedTrade;
-        });
-      });
+      const { trades: nextTrades, balanceChange } = applyReplayTradeEvents(tradesRef.current, due);
 
       commitTrades(nextTrades);
       syncTradeMarkers(nextTrades);
@@ -2559,6 +2500,10 @@ export function MarketMasterPage() {
       closedTradeMarkersRef.current,
       { zOrder: "top", autoScale: true }
     );
+    const tradeConnection = new TradeConnectionPrimitive();
+    series.attachPrimitive(tradeConnection);
+    tradeConnectionRef.current = tradeConnection;
+    const clearTradeConnection = () => tradeConnection.setTrade(null);
 
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current)
@@ -2575,6 +2520,13 @@ export function MarketMasterPage() {
     }
 
     const crosshairMoveHandler = (param) => {
+      const hoveredMarker = !isSyncingCrosshairRef.current && param.point
+        ? resolveTradeMarkerHit(chart, series, fullDataRef.current, tradesRef.current, param)
+        : null;
+      const hoveredTrade = hoveredMarker
+        ? tradesRef.current.find((trade) => String(trade.id) === hoveredMarker.tradeId)
+        : null;
+      tradeConnection.setTrade(hoveredTrade?.status === "Closed" ? hoveredTrade : null);
       if (param.time) {
         stateRef.current.isHovering = true;
         stateRef.current.lastHoveredTime = param.time;
@@ -2802,13 +2754,6 @@ export function MarketMasterPage() {
         state.hoveredOrderLine = foundOrderLineHover;
 
         if (chartContainerRef.current) {
-          const hoveredMarker = resolveTradeMarkerHit(
-            chart,
-            series,
-            fullDataRef.current,
-            tradesRef.current,
-            param
-          );
           const hoveredOpenEntry =
             hoveredMarker?.kind === "entry" &&
             tradesRef.current.some(
@@ -2867,7 +2812,7 @@ export function MarketMasterPage() {
       if (markerHit) {
         hideCandleTooltip();
         if (markerHit.kind === "entry") {
-          requestCloseTradeFromMarkerRef.current?.(markerHit.tradeId);
+          openTradeManagementRef.current?.(markerHit.tradeId);
         }
         return;
       }
@@ -3102,6 +3047,7 @@ export function MarketMasterPage() {
 
     const containerEl = chartContainerRef.current;
     if (containerEl) {
+      containerEl.addEventListener("mouseleave", clearTradeConnection);
       containerEl.addEventListener("mousedown", mousedownHandler);
       containerEl.addEventListener("contextmenu", contextMenuHandler);
     }
@@ -3118,6 +3064,7 @@ export function MarketMasterPage() {
         .timeScale()
         .unsubscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
       if (containerEl) {
+        containerEl.removeEventListener("mouseleave", clearTradeConnection);
         containerEl.removeEventListener("mousedown", mousedownHandler);
         containerEl.removeEventListener("contextmenu", contextMenuHandler);
       }
@@ -3126,6 +3073,8 @@ export function MarketMasterPage() {
       window.removeEventListener("keydown", handleKeyDown);
       resetAutomaticPensState();
       resetAutomaticSegmentsState();
+      series.detachPrimitive(tradeConnection);
+      tradeConnectionRef.current = null;
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -3610,6 +3559,10 @@ export function MarketMasterPage() {
   const handlePlaceOrder = (type) => {
     if (!isBacktestMode || isReplayModeRef.current) return;
     if (!fullDataRef.current.length || currentPrice <= 0) return;
+    if (!Number.isInteger(orderUnits) || orderUnits <= 0) {
+      toast.error("交易数量必须为正整数");
+      return;
+    }
 
     const entry = currentPrice;
     const sl = slEnabled
@@ -3623,7 +3576,9 @@ export function MarketMasterPage() {
         : entry - tpDistance
       : null;
     const newTrade = {
-      id: Date.now(),
+      id: typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `trade-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       type,
       entry,
       sl,
@@ -3656,8 +3611,9 @@ export function MarketMasterPage() {
     }
   };
 
-  const handleCloseMarket = (tradeId) => {
+  const handleCloseMarket = (tradeId, unitsOverride?: number) => {
     if (isReplayModeRef.current) return;
+    if (!isBacktestModeRef.current) return;
     const activeCandle = getActiveCandle(
       fullDataRef.current,
       currentIndexRef.current
@@ -3668,36 +3624,57 @@ export function MarketMasterPage() {
 
     let newlyClosed: any[] = [];
     let balanceChange = 0;
-    const nextTrades = tradesRef.current.map((t) => {
-      if (t.id === tradeId && t.status === "Open") {
-        const closedTrade = closeTradeRecord(
+    const trade = tradesRef.current.find((t) => String(t.id) === String(tradeId) && t.status === "Open");
+    if (!trade) return;
+    const units = unitsOverride ?? trade.units;
+    if (!Number.isInteger(units) || units < 1 || units > trade.units) {
+      toast.error("平仓数量超出剩余持仓，请重新选择");
+      return;
+    }
+    const nextTrades = tradesRef.current.flatMap((t) => {
+      if (t === trade) {
+        const { closed, remaining } = closeTradeUnits(
           t,
+          units,
           closePrice,
-          "Market Close",
           closeTime
         );
-        newlyClosed.push(closedTrade);
-        balanceChange += closedTrade.pnl;
-        return closedTrade;
+        newlyClosed.push(closed);
+        balanceChange += closed.pnl;
+        return remaining ? [remaining, closed] : [closed];
       }
-      return t;
+      return [t];
     });
     settleClosedTrades(nextTrades, newlyClosed, balanceChange);
   };
 
-  requestCloseTradeFromMarkerRef.current = (tradeId) => {
-    if (isReplayModeRef.current) return;
+  const handleOpenTradeManagement = (tradeId) => {
+    if (isReplayModeRef.current || !isBacktestModeRef.current) return;
     const trade = tradesRef.current.find(
       (item) => String(item.id) === String(tradeId) && item.status === "Open"
     );
     if (!trade) return;
-    setPendingTradeClose({
-      kind: "single",
-      tradeId: trade.id,
-      tradeType: trade.type,
-      units: trade.units,
-      entry: trade.entry,
-    });
+    hideCandleTooltip();
+    setManagedTradeId(trade.id);
+  };
+  openTradeManagementRef.current = handleOpenTradeManagement;
+
+  const handleSaveTradeRisk = (tradeId, sl, tp) => {
+    if (isReplayModeRef.current || !isBacktestModeRef.current) return "当前不可修改持仓";
+    const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
+    if (!trade) return "该订单已平仓";
+    const candle = getActiveCandle(fullDataRef.current, currentIndexRef.current);
+    if (!candle) return "暂无有效行情";
+    const error = getRiskPriceError(trade.type, "sl", sl, candle.close) || getRiskPriceError(trade.type, "tp", tp, candle.close);
+    if (error) return error;
+    commitTrades(tradesRef.current.map((t) => t === trade ? { ...t, sl, tp } : t));
+    for (const [kind, price] of [["sl", sl], ["tp", tp]]) {
+      if (trade[kind] === price) continue;
+      persistRef.current.recordModify({ client_trade_id: String(trade.id), kind, price,
+        bar_time: candle.time, bar_index: loadedOffsetRef.current + currentIndexRef.current - 1 });
+    }
+    toast.success("止损 / 止盈已保存");
+    return null;
   };
 
   const forceCloseAllOpenTrades = useCallback(() => {
@@ -4019,10 +3996,10 @@ export function MarketMasterPage() {
     const series = seriesRef.current;
     const visibleOpenTradeIds = trades
       .filter((t) => t.status === "Open" && t.visibleOnChart !== false)
-      .map((t) => t.id);
+      .map((t) => String(t.id));
 
     Object.keys(orderLinesRef.current).forEach((id) => {
-      if (!visibleOpenTradeIds.includes(Number(id))) {
+      if (!visibleOpenTradeIds.includes(id)) {
         const lines = orderLinesRef.current[id];
         if (lines.entry) series.removePriceLine(lines.entry);
         if (lines.sl) series.removePriceLine(lines.sl);
@@ -4047,6 +4024,7 @@ export function MarketMasterPage() {
           lines = { entry: entryLine, sl: null, tp: null };
           orderLinesRef.current[trade.id] = lines;
         }
+        lines.entry.applyOptions({ title: `${trade.type} ${trade.units}` });
         if (trade.sl !== null) {
           if (!lines.sl) {
             lines.sl = series.createPriceLine({
@@ -4135,7 +4113,7 @@ export function MarketMasterPage() {
   const confirmPendingTradeClose = () => {
     if (!pendingTradeClose) return;
     if (pendingTradeClose.kind === "single") {
-      handleCloseMarket(pendingTradeClose.tradeId);
+      handleCloseMarket(pendingTradeClose.tradeId, pendingTradeClose.units);
     } else {
       forceCloseAllOpenTrades();
     }
@@ -4405,6 +4383,9 @@ export function MarketMasterPage() {
         formatValue={formatVal}
         handleAIReview={handleAIReview}
         handleCloseMarket={handleCloseMarket}
+        onManageTrade={handleOpenTradeManagement}
+        handleCloseAll={handleMenuCloseAll}
+        openTradeCount={openTrades.length}
         handlePlaceOrder={handlePlaceOrder}
         hideCandleTooltip={hideCandleTooltip}
         indConfig={indConfig}
@@ -4476,6 +4457,21 @@ export function MarketMasterPage() {
         onCancel={cancelPendingTradeClose}
         onConfirm={confirmPendingTradeClose}
       />
+      {isBacktestMode && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
+        <TradeManagementDialog
+          key={managedTradeId}
+          trade={trades.find((trade) => trade.id === managedTradeId && trade.status === "Open")}
+          symbol={symbol}
+          currentPrice={currentPrice}
+          priceDecimals={priceDecimals}
+          riskInputStep={activeInstrumentProfile.inputStep}
+          defaultSlDistance={activeInstrumentProfile.sl}
+          defaultTpDistance={activeInstrumentProfile.tp}
+          onDismiss={() => setManagedTradeId(null)}
+          onSaveRisk={handleSaveTradeRisk}
+          onCloseUnits={handleCloseMarket}
+        />
+      )}
     </div>
   );
 }
