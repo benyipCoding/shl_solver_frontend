@@ -447,23 +447,23 @@ export const TopBar = ({
               <button
                 type="button"
                 onClick={handleOpenBacktestHistory}
-                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 lg:ml-3"
+                className="ml-1 flex h-[50px] shrink-0 items-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 sm:h-[42px] lg:ml-3"
                 title="查看回测记录并还原播放"
               >
-                <History size={16} className="shrink-0" />
+                <History size={18} className="shrink-0" />
                 <span className="2xl:hidden">记录</span>
                 <span className="hidden 2xl:inline">回测记录</span>
               </button>
               <button
                 onClick={handleEnterBacktest}
                 disabled={isBacktestToggleDisabled}
-                className="ml-1 flex shrink-0 items-center gap-2 rounded-full border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="ml-1 flex h-[50px] shrink-0 items-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
                 title={backtestButtonTitle}
               >
                 {isDataLoading ? (
-                  <Loader2 size={16} className="shrink-0 animate-spin" />
+                  <Loader2 size={18} className="shrink-0 animate-spin" />
                 ) : (
-                  <StepForward size={16} className="shrink-0" />
+                  <StepForward size={18} className="shrink-0" />
                 )}
                 <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
                 <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
