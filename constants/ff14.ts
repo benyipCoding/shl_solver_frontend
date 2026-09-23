@@ -1,4 +1,4 @@
-import { Orbitron, Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 
 import type {
   CharacterSummary,
@@ -10,15 +10,17 @@ import type {
   StaticText,
 } from "@/interfaces/ff14";
 
-export const headingFont = Orbitron({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+export const headingFont = localFont({
+  src: "../assets/fonts/orbitron/orbitron-latin-wght-normal.woff2",
+  weight: "600 700",
+  display: "swap",
   variable: "--font-heading",
 });
 
-export const bodyFont = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+export const bodyFont = localFont({
+  src: "../assets/fonts/plus-jakarta-sans/plus-jakarta-sans-latin-wght-normal.woff2",
+  weight: "400 700",
+  display: "swap",
   variable: "--font-body",
 });
 

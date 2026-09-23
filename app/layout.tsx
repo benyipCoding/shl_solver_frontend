@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { AuthProvider } from "@/context/AuthContext";
 import { FetchProvider } from "@/context/FetchContext";
 import "./globals.css";
@@ -8,14 +8,19 @@ import { PostHogProvider } from "@/components/common/PostHogProvider";
 import { ThemeProvider } from "@/components/common/ThemeProvider";
 import { ReduxProvider } from "@/store/ReduxProvider";
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../assets/fonts/geist/geist-latin-wght-normal.woff2",
+  weight: "100 900",
+  display: "swap",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../assets/fonts/geist-mono/geist-mono-latin-wght-normal.woff2",
+  weight: "100 900",
+  display: "swap",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  fallback: ["monospace"],
 });
 
 export const metadata: Metadata = {
