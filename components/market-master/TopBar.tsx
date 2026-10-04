@@ -55,6 +55,11 @@ export const TopBar = ({
   drawAutomaticSegments,
   automaticSegmentCount = 0,
   isAutomaticSegmentBusy = false,
+  onToggleSupportResistance,
+  isSupportResistanceEnabled = false,
+  supportResistanceCount = 0,
+  isSupportResistanceBusy = false,
+  supportResistanceError = null,
   clearLines,
   isBacktestMode,
   setIsBacktestMode,
@@ -321,6 +326,25 @@ export const TopBar = ({
               title="斐波那契回调 (Fib Retracement)"
             >
               <AlignJustify size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={onToggleSupportResistance}
+              disabled={!isSupportResistanceEnabled && (isDataLoading || isHistoryLoading || Boolean(dataError) || totalCandles === 0)}
+              aria-label="支撑/阻力区"
+              aria-pressed={isSupportResistanceEnabled}
+              aria-busy={isSupportResistanceBusy}
+              className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                isSupportResistanceEnabled
+                  ? "bg-indigo-500/20 text-indigo-200"
+                  : "text-indigo-300 hover:bg-gray-700"
+              }`}
+              title={isSupportResistanceEnabled
+                ? `${supportResistanceError ? `${supportResistanceError}；` : ""}点击关闭并移除所有支撑/阻力区；开启期间自动跟踪，清空画线不影响这些区间`
+                : "点击显示支撑/阻力区，并随 K 线自动跟踪；缩放不影响分析"}
+            >
+              {supportResistanceError ? <TriangleAlert size={18} className="text-amber-300" /> : isSupportResistanceBusy ? <Loader2 size={18} className="animate-spin" /> : <Scan size={18} />}
+              <span>支撑/阻力{supportResistanceCount ? ` ${supportResistanceCount}` : ""}</span>
             </button>
             {canUseAutomaticDraw ? (
               <>

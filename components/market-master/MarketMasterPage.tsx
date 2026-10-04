@@ -49,6 +49,9 @@ import {
 } from "@/components/market-master/chart-utils";
 import { useAutomaticPens } from "@/hooks/useAutomaticPens";
 import { useAutomaticSegments } from "@/hooks/useAutomaticSegments";
+import { useSupportResistanceZones } from "@/hooks/useSupportResistanceZones";
+import { SupportResistancePanel } from "./SupportResistancePanel";
+import type { SupportResistanceHistoryPage } from "./support-resistance-auto";
 import {
   AI_ZONE_STYLES,
   buildChartInsight,
@@ -344,6 +347,20 @@ export function MarketMasterPage() {
   const chartContainerRef = useRef<any>(null);
   const chartRef = useRef<any>(null);
   const seriesRef = useRef<any>(null);
+  const loadSupportResistanceHistoryRef = useRef<(before: number, signal: AbortSignal) => Promise<SupportResistanceHistoryPage>>(
+    async () => ({ candles: [], hasMore: false })
+  );
+  const {
+    supportResistanceSnapshot,
+    updateSupportResistance,
+    clearSupportResistance,
+    isSupportResistanceEnabled,
+    toggleSupportResistance,
+    isSupportResistanceAutomatic,
+    isSupportResistanceBusy,
+    supportResistanceHistory,
+    retrySupportResistanceHistory,
+  } = useSupportResistanceZones({ seriesRef, loadHistoryBeforeRef: loadSupportResistanceHistoryRef });
   const {
     automaticPenCount,
     clearAutomaticPens,
@@ -546,6 +563,15 @@ export function MarketMasterPage() {
         : null,
   });
   const priceDecimals = activeInstrumentProfile.priceDecimals;
+
+  useEffect(() => {
+    clearSupportResistance();
+  }, [symbol, timeframe, isBacktestMode, marketDataEpoch, clearSupportResistance]);
+
+  const handleToggleSupportResistance = useCallback(() => {
+    if (!isSupportResistanceEnabled && (isDataLoading || isHistoryLoading || dataError || !seriesRef.current)) return;
+    toggleSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
+  }, [isSupportResistanceEnabled, isDataLoading, isHistoryLoading, dataError, toggleSupportResistance]);
 
   useEffect(() => {
     const minMove = 1 / Math.pow(10, priceDecimals);
@@ -1445,6 +1471,17 @@ export function MarketMasterPage() {
       }),
     [customFetch, symbol, timeframe]
   );
+
+  // Separate analysis-only history: never prepend chart series or change replay indexes.
+  loadSupportResistanceHistoryRef.current = async (before, signal) => {
+    const page = await fetchKlinePage((input, init) => customFetch(input, { ...init, signal }), {
+      symbol,
+      interval: getIntervalByTimeframe(timeframe),
+      outputsize: KLINE_PAGE_SIZE,
+      endDate: new Date((before - 1) * 1000).toISOString(),
+    });
+    return { candles: normalizeCandles(page.rawCandles), hasMore: page.hasMoreHistory };
+  };
 
   const loadOlderHistory = useCallback(async () => {
     if (isDataLoadingRef.current || historyLoadingRef.current) return;
@@ -3095,6 +3132,7 @@ export function MarketMasterPage() {
       window.removeEventListener("keydown", handleKeyDown);
       resetAutomaticPensState();
       resetAutomaticSegmentsState();
+      clearSupportResistance();
       series.detachPrimitive(tradeConnection);
       tradeConnectionRef.current = null;
       chart.remove();
@@ -3114,6 +3152,7 @@ export function MarketMasterPage() {
     findClosestEmaAtPoint,
     resetAutomaticPensState,
     resetAutomaticSegmentsState,
+    clearSupportResistance,
     setSelectedIndicator,
     setSelectedShape,
   ]);
@@ -3124,6 +3163,15 @@ export function MarketMasterPage() {
       rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled },
     });
   }, [isRightPriceAutoScaleEnabled]);
+
+  // Run after chart creation and replay initialization. Refs hold the newly revealed
+  // cursor even when those effects updated it before the next React render.
+  useEffect(() => {
+    if (!isMounted || isDataLoading || isDataLoadingRef.current || dataError || !seriesRef.current || historyLoadingRef.current) return;
+    if (loadedMarketRef.current.symbol !== symbol || loadedMarketRef.current.timeframe !== timeframe) return;
+    if (isBacktestMode && !wasBacktestModeRef.current) return;
+    updateSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
+  }, [isMounted, currentIndex, isDataLoading, isHistoryLoading, dataError, isBacktestMode, symbol, timeframe, marketDataEpoch, updateSupportResistance]);
 
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
@@ -4465,6 +4513,11 @@ export function MarketMasterPage() {
         drawAutomaticSegments={handleDrawAutomaticSegments}
         automaticSegmentCount={automaticSegmentCount}
         isAutomaticSegmentBusy={isAutomaticSegmentBusy}
+        onToggleSupportResistance={handleToggleSupportResistance}
+        isSupportResistanceEnabled={isSupportResistanceEnabled}
+        supportResistanceCount={supportResistanceSnapshot?.zones.length ?? 0}
+        isSupportResistanceBusy={isSupportResistanceBusy || supportResistanceHistory.loading}
+        supportResistanceError={supportResistanceHistory.error}
         clearLines={clearAllLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}
@@ -4558,6 +4611,13 @@ export function MarketMasterPage() {
         tpEnabled={tpEnabled}
         trades={trades}
       >
+        {isSupportResistanceEnabled && <SupportResistancePanel
+          snapshot={supportResistanceSnapshot}
+          decimals={priceDecimals}
+          automatic={isSupportResistanceAutomatic}
+          history={supportResistanceHistory}
+          onRetryHistory={retrySupportResistanceHistory}
+        />}
         <KlineRepairSelectOverlay
           active={isRepairSelecting}
           symbol={symbol}
