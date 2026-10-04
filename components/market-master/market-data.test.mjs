@@ -12,7 +12,7 @@ vm.runInNewContext(
   }).outputText,
   { exports: target.exports, module: target }
 );
-const { normalizeCandles } = target.exports;
+const { normalizeCandles, toVolumePoint, buildVolumeData } = target.exports;
 
 const candle = (datetime, overrides = {}) => ({
   datetime,
@@ -51,7 +51,7 @@ test("deduplicates equivalent UTC timestamps and subsecond timestamps", () => {
   ]);
   assert.deepEqual(plain(result), [{
     time: Date.parse("2026-09-23T00:00:00Z") / 1000,
-    open: 10, high: 12, low: 9, close: 12,
+    open: 10, high: 12, low: 9, close: 12, volume: null,
   }]);
 });
 
@@ -78,6 +78,58 @@ test("accepts numeric strings, zero and negative prices while rejecting invalid 
     candle("not-a-date"),
     candle("1970-01-01", { open: "0", high: "1.5", low: "-2", close: "-1" }),
   ]);
-  assert.deepEqual(plain(result), [{ time: 0, open: 0, high: 1.5, low: -2, close: -1 }]);
+  assert.deepEqual(plain(result), [{ time: 0, open: 0, high: 1.5, low: -2, close: -1, volume: null }]);
   assert.equal(normalizeCandles().length, 0);
+});
+
+test("preserves volume from the API, including numeric strings and actual zero", () => {
+  const result = normalizeCandles([
+    candle("2026-09-23 00:00:00", { volume: "1234.5" }),
+    candle("2026-09-23 00:01:00", { volume: 0 }),
+    candle("2026-09-23 00:02:00", { volume: 9876 }),
+    candle("2026-09-23 00:02:00", { volume: "9999" }),
+  ]);
+  assert.deepEqual(plain(result.map((bar) => bar.volume)), [1234.5, 0, 9999]);
+});
+
+test("missing or invalid volume leaves the price candle usable without fabricating zero", () => {
+  for (const volume of [undefined, null, "", "  ", "bad", NaN, Infinity, -1, "-2", true]) {
+    const result = normalizeCandles([candle("2026-09-23 00:00:00", { volume })]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].volume, null, String(volume));
+  }
+});
+
+test("volume histogram preserves missing timestamps for alignment and uses candle direction", () => {
+  const bars = normalizeCandles([
+    candle("2026-09-23 00:00:00", { volume: 100 }),
+    candle("2026-09-23 00:01:00"),
+    candle("2026-09-23 00:02:00", { close: 9, volume: 200 }),
+    candle("2026-09-23 00:03:00", { close: 10, volume: 0 }),
+  ]);
+  const points = bars.map((bar) => toVolumePoint(bar, { upColor: "green", downColor: "red" }));
+  assert.deepEqual(plain(points), [
+    { time: bars[0].time, value: 100, color: "green" },
+    { time: bars[1].time },
+    { time: bars[2].time, value: 200, color: "red" },
+    { time: bars[3].time, value: 0, color: "green" },
+  ]);
+});
+
+test("replay volume excludes prefetched future bars and reveals only the next candle", () => {
+  const bars = normalizeCandles([
+    candle("2026-09-23 00:00:00", { volume: 100 }),
+    candle("2026-09-23 00:01:00", { volume: 200 }),
+    candle("2026-09-23 00:02:00", { volume: 99999 }),
+  ]);
+  const colors = { upColor: "green", downColor: "red" };
+  const visible = buildVolumeData(bars, 2, colors);
+  assert.deepEqual(plain(visible.map((bar) => bar.value)), [100, 200]);
+  assert.deepEqual(plain(buildVolumeData(bars, 0, colors)), []);
+  assert.deepEqual(plain(buildVolumeData(bars, -1, colors)), []);
+  assert.deepEqual(
+    plain([...visible, toVolumePoint(bars[2], colors)]),
+    plain(buildVolumeData(bars, 3, colors))
+  );
+  assert.equal(buildVolumeData(bars, 1, colors).length, 1);
 });

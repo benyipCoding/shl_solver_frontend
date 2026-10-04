@@ -20,6 +20,7 @@ type LegendData = {
   high: number;
   low: number;
   close: number;
+  volume: number | null;
   emas: Array<{ color: string; period: number; value: number }>;
   bollinger: {
     period: number;
@@ -93,6 +94,7 @@ type MarketWorkspaceProps = {
   startBottomPanelResize: MouseEventHandler<HTMLDivElement>;
   startRightPanelResize: MouseEventHandler<HTMLDivElement>;
   subChartContainerRef: RefObject<HTMLDivElement | null>;
+  volumeChartContainerRef: RefObject<HTMLDivElement | null>;
   symbol: string;
   toggleTradeVisibility: (tradeId: unknown) => void;
   totalCandles: number;
@@ -147,6 +149,7 @@ export function MarketWorkspace({
   startBottomPanelResize,
   startRightPanelResize,
   subChartContainerRef,
+  volumeChartContainerRef,
   symbol,
   toggleTradeVisibility,
   totalCandles,
@@ -161,7 +164,7 @@ export function MarketWorkspace({
         ref={mainColumnRef}
         className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
-        <div className="relative flex-1 bg-[#111827]">
+        <div className="relative min-h-[180px] flex-1 bg-[#111827]">
           {isDataLoading && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 text-sm text-blue-200 backdrop-blur-sm">
               正在加载真实 K 线数据...
@@ -283,7 +286,7 @@ export function MarketWorkspace({
         </div>
 
         {indConfig.macd.enabled && (
-          <div className="relative h-36 shrink-0 border-t border-gray-800 bg-[#111827] sm:h-48">
+          <div className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48">
             {legendData && (
               <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2.5 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:right-auto sm:gap-4 sm:px-3 sm:text-sm">
                 <div className="font-semibold tracking-wider text-gray-400">
@@ -306,6 +309,24 @@ export function MarketWorkspace({
               </div>
             )}
             <div ref={subChartContainerRef} className="absolute inset-0" />
+          </div>
+        )}
+
+        {indConfig.volume.enabled && (
+          <div className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48">
+            <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-4 rounded border border-gray-700/50 bg-gray-900/70 px-3 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:text-sm">
+              <span className="font-semibold tracking-wider text-gray-400">交易量 (VOL)</span>
+              <span style={{
+                color: legendData && legendData.close >= legendData.open
+                  ? indConfig.volume.upColor
+                  : indConfig.volume.downColor,
+              }}>
+                {legendData?.volume == null
+                  ? "暂无数据"
+                  : legendData.volume.toLocaleString("zh-CN", { maximumFractionDigits: 8 })}
+              </span>
+            </div>
+            <div ref={volumeChartContainerRef} className="absolute inset-0" />
           </div>
         )}
 

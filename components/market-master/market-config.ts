@@ -17,6 +17,7 @@ export const BOTTOM_PANEL_DEFAULT_HEIGHT = 224;
 export const BOTTOM_PANEL_MIN_HEIGHT = 160;
 export const MAIN_CHART_MIN_HEIGHT = 180;
 export const MACD_PANEL_HEIGHT = 192;
+export const VOLUME_PANEL_HEIGHT = 192;
 
 export const TIMEFRAME_OPTIONS = [
   { value: "m1", label: "M1", interval: "1min" },
@@ -93,6 +94,11 @@ export type BollingerConfig = {
 export type IndicatorConfig = {
   emas: EmaConfig[];
   bollinger: BollingerConfig;
+  volume: {
+    enabled: boolean;
+    upColor: string;
+    downColor: string;
+  };
   macd: {
     enabled: boolean;
     fast: number;
@@ -239,6 +245,11 @@ export const applySyncedCrosshair = (
 
 export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
   emas: [],
+  volume: {
+    enabled: false,
+    upColor: "#10b981",
+    downColor: "#ef4444",
+  },
   bollinger: {
     enabled: false,
     period: 20,
@@ -270,6 +281,7 @@ export const cloneIndicatorConfig = (
 ): IndicatorConfig => ({
   emas: config.emas.map((ema) => ({ ...ema })),
   bollinger: { ...config.bollinger },
+  volume: { ...config.volume },
   macd: {
     ...config.macd,
     histColors: { ...config.macd.histColors },
@@ -313,6 +325,7 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
   const macdRaw = isRecord(value.macd) ? value.macd : {};
   const histRaw = isRecord(macdRaw.histColors) ? macdRaw.histColors : {};
   const bollingerRaw = isRecord(value.bollinger) ? value.bollinger : {};
+  const volumeRaw = isRecord(value.volume) ? value.volume : {};
 
   return {
     emas: Array.isArray(value.emas)
@@ -346,6 +359,11 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
         bollingerRaw.lineWidth,
         defaults.bollinger.lineWidth
       ),
+    },
+    volume: {
+      enabled: Boolean(volumeRaw.enabled),
+      upColor: sanitizeColor(volumeRaw.upColor, defaults.volume.upColor),
+      downColor: sanitizeColor(volumeRaw.downColor, defaults.volume.downColor),
     },
     macd: {
       enabled: Boolean(macdRaw.enabled),

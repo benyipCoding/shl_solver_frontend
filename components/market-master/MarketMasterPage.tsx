@@ -93,6 +93,8 @@ import {
   fetchKlinePage,
   mergeCandleData,
   normalizeCandles,
+  toVolumePoint,
+  buildVolumeData,
   windowsOverlapOrTouch,
   type KlinePageMeta,
   type NormalizedCandle,
@@ -373,6 +375,9 @@ export function MarketMasterPage() {
   const macdHistSeriesRef = useRef<any>(null);
   const macdLineSeriesRef = useRef<any>(null);
   const macdSignalSeriesRef = useRef<any>(null);
+  const volumeChartContainerRef = useRef<HTMLDivElement>(null);
+  const volumeChartRef = useRef<any>(null);
+  const volumeSeriesRef = useRef<any>(null);
   const isSyncingCrosshairRef = useRef(false);
 
   const [isIndicatorModalOpen, setIsIndicatorModalOpen] = useState(false);
@@ -426,6 +431,7 @@ export function MarketMasterPage() {
     startRightPanelResize,
   } = useResizableMarketPanels({
     isMacdEnabled: indConfig.macd.enabled,
+    isVolumeEnabled: indConfig.volume.enabled,
     isMaximized,
   });
 
@@ -1107,6 +1113,7 @@ export function MarketMasterPage() {
         high: d.high,
         low: d.low,
         close: d.close,
+        volume: d.volume,
         emas: emasData,
         bollinger:
           bollingerPoint?.middle != null
@@ -1196,6 +1203,9 @@ export function MarketMasterPage() {
       if (seriesRef.current) {
         seriesRef.current.setData(candleData);
       }
+      volumeSeriesRef.current?.setData(
+        buildVolumeData(data, nextBacktestMode ? nextIndex : data.length, activeConfig.volume)
+      );
 
       activeConfig.emas.forEach((ema: any) => {
         const emaSeries = emaSeriesRefs.current[ema.id];
@@ -1694,6 +1704,7 @@ export function MarketMasterPage() {
       if (macdHistSeriesRef.current) macdHistSeriesRef.current.setData([]);
       if (macdLineSeriesRef.current) macdLineSeriesRef.current.setData([]);
       if (macdSignalSeriesRef.current) macdSignalSeriesRef.current.setData([]);
+      volumeSeriesRef.current?.setData([]);
     };
 
     const removeOrderLines = () => {
@@ -2278,6 +2289,10 @@ export function MarketMasterPage() {
     setDraftConfig(nextConfig);
     setIsIndicatorModalOpen(false);
 
+    volumeSeriesRef.current?.setData(
+      buildVolumeData(fullDataRef.current, currentIndexRef.current, nextConfig.volume)
+    );
+
     if (chartRef.current) {
       Object.keys(emaSeriesRefs.current).forEach((id) => {
         if (!currentEmaIds.includes(id)) {
@@ -2429,7 +2444,7 @@ export function MarketMasterPage() {
         tickMarkFormatter: (time: Time) =>
           formatChartTimeLabel(time, timeframeRef.current),
       },
-      rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled },
+      rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled, minimumWidth: 80 },
     });
 
     const series = chart.addSeries(CandlestickSeries, {
@@ -2540,6 +2555,13 @@ export function MarketMasterPage() {
       if (!isSyncedMove) {
         isSyncingCrosshairRef.current = true;
         try {
+          const candle = findPointByTime(fullDataRef.current, param.time);
+          applySyncedCrosshair(
+            volumeChartRef.current,
+            volumeSeriesRef.current,
+            param.time,
+            candle?.volume
+          );
           if (param.time) {
             const macdPoint = findPointByTime(
               fullMacdDataRef.current,
@@ -3132,7 +3154,7 @@ export function MarketMasterPage() {
         tickMarkFormatter: (time: Time) =>
           formatChartTimeLabel(time, timeframeRef.current),
       },
-      rightPriceScale: { borderColor: "#374151" },
+      rightPriceScale: { borderColor: "#374151", minimumWidth: 80 },
     });
 
     const macdHist = subChart.addSeries(HistogramSeries, {
@@ -3201,6 +3223,13 @@ export function MarketMasterPage() {
 
       isSyncingCrosshairRef.current = true;
       try {
+        const volumeCandle = findPointByTime(fullDataRef.current, param.time);
+        applySyncedCrosshair(
+          volumeChartRef.current,
+          volumeSeriesRef.current,
+          param.time,
+          volumeCandle?.volume
+        );
         if (param.time) {
           const candle = findPointByTime(fullDataRef.current, param.time);
           applySyncedCrosshair(
@@ -3305,6 +3334,111 @@ export function MarketMasterPage() {
     setSelectedShape,
   ]);
 
+  // ================= 3. 初始化副图表 (交易量) =================
+  useEffect(() => {
+    const container = volumeChartContainerRef.current;
+    const mainChart = chartRef.current;
+    if (!isMounted || !indConfig.volume.enabled || !container || !mainChart)
+      return;
+
+    const volumeChart = createChart(container, {
+      layout: {
+        background: { type: "solid", color: "#111827" },
+        textColor: "#9ca3af",
+      },
+      localization: {
+        timeFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
+      grid: {
+        vertLines: { color: "#1f2937" },
+        horzLines: { color: "#1f2937" },
+      },
+      crosshair: { mode: 0 },
+      width: container.clientWidth,
+      height: container.clientHeight,
+      timeScale: {
+        borderColor: "#374151",
+        tickMarkFormatter: (time: Time) =>
+          formatChartTimeLabel(time, timeframeRef.current),
+      },
+      rightPriceScale: {
+        borderColor: "#374151",
+        minimumWidth: 80,
+        scaleMargins: { top: 0.25, bottom: 0 },
+      },
+    });
+    const volumeSeries = volumeChart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      lastValueVisible: false,
+      priceLineVisible: false,
+      base: 0,
+    });
+    volumeSeries.setData(
+      buildVolumeData(fullDataRef.current, currentIndexRef.current, indConfigRef.current.volume)
+    );
+    volumeChartRef.current = volumeChart;
+    volumeSeriesRef.current = volumeSeries;
+
+    const crosshairMoveHandler = (param) => {
+      if (isSyncingCrosshairRef.current) return;
+      stateRef.current.isHovering = Boolean(param.time);
+      if (param.time) stateRef.current.lastHoveredTime = param.time;
+      updateLegend(param.time);
+
+      isSyncingCrosshairRef.current = true;
+      try {
+        const candle = findPointByTime(fullDataRef.current, param.time);
+        const macdPoint = findPointByTime(fullMacdDataRef.current, param.time);
+        applySyncedCrosshair(
+          chartRef.current, seriesRef.current, param.time, candle?.close
+        );
+        applySyncedCrosshair(
+          subChartRef.current, macdLineSeriesRef.current, param.time, macdPoint?.macd
+        );
+      } finally {
+        isSyncingCrosshairRef.current = false;
+      }
+    };
+    volumeChart.subscribeCrosshairMove(crosshairMoveHandler);
+
+    const mainTimeScale = mainChart.timeScale();
+    const volumeTimeScale = volumeChart.timeScale();
+    const initialRange = mainTimeScale.getVisibleLogicalRange();
+    if (initialRange) volumeTimeScale.setVisibleLogicalRange(initialRange);
+    let isSyncingRange = false;
+    const syncRange = (target, range) => {
+      if (!range || isSyncingRange) return;
+      isSyncingRange = true;
+      try {
+        target.setVisibleLogicalRange(range);
+      } finally {
+        isSyncingRange = false;
+      }
+    };
+    const syncToVolume = (range) => syncRange(volumeTimeScale, range);
+    const syncToMain = (range) => syncRange(mainTimeScale, range);
+    mainTimeScale.subscribeVisibleLogicalRangeChange(syncToVolume);
+    volumeTimeScale.subscribeVisibleLogicalRangeChange(syncToMain);
+
+    const handleResize = () => volumeChart.applyOptions({
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncToVolume);
+      volumeTimeScale.unsubscribeVisibleLogicalRangeChange(syncToMain);
+      volumeChart.unsubscribeCrosshairMove(crosshairMoveHandler);
+      volumeChart.remove();
+      volumeChartRef.current = null;
+      volumeSeriesRef.current = null;
+    };
+  }, [isMounted, indConfig.volume.enabled, updateLegend]);
+
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
     const replayEndCurrent = replayEndCurrentIndexRef.current;
@@ -3344,6 +3478,7 @@ export function MarketMasterPage() {
 
     const nextCandle = fullDataRef.current[currentIndex];
     seriesRef.current.update(nextCandle);
+    volumeSeriesRef.current?.update(toVolumePoint(nextCandle, indConfig.volume));
     updateAutomaticPensAfterCandle();
     updateAutomaticSegmentsAfterCandle();
 
@@ -4415,6 +4550,7 @@ export function MarketMasterPage() {
         startBottomPanelResize={startBottomPanelResize}
         startRightPanelResize={startRightPanelResize}
         subChartContainerRef={subChartContainerRef}
+        volumeChartContainerRef={volumeChartContainerRef}
         symbol={symbol}
         toggleTradeVisibility={toggleTradeVisibility}
         totalCandles={totalCandles}

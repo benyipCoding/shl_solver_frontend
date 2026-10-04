@@ -8,6 +8,7 @@ export type CandleInput = {
   high?: number | string | null;
   low?: number | string | null;
   close?: number | string | null;
+  volume?: number | string | null;
   [key: string]: unknown;
 };
 
@@ -17,6 +18,7 @@ export type NormalizedCandle = {
   high: number;
   low: number;
   close: number;
+  volume: number | null;
 };
 
 export type KlinePageMeta = {
@@ -103,11 +105,37 @@ export const normalizeCandles = (
     // Lightweight Charts requires strictly increasing, unique times. Deduplicate
     // after UTC/second conversion, keeping the last valid candle for each time.
     // Do this before indicator calculation so every series uses the same bars.
-    candlesByTime.set(time, { time, open, high, low, close });
+    const rawVolume = candle.volume;
+    const volume =
+      (typeof rawVolume === "number" ||
+        (typeof rawVolume === "string" && rawVolume.trim() !== "")) &&
+      Number.isFinite(Number(rawVolume)) && Number(rawVolume) >= 0
+        ? Number(rawVolume)
+        : null;
+    candlesByTime.set(time, { time, open, high, low, close, volume });
   }
 
   return [...candlesByTime.values()].sort((a, b) => a.time - b.time);
 };
+
+export const toVolumePoint = (
+  candle: NormalizedCandle,
+  colors: { upColor: string; downColor: string }
+) =>
+  candle.volume == null
+    ? { time: candle.time }
+    : {
+        time: candle.time,
+        value: candle.volume,
+        color: candle.close >= candle.open ? colors.upColor : colors.downColor,
+      };
+
+// The loaded window can include prefetched future bars during replay.
+export const buildVolumeData = (
+  candles: NormalizedCandle[],
+  visibleCount: number,
+  colors: { upColor: string; downColor: string }
+) => candles.slice(0, Math.max(0, visibleCount)).map((candle) => toVolumePoint(candle, colors));
 
 const toFiniteNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);

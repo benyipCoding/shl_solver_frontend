@@ -69,6 +69,16 @@ export const IndicatorConfigModal = ({
             MACD
           </button>
           <button
+            onClick={() => setSelectedIndTab("VOLUME")}
+            className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors font-medium ${
+              selectedIndTab === "VOLUME"
+                ? "bg-gray-800 text-blue-400 shadow-sm"
+                : "text-gray-400 hover:bg-gray-800/50"
+            }`}
+          >
+            交易量
+          </button>
+          <button
             onClick={() => setSelectedIndTab("BOLL")}
             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors font-medium ${
               selectedIndTab === "BOLL"
@@ -310,6 +320,62 @@ export const IndicatorConfigModal = ({
               ) : (
                 <div className="text-sm text-gray-600 text-center py-8">
                   MACD 暂未启用
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedIndTab === "VOLUME" && (
+            <div className="space-y-4">
+              <div className="sticky top-0 z-10 mb-4 flex items-center justify-between border-b border-gray-800 bg-[#111827] pb-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                  交易量 (VOL)
+                </h3>
+                <button
+                  onClick={() =>
+                    setDraftConfig((prev: any) => ({
+                      ...prev,
+                      volume: { ...prev.volume, enabled: !prev.volume.enabled },
+                    }))
+                  }
+                  className={`flex items-center gap-1 rounded border px-3 py-1 text-xs transition-colors ${
+                    draftConfig.volume.enabled
+                      ? "border-red-500/50 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white"
+                      : "border-emerald-500/50 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white"
+                  }`}
+                >
+                  {draftConfig.volume.enabled ? <Trash2 size={14} /> : <Plus size={14} />}
+                  {draftConfig.volume.enabled ? "移除交易量" : "启用交易量"}
+                </button>
+              </div>
+              {draftConfig.volume.enabled ? (
+                <div className="space-y-6">
+                  <p className="text-xs leading-6 text-gray-400">
+                    在独立副图中显示每根 K 线的交易量，柱形颜色跟随该根 K 线的涨跌。
+                  </p>
+                  <div className="flex flex-wrap gap-6">
+                    {[
+                      ["upColor", "上涨 / 平盘"],
+                      ["downColor", "下跌"],
+                    ].map(([field, label]) => (
+                      <div key={field} className="flex items-center gap-2">
+                        <ColorPicker
+                          value={draftConfig.volume[field]}
+                          onChange={(color: string) =>
+                            setDraftConfig((prev: any) => ({
+                              ...prev,
+                              volume: { ...prev.volume, [field]: color },
+                            }))
+                          }
+                        />
+                        <span className="text-xs text-gray-300">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-gray-600">
+                  交易量暂未启用
                 </div>
               )}
             </div>

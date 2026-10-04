@@ -4,6 +4,7 @@ import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
   BOTTOM_PANEL_MIN_HEIGHT,
   MACD_PANEL_HEIGHT,
+  VOLUME_PANEL_HEIGHT,
   MAIN_CHART_MIN_HEIGHT,
   MAIN_CONTENT_MIN_WIDTH,
   RIGHT_PANEL_DEFAULT_WIDTH,
@@ -23,11 +24,13 @@ type ResizeState = {
 
 type UseResizableMarketPanelsArgs = {
   isMacdEnabled: boolean;
+  isVolumeEnabled: boolean;
   isMaximized: boolean;
 };
 
 export function useResizableMarketPanels({
   isMacdEnabled,
+  isVolumeEnabled,
   isMaximized,
 }: UseResizableMarketPanelsArgs) {
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -98,7 +101,9 @@ export function useResizableMarketPanels({
       const containerHeight =
         mainColumnRef.current?.clientHeight || window.innerHeight;
       const minTopAreaHeight =
-        MAIN_CHART_MIN_HEIGHT + (isMacdEnabled ? MACD_PANEL_HEIGHT : 0);
+        MAIN_CHART_MIN_HEIGHT +
+        (isMacdEnabled ? MACD_PANEL_HEIGHT : 0) +
+        (isVolumeEnabled ? VOLUME_PANEL_HEIGHT : 0);
       const maxHeight = Math.max(
         BOTTOM_PANEL_MIN_HEIGHT,
         containerHeight - minTopAreaHeight
@@ -120,7 +125,7 @@ export function useResizableMarketPanels({
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
     };
-  }, [isMacdEnabled, stopResizeDrag]);
+  }, [isMacdEnabled, isVolumeEnabled, stopResizeDrag]);
 
   const startRightPanelResize = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
