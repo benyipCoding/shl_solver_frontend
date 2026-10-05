@@ -48,6 +48,12 @@ export function useSupportResistanceZones({ seriesRef, loadHistoryBeforeRef }: {
     setHistory({ loading: false, hasMore: true, error: null });
   }, [seriesRef, stopAutomaticSupportResistance]);
 
+  const resetSupportResistance = useCallback(() => {
+    enabledRef.current = false;
+    setEnabled(false);
+    clearSupportResistance();
+  }, [clearSupportResistance]);
+
   const publishSnapshot = useCallback((snapshot: SupportResistanceSnapshot) => {
     if (!enabledRef.current) return snapshot;
     snapshotRef.current = snapshot;
@@ -136,13 +142,13 @@ export function useSupportResistanceZones({ seriesRef, loadHistoryBeforeRef }: {
     if (trackerRef.current) {
       trackerRef.current.refresh(candles, visibleCount, hasMoreHistory);
     } else {
-      // Only an activated overlay restarts after a market change or replay rewind.
+      // Keep an activated overlay running after a replay rewind or chart rebuild.
       startAutomaticSupportResistance(candles, visibleCount, hasMoreHistory);
     }
   }, [clearSupportResistance, startAutomaticSupportResistance]);
 
   return {
-    supportResistanceSnapshot, updateSupportResistance, clearSupportResistance,
+    supportResistanceSnapshot, updateSupportResistance, clearSupportResistance, resetSupportResistance,
     isSupportResistanceEnabled, toggleSupportResistance,
     isSupportResistanceAutomatic, isSupportResistanceBusy, supportResistanceHistory,
     retrySupportResistanceHistory,

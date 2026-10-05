@@ -4,7 +4,8 @@ import type {
 } from "lightweight-charts";
 import type { SupportResistanceZone } from "./support-resistance";
 
-export const ZONE_COLORS = { support: "#26a69a", resistance: "#ef5350" };
+// Reserve green/red for orders; zones use a quieter blue/purple palette.
+export const ZONE_COLORS = { support: "#60a5fa", resistance: "#c084fc" };
 
 // Separate, read-only overlay: recalculating zones never modifies manual drawings.
 export class SupportResistancePrimitive implements ISeriesPrimitive<Time> {
@@ -34,11 +35,11 @@ export class SupportResistancePrimitive implements ISeriesPrimitive<Time> {
           ctx.save();
           if (!labelsOnly) {
             ctx.fillStyle = color;
-            ctx.globalAlpha = 0.1 + strength * 0.3;
+            ctx.globalAlpha = 0.05 + strength * 0.1;
             ctx.fillRect(left, top, width, Math.max(1, bottom - top));
-            ctx.globalAlpha = 0.5 + strength * 0.5;
+            ctx.globalAlpha = 0.35 + strength * 0.3;
             ctx.strokeStyle = color;
-            ctx.lineWidth = 1 + strength;
+            ctx.lineWidth = 1;
             ctx.setLineDash(zone.status === "piercing" ? [5, 4] : []);
             ctx.strokeRect(left, top, width, Math.max(1, bottom - top));
             ctx.restore();

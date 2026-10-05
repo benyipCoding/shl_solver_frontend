@@ -354,6 +354,7 @@ export function MarketMasterPage() {
     supportResistanceSnapshot,
     updateSupportResistance,
     clearSupportResistance,
+    resetSupportResistance,
     isSupportResistanceEnabled,
     toggleSupportResistance,
     isSupportResistanceAutomatic,
@@ -565,8 +566,8 @@ export function MarketMasterPage() {
   const priceDecimals = activeInstrumentProfile.priceDecimals;
 
   useEffect(() => {
-    clearSupportResistance();
-  }, [symbol, timeframe, isBacktestMode, marketDataEpoch, clearSupportResistance]);
+    resetSupportResistance();
+  }, [symbol, timeframe, isBacktestMode, isReplayMode, marketDataEpoch, resetSupportResistance]);
 
   const handleToggleSupportResistance = useCallback(() => {
     if (!isSupportResistanceEnabled && (isDataLoading || isHistoryLoading || dataError || !seriesRef.current)) return;
@@ -1419,6 +1420,23 @@ export function MarketMasterPage() {
       }
       currentIndexRef.current = nextCurrentIndex;
 
+      // Prepending history moves every local replay index, not just the cursor.
+      if (
+        inBacktest &&
+        isReplayModeRef.current &&
+        prependedCount > 0 &&
+        !isInitialPage &&
+        !shouldReplace &&
+        replayEndCurrentIndexRef.current > 0
+      ) {
+        replayStartCurrentIndexRef.current += prependedCount;
+        replayEndCurrentIndexRef.current += prependedCount;
+        setReplayBounds({
+          startCurrent: replayStartCurrentIndexRef.current,
+          endCurrent: replayEndCurrentIndexRef.current,
+        });
+      }
+
       if (isReplayModeRef.current && replayNeedsMoreFutureRef.current) {
         const cursorUnix = replayCursorUnixRef.current;
         const lastTime = data[data.length - 1]?.time;
@@ -2242,7 +2260,9 @@ export function MarketMasterPage() {
     const hasTargetMarketData =
       loadedMarketRef.current.symbol === detail.symbol &&
       loadedMarketRef.current.timeframe === nextTimeframe;
-    if (isDataLoadingRef.current) {
+    // An outstanding history/latest-window request must finish before resetting
+    // the replay cursor, otherwise its response can overwrite the restored start.
+    if (isDataLoadingRef.current || historyLoadingRef.current) {
       return;
     }
 
@@ -2267,6 +2287,7 @@ export function MarketMasterPage() {
     dataError,
     isBacktestMode,
     isDataLoading,
+    isHistoryLoading,
     pendingReplayToken,
     symbol,
     timeframe,
@@ -2726,6 +2747,17 @@ export function MarketMasterPage() {
           }
         }
 
+        // Nearby risk lines remain draggable; an exact entry-line hit takes
+        // precedence when it is closer to the pointer than the risk line.
+        if (foundOrderLineHover && hoveredMarker?.kind === "entry" && hoveredTrade?.status === "Open") {
+          const entryY = series.priceToCoordinate(hoveredTrade.entry);
+          const riskTrade = visibleOpenTrades.find((trade) => trade.id === foundOrderLineHover.id);
+          const riskY = riskTrade ? series.priceToCoordinate(riskTrade[foundOrderLineHover.type]) : null;
+          if (entryY !== null && riskY !== null && Math.abs(param.point.y - entryY) < Math.abs(param.point.y - riskY)) {
+            foundOrderLineHover = null;
+          }
+        }
+
         if (!foundOrderLineHover) {
           for (const line of state.lines) {
             const x1 = chart.timeScale().timeToCoordinate(line.p1.time);
@@ -2868,6 +2900,11 @@ export function MarketMasterPage() {
         tradesRef.current,
         param
       );
+      // A risk-line click/drag must not open an adjacent entry's dialog.
+      if (state.hoveredOrderLine || state.draggingOrderLine) {
+        hideCandleTooltip();
+        return;
+      }
       if (markerHit) {
         hideCandleTooltip();
         if (markerHit.kind === "entry") {
@@ -4197,17 +4234,20 @@ export function MarketMasterPage() {
         let lines = orderLinesRef.current[trade.id];
         if (!lines) {
           const entryLine = series.createPriceLine({
+            // Price-line hits expose this ID via hoveredObjectId, sharing the
+            // entry marker's existing hover and order-management click path.
+            id: `${trade.id}-entry`,
             price: trade.entry,
             color: trade.type === "Buy" ? "#10b981" : "#ef4444",
             lineWidth: 2,
-            lineStyle: 2,
+            lineStyle: 0,
             axisLabelVisible: true,
             title: `${trade.type} ${trade.units}`,
           });
           lines = { entry: entryLine, sl: null, tp: null };
           orderLinesRef.current[trade.id] = lines;
         }
-        lines.entry.applyOptions({ title: `${trade.type} ${trade.units}` });
+        lines.entry.applyOptions({ id: `${trade.id}-entry`, lineStyle: 0, title: `${trade.type} ${trade.units}` });
         if (trade.sl !== null) {
           if (!lines.sl) {
             lines.sl = series.createPriceLine({
