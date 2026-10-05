@@ -83,7 +83,7 @@ export function BacktestShareDialog({ item, onClose, onVisibilityChange }: {
           <h3 id="backtest-share-title" className="font-bold text-white">分享回测记录 · {item.symbol}</h3>
           <button type="button" disabled={revoking} aria-label="关闭分享" onClick={onClose} className="rounded p-1 text-gray-400 hover:text-white"><X size={18} /></button>
         </div>
-        <p className="mb-3 text-sm leading-relaxed text-gray-400">获得链接的人登录后，会自动收藏这条记录并从起点打开回放。</p>
+        <p className="mb-3 text-sm leading-relaxed text-gray-400">获得链接的人无需登录即可从起点回放，登录后还会自动收藏到回测记录。</p>
         {error ? (
           <div role="alert" className="text-sm text-red-400">{error}<button type="button" className="ml-3 text-blue-400" onClick={() => setAttempt(value => value + 1)}>重试</button></div>
         ) : !link ? (

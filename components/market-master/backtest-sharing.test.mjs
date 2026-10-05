@@ -53,4 +53,22 @@ test("invalid/revoked shares surface the server message without pretending to im
   const client = createBacktestPersistClient();
   client.configure({ enabled: true, fetchFn: async () => new Response(JSON.stringify({ code: 404, message: "分享链接已失效" }), { status: 404 }) });
   await assert.rejects(client.saveSharedSession("missing"), /分享链接已失效/);
+  await assert.rejects(client.getSharedSession("missing"), /分享链接已失效/);
+});
+
+test("guest previews use an uncached read without saving a bookmark", async () => {
+  const client = createBacktestPersistClient();
+  const requests = [];
+  const controller = new AbortController();
+  client.configure({ enabled: false, fetchFn: async (url, init) => {
+    requests.push({ url, ...init });
+    return new Response(JSON.stringify({ code: 200, data: { public_id: "abc", events: [], is_shared: true } }));
+  } });
+  const detail = await client.getSharedSession("abc", controller.signal);
+  assert.equal(detail.public_id, "abc");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "/api/market_master/backtest/shared/abc");
+  assert.equal(requests[0].method, "GET");
+  assert.equal(requests[0].cache, "no-store");
+  assert.equal(requests[0].signal, controller.signal);
 });

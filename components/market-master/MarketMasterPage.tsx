@@ -4686,7 +4686,7 @@ export function MarketMasterPage() {
         replayingId={replayingSessionId}
       />
       <Suspense fallback={null}>
-        <BacktestShareLinkHandler onReplay={restoreReplayDetail} />
+        <BacktestShareLinkHandler onReplay={restoreReplayDetail} isReplayMode={isReplayMode} />
       </Suspense>
 
       <PendingMarketChangeDialog

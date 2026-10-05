@@ -243,6 +243,12 @@ export const createBacktestPersistClient = () => {
         { method: "DELETE" }
       ));
     },
+    async getSharedSession(publicIdValue: string, signal?: AbortSignal) {
+      return parsePayload(await fetchFn(
+        `/api/market_master/backtest/shared/${encodeURIComponent(publicIdValue)}`,
+        { method: "GET", cache: "no-store", signal }
+      ));
+    },
     async saveSharedSession(publicIdValue: string, signal?: AbortSignal) {
       return parsePayload(await fetchFn(
         `/api/market_master/backtest/shared/${encodeURIComponent(publicIdValue)}`,
