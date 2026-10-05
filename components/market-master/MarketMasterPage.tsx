@@ -2,6 +2,7 @@
 "use client";
 
 import React, {
+  Suspense,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -108,6 +109,7 @@ import {
   type BacktestSessionStartPayload,
 } from "@/components/market-master/backtest-persistence";
 import { BacktestHistoryModal } from "@/components/market-master/BacktestHistoryModal";
+import { BacktestShareLinkHandler } from "@/components/market-master/BacktestShareLinkHandler";
 import {
   findCandleIndexByTime,
   applyReplayTradeEvents,
@@ -4155,6 +4157,14 @@ export function MarketMasterPage() {
     applyReplayWindow(detail, { restarted: true });
   }, [applyReplayWindow]);
 
+  const restoreReplayDetail = useCallback((detail) => {
+    setIsBacktestHistoryOpen(false);
+    setReplayingSessionId(detail.public_id);
+    pendingReplayRef.current = detail;
+    setPendingReplayToken((token) => token + 1);
+    if (isBacktestMode) handleExitBacktest();
+  }, [handleExitBacktest, isBacktestMode]);
+
   const handleReplaySession = useCallback(
     async (publicId: string) => {
       if (!user) return;
@@ -4165,18 +4175,14 @@ export function MarketMasterPage() {
         if (!detail?.public_id) {
           throw new Error("回测记录不存在");
         }
-        pendingReplayRef.current = detail;
-        setPendingReplayToken((token) => token + 1);
-        if (isBacktestMode) {
-          handleExitBacktest();
-        }
+        restoreReplayDetail(detail);
       } catch (error: any) {
         pendingReplayRef.current = null;
         setReplayingSessionId(null);
         toast.error(error?.message || "加载回测记录失败");
       }
     },
-    [handleExitBacktest, isBacktestMode, user]
+    [restoreReplayDetail, user]
   );
 
   const confirmPendingMarketChange = useCallback(() => {
@@ -4679,6 +4685,9 @@ export function MarketMasterPage() {
         onReplay={handleReplaySession}
         replayingId={replayingSessionId}
       />
+      <Suspense fallback={null}>
+        <BacktestShareLinkHandler onReplay={restoreReplayDetail} />
+      </Suspense>
 
       <PendingMarketChangeDialog
         pendingChange={pendingMarketChange}

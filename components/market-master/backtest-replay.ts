@@ -20,6 +20,10 @@ export type BacktestSessionListItem = {
   interval: string;
   timeframe?: string | null;
   status: string;
+  visibility?: "PRIVATE" | "UNLISTED" | "PUBLIC";
+  is_shared?: boolean;
+  is_available?: boolean;
+  saved_at?: string | null;
   start_bar_time?: string | null;
   start_bar_index?: number | null;
   cursor_bar_time?: string | null;

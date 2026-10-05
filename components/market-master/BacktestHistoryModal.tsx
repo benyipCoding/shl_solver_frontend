@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { History, Loader2, Play, Trash2, X } from "lucide-react";
+import { History, Loader2, Play, Share2, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFetch } from "@/context/FetchContext";
 import { TIMEFRAME_OPTIONS } from "@/components/market-master/market-config";
 import { createBacktestPersistClient } from "@/components/market-master/backtest-persistence";
 import type { BacktestSessionListItem } from "@/components/market-master/backtest-replay";
+import { BacktestShareDialog } from "./BacktestShareDialog";
 
 type BacktestHistoryModalProps = {
   isOpen: boolean;
@@ -66,8 +67,13 @@ export function BacktestHistoryModal({
   const [pendingDelete, setPendingDelete] =
     useState<BacktestSessionListItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sharingItem, setSharingItem] = useState<BacktestSessionListItem | null>(null);
   const isLoadingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const closeShare = useCallback(() => setSharingItem(null), []);
+  const updateVisibility = useCallback((publicId: string, visibility: "PRIVATE" | "UNLISTED") => {
+    setItems(previous => previous.map(item => item.public_id === publicId ? { ...item, visibility } : item));
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -104,6 +110,7 @@ export function BacktestHistoryModal({
     if (!isOpen) {
       setPendingDelete(null);
       setDeletingId(null);
+      setSharingItem(null);
       return;
     }
     setItems([]);
@@ -127,7 +134,7 @@ export function BacktestHistoryModal({
     try {
       await persistRef.current.deleteSession(publicId);
       setPendingDelete(null);
-      toast.success("已删除回测记录");
+      toast.success(pendingDelete.is_shared ? "已移除收藏" : "已删除回测记录");
       setItems([]);
       setPage(1);
       setHasMore(true);
@@ -201,6 +208,8 @@ export function BacktestHistoryModal({
                           <span className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">
                             {timeframeLabel(item)}
                           </span>
+                          {item.is_shared && <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-xs text-blue-300">来自分享</span>}
+                          {item.is_available === false && <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-xs text-red-300">已失效</span>}
                           <span
                             className={`rounded px-1.5 py-0.5 text-xs ${
                               item.status === "COMPLETED"
@@ -212,8 +221,9 @@ export function BacktestHistoryModal({
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-gray-500">
-                          {formatDateTime(item.created_at)}
+                          {item.is_shared && item.saved_at ? `收藏于 ${formatDateTime(item.saved_at)}` : formatDateTime(item.created_at)}
                         </p>
+                        {item.is_available === false && <p className="mt-1 text-xs text-gray-500">作者已停止分享或删除原记录</p>}
                         <p className="mt-2 text-xs text-gray-400">
                           成交 {item.trade_count || 0} 笔
                           {item.closed_trade_count
@@ -232,7 +242,7 @@ export function BacktestHistoryModal({
                       <div className="flex shrink-0 flex-col items-stretch gap-2">
                         <button
                           type="button"
-                          disabled={Boolean(replayingId) || Boolean(deletingId)}
+                          disabled={Boolean(replayingId) || Boolean(deletingId) || item.is_available === false}
                           onClick={() => onReplay(item.public_id)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
@@ -245,6 +255,14 @@ export function BacktestHistoryModal({
                         </button>
                         <button
                           type="button"
+                          disabled={Boolean(deletingId) || item.is_available === false}
+                          onClick={() => setSharingItem(item)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Share2 size={14} />分享
+                        </button>
+                        <button
+                          type="button"
                           disabled={Boolean(deletingId)}
                           onClick={() => setPendingDelete(item)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
@@ -254,7 +272,7 @@ export function BacktestHistoryModal({
                           ) : (
                             <Trash2 size={14} />
                           )}
-                          删除
+                          {item.is_shared ? "移除收藏" : "删除"}
                         </button>
                       </div>
                     </div>
@@ -271,6 +289,8 @@ export function BacktestHistoryModal({
           )}
         </div>
       </div>
+
+      {sharingItem && <BacktestShareDialog key={sharingItem.public_id} item={sharingItem} onClose={closeShare} onVisibilityChange={updateVisibility} />}
 
       {pendingDelete ? (
         <div
@@ -292,18 +312,20 @@ export function BacktestHistoryModal({
                 id="backtest-delete-title"
                 className="text-base font-bold text-white"
               >
-                确认删除回测记录？
+                {pendingDelete.is_shared ? "确认移除收藏？" : "确认删除回测记录？"}
               </h3>
             </div>
             <div className="space-y-2 px-5 py-4 text-sm leading-relaxed text-gray-300">
               <p>
-                将删除{" "}
+                {pendingDelete.is_shared ? "将移除收藏 " : "将删除 "}
                 <span className="font-semibold text-white">
                   {pendingDelete.symbol}
                 </span>{" "}
                 · {timeframeLabel(pendingDelete)} 这场回测。
               </p>
-              <p className="text-gray-400">删除后无法还原播放，此操作无法撤销。</p>
+              <p className="text-gray-400">{pendingDelete.is_shared
+                ? "只从你的列表移除，不影响原作者和其他用户。再次打开分享链接可以重新收藏。"
+                : "删除后无法还原播放，分享链接和其他用户的收藏也将失效，此操作无法撤销。"}</p>
             </div>
             <div className="flex justify-end gap-3 border-t border-gray-700 px-5 py-4">
               <button
@@ -325,7 +347,7 @@ export function BacktestHistoryModal({
                 ) : (
                   <Trash2 size={14} />
                 )}
-                确认删除
+                {pendingDelete.is_shared ? "确认移除" : "确认删除"}
               </button>
             </div>
           </div>

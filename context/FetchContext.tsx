@@ -45,7 +45,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
           if (needNavigate) {
             const params = new URLSearchParams();
             if (pathname) {
-              params.set("callbackUrl", pathname);
+              params.set("callbackUrl", `${window.location.pathname}${window.location.search}${window.location.hash}`);
             }
             router.push(`/auth?${params.toString()}`);
           }
@@ -53,7 +53,11 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
 
         return response;
       } catch (error) {
-        console.error("Global fetch error:", error);
+        // Effect cleanup cancels stale requests; callers still receive the
+        // rejection, but an intentional cancellation is not a network failure.
+        if (!(error instanceof Error && error.name === "AbortError")) {
+          console.error("Global fetch error:", error);
+        }
         throw error;
       }
     },

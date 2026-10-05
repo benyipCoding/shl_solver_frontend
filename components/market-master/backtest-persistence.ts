@@ -231,5 +231,23 @@ export const createBacktestPersistClient = () => {
         )
       );
     },
+    async shareSession(publicIdValue: string, signal?: AbortSignal) {
+      return parsePayload(await fetchFn(
+        `/api/market_master/backtest/sessions/${encodeURIComponent(publicIdValue)}/share`,
+        { method: "POST", signal }
+      ));
+    },
+    async revokeShare(publicIdValue: string) {
+      return parsePayload(await fetchFn(
+        `/api/market_master/backtest/sessions/${encodeURIComponent(publicIdValue)}/share`,
+        { method: "DELETE" }
+      ));
+    },
+    async saveSharedSession(publicIdValue: string, signal?: AbortSignal) {
+      return parsePayload(await fetchFn(
+        `/api/market_master/backtest/shared/${encodeURIComponent(publicIdValue)}`,
+        { method: "POST", signal }
+      ));
+    },
   };
 };
