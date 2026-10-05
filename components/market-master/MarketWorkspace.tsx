@@ -238,13 +238,9 @@ export function MarketWorkspace({
 
           {mode === "draw" && (
             <div className="pointer-events-none absolute left-4 top-12 z-10 rounded-full border border-blue-500 bg-blue-600/20 px-3 py-1.5 text-xs text-blue-400">
-              画线模式 (
-              {drawType === "line"
-                ? "直线"
-                : drawType === "rectangle"
-                  ? "矩形"
-                  : "斐波那契"}
-              )
+              {drawType === "zone"
+                ? "手动支撑/阻力区：点击起点，再点击另一价格边界；自动向右延伸，Esc 取消"
+                : `画线模式 (${drawType === "line" ? "直线" : drawType === "rectangle" ? "矩形" : "斐波那契"})`}
             </div>
           )}
           <div ref={chartContainerRef} className="absolute inset-0" />

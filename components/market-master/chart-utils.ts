@@ -61,7 +61,8 @@ export class ShapeRenderer {
   }
 
   draw(target: any) {
-    target.useBitmapCoordinateSpace((scope: any) => {
+    // Chart coordinates (including the pane width) are CSS pixels.
+    target.useMediaCoordinateSpace((scope: any) => {
       const ctx = scope.context;
       if (!this.p1 || !this.p2) return;
 
@@ -76,7 +77,7 @@ export class ShapeRenderer {
         ctx.moveTo(this.p1.x, this.p1.y);
         ctx.lineTo(this.p2.x, this.p2.y);
         ctx.stroke();
-      } else if (this.type === "rectangle") {
+      } else if (this.type === "rectangle" || this.type === "zone") {
         const x = Math.min(this.p1.x, this.p2.x);
         const y = Math.min(this.p1.y, this.p2.y);
         const w = Math.abs(this.p2.x - this.p1.x);
@@ -132,7 +133,7 @@ export class ShapeRenderer {
       };
 
       if (this.hoveredPoint !== null) {
-        if (this.type === "rectangle") {
+        if (this.type === "rectangle" || this.type === "zone") {
           const corners = [
             { x: this.p1.x, y: this.p1.y, id: 1 },
             { x: this.p2.x, y: this.p2.y, id: 2 },
@@ -157,16 +158,9 @@ export class ShapePaneView {
   update() {}
   renderer(addAndCache: any) {
     if (!this.source.chart || !this.source.series) return null;
-    const x1 = this.source.chart
-      .timeScale()
-      .timeToCoordinate(this.source.p1.time);
-    const x2 = this.source.chart
-      .timeScale()
-      .timeToCoordinate(this.source.p2.time);
-    const y1 = this.source.series.priceToCoordinate(this.source.p1.price);
-    const y2 = this.source.series.priceToCoordinate(this.source.p2.price);
-
-    if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+    const coordinates = this.source.getCoordinates();
+    if (!coordinates) return null;
+    const { x1, x2, y1, y2 } = coordinates;
 
     let fibY: any[] = [];
     const fibLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
@@ -206,14 +200,14 @@ export class ShapePrimitive {
   constructor(p1: any, p2: any, type: string = "line") {
     this.id = "shape_" + Date.now() + Math.random().toString(36).substr(2, 9);
     this.p1 = p1;
-    this.p2 = p2;
+    this.p2 = type === "zone" ? { ...p2, time: p1.time } : p2;
     this.type = type;
     this.hoveredPoint = null;
     this.config = {
-      color: "#2962ff",
-      lineWidth: 2,
+      color: type === "zone" ? "#c084fc" : "#2962ff",
+      lineWidth: type === "zone" ? 1 : 2,
       isSelected: false,
-      fillBaseColor: "#2962ff",
+      fillBaseColor: type === "zone" ? "#c084fc" : "#2962ff",
       fibColors: [
         "#787b86",
         "#f23645",
@@ -242,7 +236,33 @@ export class ShapePrimitive {
   updateViews() {
     this._paneViews.forEach((pw: any) => pw.update());
   }
+  getCoordinates() {
+    if (!this.chart || !this.series) return null;
+    const timeScale = this.chart.timeScale();
+    const x1 = timeScale.timeToCoordinate(this.p1.time);
+    // Resolve the right edge on every paint/hit test. Advancing candles,
+    // zooming and resizing never change the user's price boundaries.
+    const x2 = this.type === "zone"
+      ? timeScale.width()
+      : timeScale.timeToCoordinate(this.p2.time);
+    const y1 = this.series.priceToCoordinate(this.p1.price);
+    const y2 = this.series.priceToCoordinate(this.p2.price);
+    if (x1 === null || x2 === null || y1 === null || y2 === null) return null;
+    if (this.type === "zone" && x1 >= x2) return null;
+    return { x1, x2, y1, y2 };
+  }
   updatePoint(index: any, newPoint: any) {
+    if (this.type === "zone") {
+      if (index === 1) this.p1 = newPoint;
+      else if (index === 2) this.p2 = { ...this.p2, price: newPoint.price };
+      else if (index === 3) {
+        this.p1 = { ...this.p1, time: newPoint.time };
+        this.p2 = { ...this.p2, price: newPoint.price };
+      } else if (index === 4) this.p1 = { ...this.p1, price: newPoint.price };
+      this.p2 = { ...this.p2, time: this.p1.time };
+      this.requestUpdate?.();
+      return;
+    }
     if (index === 1) this.p1 = newPoint;
     else if (index === 2) this.p2 = newPoint;
     else if (index === 3) {

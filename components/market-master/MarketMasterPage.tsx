@@ -1000,6 +1000,18 @@ export function MarketMasterPage() {
     setSelectedIndicator(null);
   }, [setSelectedShape, setSelectedIndicator]);
 
+  const cancelPendingDrawing = useCallback(() => {
+    const state = stateRef.current;
+    if (state.isDrawing && state.activeLine) {
+      detachShapeFromMainSeries(state.activeLine);
+      state.lines = state.lines.filter((line) => line !== state.activeLine);
+      setLines([...state.lines]);
+    }
+    state.isDrawing = false;
+    state.activeLine = null;
+    state.currentLogical = null;
+  }, [detachShapeFromMainSeries]);
+
   const getEpochTime = useCallback((time: any) => {
     if (typeof time === "number") return time;
     if (time && typeof time.timestamp === "number") return time.timestamp;
@@ -2652,7 +2664,8 @@ export function MarketMasterPage() {
       let price = series.coordinateToPrice(param.point.y);
 
       const dragTime =
-        time || chart.timeScale().coordinateToTime(param.point.x);
+        time || chart.timeScale().coordinateToTime(param.point.x) ||
+        (state.activeLine?.type === "zone" ? state.activeLine.p1.time : null);
       if (magnetRef.current && dragTime && price !== null) {
         const candle = fullDataRef.current.find((d) => d.time === dragTime);
         if (candle) {
@@ -2762,18 +2775,17 @@ export function MarketMasterPage() {
 
         if (!foundOrderLineHover) {
           for (const line of state.lines) {
-            const x1 = chart.timeScale().timeToCoordinate(line.p1.time);
-            const y1 = series.priceToCoordinate(line.p1.price);
-            const x2 = chart.timeScale().timeToCoordinate(line.p2.time);
-            const y2 = series.priceToCoordinate(line.p2.price);
-
-            if (x1 === null || y1 === null || x2 === null || y2 === null)
+            const coordinates = line.getCoordinates();
+            if (!coordinates) {
+              line.setHoveredPoint(null);
               continue;
+            }
+            const { x1, x2, y1, y2 } = coordinates;
 
             const px = param.point.x,
               py = param.point.y;
 
-            if (line.type === "rectangle") {
+            if (line.type === "rectangle" || line.type === "zone") {
               if (Math.hypot(px - x1, py - y1) < 10) {
                 line.setHoveredPoint(1);
                 foundTrendlineHover = true;
@@ -2813,7 +2825,7 @@ export function MarketMasterPage() {
               }
             }
 
-            if (line.type === "rectangle") {
+            if (line.type === "rectangle" || line.type === "zone") {
               const minX = Math.min(x1, x2),
                 maxX = Math.max(x1, x2);
               const minY = Math.min(y1, y2),
@@ -2874,6 +2886,15 @@ export function MarketMasterPage() {
       const state = stateRef.current;
       if (state.mode === "draw") {
         hideCandleTooltip();
+        if (state.drawType === "zone") {
+          if (!param.point) return;
+          const time = param.time || chart.timeScale().coordinateToTime(param.point.x) || state.activeLine?.p1.time;
+          const price = magnetRef.current && state.currentLogical?.time === time
+            ? state.currentLogical.price
+            : series.coordinateToPrice(param.point.y);
+          if (time == null || price == null) return;
+          state.currentLogical = { time, price };
+        }
         if (!state.currentLogical) return;
         if (!state.isDrawing) {
           const newLine = new ShapePrimitive(
@@ -2886,6 +2907,8 @@ export function MarketMasterPage() {
           state.isDrawing = true;
           state.lines.push(newLine);
         } else {
+          state.activeLine?.updatePoint(2, state.currentLogical);
+          if (state.activeLine?.type === "zone" && state.activeLine.p1.price === state.activeLine.p2.price) return;
           state.isDrawing = false;
           state.activeLine = null;
           setMode("idle");
@@ -3107,6 +3130,13 @@ export function MarketMasterPage() {
       )
         return;
 
+      if (e.key === "Escape" && stateRef.current.mode === "draw") {
+        cancelPendingDrawing();
+        setMode("idle");
+        stateRef.current.mode = "idle";
+        return;
+      }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         let hoveredShapeIndex = stateRef.current.lines.findIndex(
           (l) => l.hoveredPoint !== null
@@ -3186,6 +3216,7 @@ export function MarketMasterPage() {
     isMounted,
     applyIndicatorSelectionStyles,
     clearAllSelections,
+    cancelPendingDrawing,
     detachShapeFromMainSeries,
     findClosestBollingerAtPoint,
     findClosestEmaAtPoint,
@@ -4303,6 +4334,8 @@ export function MarketMasterPage() {
 
   const setDrawingTool = (type) => {
     hideCandleTooltip();
+    cancelPendingDrawing();
+    clearAllSelections();
     setIsRepairSelecting(false);
     setPendingRepairRange(null);
     setMode("draw");
@@ -4363,7 +4396,7 @@ export function MarketMasterPage() {
     if (shapeIndex !== -1) {
       const shape = stateRef.current.lines[shapeIndex];
       shape.updateConfig({ [field]: value });
-      if (field === "color" && shape.type === "rectangle") {
+      if (field === "color" && (shape.type === "rectangle" || shape.type === "zone")) {
         shape.updateConfig({ fillBaseColor: value });
       }
     }
@@ -4479,6 +4512,7 @@ export function MarketMasterPage() {
   };
 
   const setInteractionMode = (nextMode: string) => {
+    cancelPendingDrawing();
     if (nextMode !== "repairSelect") {
       setIsRepairSelecting(false);
       setPendingRepairRange(null);
@@ -4489,6 +4523,7 @@ export function MarketMasterPage() {
   };
 
   const clearAllLines = () => {
+    cancelPendingDrawing();
     setSelectedShape(null);
     stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
     stateRef.current.lines = [];

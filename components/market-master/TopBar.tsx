@@ -12,6 +12,7 @@ import {
   MousePointer2,
   Minus,
   Square,
+  PanelTopDashed,
   AlignJustify,
   Magnet,
   ArrowUpDown,
@@ -312,9 +313,23 @@ export const TopBar = ({
                   ? "bg-gray-700 text-blue-400"
                   : "hover:bg-gray-700 text-gray-400"
               }`}
-              title="画阻力矩形 (Rectangle)"
+              title="画普通矩形 (Rectangle)"
             >
               <Square size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawingTool("zone")}
+              aria-label="手动支撑/阻力区"
+              aria-pressed={mode === "draw" && drawType === "zone"}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "draw" && drawType === "zone"
+                  ? "bg-gray-700 text-purple-300"
+                  : "hover:bg-gray-700 text-gray-400"
+              }`}
+              title="手动支撑/阻力区：两次点击确定起点和价格范围，自动向右延伸"
+            >
+              <PanelTopDashed size={20} />
             </button>
             <button
               onClick={() => setDrawingTool("fib")}
