@@ -44,6 +44,72 @@ test("ignores a shallow pullback and extends the original trend", () => {
   assert.equal(pens[0].endPoint.price, 105);
 });
 
+test("a shallow initial leg qualifies at fifteen candles, but not fourteen, in both directions", () => {
+  for (const direction of [1, -1]) {
+    const data = candles(Array.from({ length: 15 }, (_, i) => 100 + direction * i * 0.01));
+    assert.equal(generateAutomaticPens(data.slice(0, 14)).length, 0);
+    const pens = generateAutomaticPens(data);
+    assert.equal(pens.length, 1);
+    assert.equal(pens[0].trend, direction);
+    assert.equal(pens[0].startPoint.index, 0);
+    assert.equal(pens[0].endPoint.index, 14);
+  }
+});
+
+test("a shallow reversal qualifies at fifteen candles with an exactly shared pivot", () => {
+  for (const direction of [1, -1]) {
+    const data = candles([
+      ...Array.from({ length: 5 }, (_, i) => 100 + direction * i),
+      ...Array.from({ length: 14 }, (_, i) => 100 + direction * (4 - (i + 1) * 0.01)),
+    ]);
+    assert.equal(generateAutomaticPens(data.slice(0, -1)).length, 1);
+    const pens = generateAutomaticPens(data);
+    assert.equal(pens.length, 2);
+    assert.deepEqual(pens[0].endPoint, pens[1].startPoint);
+    assert.equal(pens[1].trend, -direction);
+    assert.equal(pens[1].endPoint.index - pens[1].startPoint.index + 1, 15);
+  }
+});
+
+test("the time-only threshold can be adjusted and defaults to three times the minimum span", () => {
+  const data = candles(Array.from({ length: 30 }, (_, i) => 100 + i * 0.01));
+  const options = { timeOnlyMinCandleCount: 20 };
+  assert.equal(generateAutomaticPens(data.slice(0, 19), undefined, options).length, 0);
+  assert.equal(generateAutomaticPens(data.slice(0, 20), undefined, options).length, 1);
+  assert.equal(generateAutomaticPens(data.slice(0, 17), 6).length, 0);
+  assert.equal(generateAutomaticPens(data.slice(0, 18), 6).length, 1);
+  for (const value of [4, -1, 15.5, NaN, Infinity]) {
+    assert.throws(() => generateAutomaticPens(data, undefined, { timeOnlyMinCandleCount: value }), /timeOnlyMinCandleCount/);
+  }
+});
+
+test("time alone cannot create pens when prices stay identical", () => {
+  assert.equal(generateAutomaticPens(candles(Array(120).fill(100))).length, 0);
+});
+
+test("waiting after a shallow old extreme does not substitute for fifteen candles between endpoints", () => {
+  const prices = [100, 101, 102, 103, 104, 103.9, 103.8, 103.7, 103.6, ...Array(30).fill(103.6)];
+  assert.equal(generateAutomaticPens(candles(prices)).length, 1);
+  const pens = generateAutomaticPens(candles([...prices, 103.5]));
+  assert.equal(pens.length, 2);
+  assert.equal(pens[1].startPoint.index, 4);
+  assert.equal(pens[1].endPoint.index, prices.length);
+});
+
+test("extending the trend restarts the reversal span at the new extreme", () => {
+  const prices = [
+    100, 101, 102, 103, 104,
+    ...Array.from({ length: 10 }, (_, i) => 104 - (i + 1) * 0.01),
+    105,
+    ...Array.from({ length: 14 }, (_, i) => 105 - (i + 1) * 0.01),
+  ];
+  assert.equal(generateAutomaticPens(candles(prices.slice(0, -1))).length, 1);
+  const pens = generateAutomaticPens(candles(prices));
+  assert.equal(pens.length, 2);
+  assert.equal(pens[1].startPoint.index, 15);
+  assert.equal(pens[1].endPoint.index, 29);
+});
+
 test("confirms meaningful reversals in both directions with exactly shared pivots", () => {
   const pens = generateAutomaticPens(candles([100, 101, 102, 103, 104, 103, 102, 101, 100, 101, 102, 103, 104]));
   assert.deepEqual(Array.from(pens, (pen) => pen.trend), [1, -1, 1]);
@@ -58,10 +124,10 @@ test("a falling trend ignores a shallow bounce before extending", () => {
   assert.equal(pens[0].endPoint.price, 99);
 });
 
-test("waiting does not lower the reversal threshold even after ATR windows expire", () => {
+test("the ATR threshold stays fixed before the configured time-only threshold", () => {
   const data = candles([100, 101, 102, 103, 104]);
   data.push(...candles(Array.from({ length: 120 }, (_, i) => 104 - (i + 1) * 0.01), 0.005, 6));
-  const pens = generateAutomaticPens(data);
+  const pens = generateAutomaticPens(data, undefined, { timeOnlyMinCandleCount: 150 });
   assert.equal(pens.length, 1);
   assert.equal(pens[0].endPoint.price, 104);
 });
@@ -153,6 +219,17 @@ test("enabled drawing can start with zero pens and later acquire its first pen",
   harness.setData(candles([100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
+});
+
+test("incremental drawing adds the first shallow pen when its fifteenth candle arrives", () => {
+  const data = candles(Array.from({ length: 15 }, (_, i) => 100 + i * 0.01));
+  const harness = hookHarness(data.slice(0, 14), { from: 1, to: 14 });
+  harness.hook.drawAutomaticPens();
+  assert.equal(harness.drawn.size, 0);
+  harness.setData(data);
+  harness.hook.updateAutomaticPensAfterCandle();
+  assert.equal(harness.drawn.size, 1);
+  assert.deepEqual([...harness.drawn][0].data, [{ time: 1, value: 100 }, { time: 15, value: 100.14 }]);
 });
 
 test("updates preserve the initial drawing boundary and refresh same-bar prices", () => {

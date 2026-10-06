@@ -6,6 +6,7 @@ export const AUTOMATIC_PENS_RULES = {
   atrPeriod: 14,
   backgroundAtrPeriod: 100,
   minMoveAtrMultiple: 2,
+  timeOnlyCandleMultiplier: 3,
 } as const;
 
 export enum AutomaticPenTrend {
@@ -34,6 +35,8 @@ type AutomaticPenOptions = {
   /** Earlier candles warm up ATR but cannot become pen endpoints. */
   startIndex?: number;
   minMoveAtrMultiple?: number;
+  /** Long legs may qualify without reaching the ATR price threshold. */
+  timeOnlyMinCandleCount?: number;
 };
 
 function calculateMinimumMoves(
@@ -68,8 +71,9 @@ function calculateMinimumMoves(
 
 /**
  * Body extrema define endpoints; wick/gap true ranges define normal volatility.
- * Each new leg must pass both the inclusive candle span and the price threshold
- * sampled at its starting extreme. Waiting alone cannot lower that threshold.
+ * A new leg needs the minimum inclusive span plus the ATR price threshold,
+ * or the longer time-only span. Both spans measure actual endpoint positions;
+ * waiting after an old extreme cannot lengthen a leg. ATR stays fixed at its start.
  * The final pen is still developing; earlier pens are confirmed by a reversal.
  */
 export function generateAutomaticPens(
@@ -78,6 +82,7 @@ export function generateAutomaticPens(
   {
     startIndex = 0,
     minMoveAtrMultiple = AUTOMATIC_PENS_RULES.minMoveAtrMultiple,
+    timeOnlyMinCandleCount = minCandleCount * AUTOMATIC_PENS_RULES.timeOnlyCandleMultiplier,
   }: AutomaticPenOptions = {}
 ): AutomaticPen[] {
   if (!Number.isInteger(minCandleCount) || minCandleCount < 2) {
@@ -89,6 +94,9 @@ export function generateAutomaticPens(
   if (!Number.isFinite(minMoveAtrMultiple) || minMoveAtrMultiple < 0) {
     throw new RangeError("minMoveAtrMultiple must be finite and nonnegative");
   }
+  if (!Number.isInteger(timeOnlyMinCandleCount) || timeOnlyMinCandleCount < minCandleCount) {
+    throw new RangeError("timeOnlyMinCandleCount must be an integer of at least minCandleCount");
+  }
   if (candlestickData.length - startIndex < 2) return [];
 
   const minimumMoves = calculateMinimumMoves(candlestickData, minMoveAtrMultiple);
@@ -99,10 +107,13 @@ export function generateAutomaticPens(
       ? Math.max(candlestickData[index].open, candlestickData[index].close)
       : Math.min(candlestickData[index].open, candlestickData[index].close),
   });
-  const qualifies = (start: AutomaticPenPoint, end: AutomaticPenPoint) =>
-    end.index - start.index + 1 >= minCandleCount &&
-    Math.abs(end.price - start.price) > 0 &&
-    Math.abs(end.price - start.price) >= minimumMoves[start.index];
+  const qualifies = (start: AutomaticPenPoint, end: AutomaticPenPoint) => {
+    const candleCount = end.index - start.index + 1;
+    const priceMove = Math.abs(end.price - start.price);
+    return candleCount >= minCandleCount && priceMove > 0 && (
+      priceMove >= minimumMoves[start.index] || candleCount >= timeOnlyMinCandleCount
+    );
+  };
 
   let high = point(startIndex, true);
   let low = point(startIndex, false);
