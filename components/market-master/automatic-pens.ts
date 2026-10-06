@@ -2,6 +2,11 @@ import type { CandlestickData, Time } from "lightweight-charts";
 
 export const AUTOMATIC_PENS_COLOR = "#ffff00";
 export const AUTOMATIC_PENS_MIN_CANDLE_COUNT = 5;
+export const AUTOMATIC_PENS_RULES = {
+  atrPeriod: 14,
+  backgroundAtrPeriod: 100,
+  minMoveAtrMultiple: 2,
+} as const;
 
 export enum AutomaticPenTrend {
   Up = 1,
@@ -22,150 +27,142 @@ export type AutomaticPen = {
 
 type AutomaticPenCandle = Pick<
   CandlestickData<Time>,
-  "time" | "open" | "close"
+  "time" | "open" | "close" | "high" | "low"
 >;
 
+type AutomaticPenOptions = {
+  /** Earlier candles warm up ATR but cannot become pen endpoints. */
+  startIndex?: number;
+  minMoveAtrMultiple?: number;
+};
+
+function calculateMinimumMoves(
+  candles: readonly AutomaticPenCandle[],
+  multiple: number
+): number[] {
+  const ranges: number[] = [];
+  let shortSum = 0;
+  let backgroundSum = 0;
+  return candles.map((candle, index) => {
+    const previousClose = index > 0 ? candles[index - 1].close : candle.open;
+    const range = Math.max(
+      candle.high - candle.low,
+      Math.abs(candle.high - previousClose),
+      Math.abs(candle.low - previousClose)
+    );
+    ranges.push(range);
+    shortSum += range;
+    backgroundSum += range;
+    const { atrPeriod, backgroundAtrPeriod } = AUTOMATIC_PENS_RULES;
+    if (index >= atrPeriod) shortSum -= ranges[index - atrPeriod];
+    if (index >= backgroundAtrPeriod) {
+      backgroundSum -= ranges[index - backgroundAtrPeriod];
+    }
+    return multiple * Math.max(
+      0,
+      shortSum / Math.min(index + 1, atrPeriod),
+      backgroundSum / Math.min(index + 1, backgroundAtrPeriod)
+    );
+  });
+}
+
 /**
- * Port of the legacy Pens algorithm. It deliberately uses candle bodies rather
- * than wick highs/lows and confirms a turn only after the extrema span at
- * least minCandleCount candles (inclusive).
+ * Body extrema define endpoints; wick/gap true ranges define normal volatility.
+ * Each new leg must pass both the inclusive candle span and the price threshold
+ * sampled at its starting extreme. Waiting alone cannot lower that threshold.
+ * The final pen is still developing; earlier pens are confirmed by a reversal.
  */
 export function generateAutomaticPens(
   candlestickData: readonly AutomaticPenCandle[],
-  minCandleCount = AUTOMATIC_PENS_MIN_CANDLE_COUNT
+  minCandleCount = AUTOMATIC_PENS_MIN_CANDLE_COUNT,
+  {
+    startIndex = 0,
+    minMoveAtrMultiple = AUTOMATIC_PENS_RULES.minMoveAtrMultiple,
+  }: AutomaticPenOptions = {}
 ): AutomaticPen[] {
-  if (candlestickData.length < 2) return [];
+  if (!Number.isInteger(minCandleCount) || minCandleCount < 2) {
+    throw new RangeError("minCandleCount must be an integer of at least 2");
+  }
+  if (!Number.isInteger(startIndex) || startIndex < 0) {
+    throw new RangeError("startIndex must be a nonnegative integer");
+  }
+  if (!Number.isFinite(minMoveAtrMultiple) || minMoveAtrMultiple < 0) {
+    throw new RangeError("minMoveAtrMultiple must be finite and nonnegative");
+  }
+  if (candlestickData.length - startIndex < 2) return [];
 
-  const firstCandle = candlestickData[0];
-  const high: AutomaticPenPoint = {
-    index: 0,
-    price: Math.max(firstCandle.open, firstCandle.close),
-    time: firstCandle.time,
-  };
-  const low: AutomaticPenPoint = {
-    index: 0,
-    price: Math.min(firstCandle.open, firstCandle.close),
-    time: firstCandle.time,
-  };
+  const minimumMoves = calculateMinimumMoves(candlestickData, minMoveAtrMultiple);
+  const point = (index: number, high: boolean): AutomaticPenPoint => ({
+    index,
+    time: candlestickData[index].time,
+    price: high
+      ? Math.max(candlestickData[index].open, candlestickData[index].close)
+      : Math.min(candlestickData[index].open, candlestickData[index].close),
+  });
+  const qualifies = (start: AutomaticPenPoint, end: AutomaticPenPoint) =>
+    end.index - start.index + 1 >= minCandleCount &&
+    Math.abs(end.price - start.price) > 0 &&
+    Math.abs(end.price - start.price) >= minimumMoves[start.index];
 
-  let currentTrend: AutomaticPenTrend | null = null;
-  let startPoint: AutomaticPenPoint | null = null;
-  let endPoint: AutomaticPenPoint | null = null;
+  let high = point(startIndex, true);
+  let low = point(startIndex, false);
+  let active: AutomaticPen | null = null;
   const pens: AutomaticPen[] = [];
 
-  const updateOppositeExtreme = (
-    newTrend: AutomaticPenTrend,
-    currentHigh: number,
-    currentLow: number,
-    index: number,
-    candle: AutomaticPenCandle
-  ) => {
-    if (newTrend === AutomaticPenTrend.Up) {
-      low.index = index;
-      low.price = currentLow;
-      low.time = candle.time;
-    }
+  for (let index = startIndex + 1; index < candlestickData.length; index++) {
+    const currentHigh = point(index, true);
+    const currentLow = point(index, false);
 
-    if (newTrend === AutomaticPenTrend.Down) {
-      high.index = index;
-      high.price = currentHigh;
-      high.time = candle.time;
-    }
-  };
-
-  const updateTrend = (
-    newTrend: AutomaticPenTrend,
-    currentHigh: number,
-    currentLow: number,
-    index: number,
-    candle: AutomaticPenCandle
-  ) => {
-    let candleDistance = 0;
-
-    if (currentTrend === newTrend) {
-      candleDistance =
-        newTrend === AutomaticPenTrend.Up
-          ? Math.abs(high.index - (startPoint ? startPoint.index : low.index)) + 1
-          : Math.abs((startPoint ? startPoint.index : high.index) - low.index) + 1;
-
-      if (candleDistance >= minCandleCount) {
-        endPoint =
-          newTrend === AutomaticPenTrend.Up ? { ...high } : { ...low };
-        updateOppositeExtreme(
-          newTrend,
-          currentHigh,
-          currentLow,
-          index,
-          candle
-        );
+    if (!active) {
+      const newHigh = currentHigh.price > high.price;
+      const newLow = currentLow.price < low.price;
+      if (newHigh) high = currentHigh;
+      if (newLow) low = currentLow;
+      if (newHigh && qualifies(low, high)) {
+        active = { startPoint: low, endPoint: high, trend: AutomaticPenTrend.Up };
+        low = currentLow;
+      } else if (newLow && qualifies(high, low)) {
+        active = { startPoint: high, endPoint: low, trend: AutomaticPenTrend.Down };
+        high = currentHigh;
       }
-      return;
+      continue;
     }
 
-    candleDistance =
-      newTrend === AutomaticPenTrend.Up
-        ? Math.abs(high.index - (endPoint ? endPoint.index : low.index)) + 1
-        : Math.abs((endPoint ? endPoint.index : high.index) - low.index) + 1;
-
-    if (candleDistance < minCandleCount) return;
-
-    if (startPoint && endPoint) {
-      pens.push({
-        startPoint,
-        endPoint,
-        trend: currentTrend ?? newTrend,
-      });
+    if (active.trend === AutomaticPenTrend.Up) {
+      if (currentHigh.price > active.endPoint.price) {
+        active.endPoint = currentHigh;
+        low = currentLow;
+      } else if (currentLow.price < low.price) {
+        low = currentLow;
+        if (qualifies(active.endPoint, low)) {
+          pens.push(active);
+          active = {
+            startPoint: active.endPoint,
+            endPoint: low,
+            trend: AutomaticPenTrend.Down,
+          };
+          high = currentHigh;
+        }
+      }
+    } else {
+      if (currentLow.price < active.endPoint.price) {
+        active.endPoint = currentLow;
+        high = currentHigh;
+      } else if (currentHigh.price > high.price) {
+        high = currentHigh;
+        if (qualifies(active.endPoint, high)) {
+          pens.push(active);
+          active = {
+            startPoint: active.endPoint,
+            endPoint: high,
+            trend: AutomaticPenTrend.Up,
+          };
+          low = currentLow;
+        }
+      }
     }
+  }
 
-    currentTrend = newTrend;
-    startPoint =
-      newTrend === AutomaticPenTrend.Up ? { ...low } : { ...high };
-    endPoint =
-      newTrend === AutomaticPenTrend.Up ? { ...high } : { ...low };
-    updateOppositeExtreme(newTrend, currentHigh, currentLow, index, candle);
-  };
-
-  candlestickData.forEach((candle, index) => {
-    if (index === 0) return;
-
-    const currentHigh = Math.max(candle.open, candle.close);
-    const currentLow = Math.min(candle.open, candle.close);
-
-    if (currentHigh > high.price) {
-      high.index = index;
-      high.price = currentHigh;
-      high.time = candle.time;
-      updateTrend(
-        AutomaticPenTrend.Up,
-        currentHigh,
-        currentLow,
-        index,
-        candle
-      );
-    }
-
-    if (currentLow < low.price) {
-      low.index = index;
-      low.price = currentLow;
-      low.time = candle.time;
-      updateTrend(
-        AutomaticPenTrend.Down,
-        currentHigh,
-        currentLow,
-        index,
-        candle
-      );
-    }
-
-    if (
-      index === candlestickData.length - 1 &&
-      startPoint &&
-      endPoint &&
-      currentTrend
-    ) {
-      pens.push({ startPoint, endPoint, trend: currentTrend });
-    }
-  });
-
+  if (active) pens.push(active);
   return pens;
 }
