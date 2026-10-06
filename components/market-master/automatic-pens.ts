@@ -5,7 +5,7 @@ export const AUTOMATIC_PENS_MIN_CANDLE_COUNT = 5;
 export const AUTOMATIC_PENS_RULES = {
   atrPeriod: 14,
   backgroundAtrPeriod: 100,
-  minMoveAtrMultiple: 2,
+  minMoveAtrMultiple: 1.5,
   timeOnlyCandleMultiplier: 3,
 } as const;
 

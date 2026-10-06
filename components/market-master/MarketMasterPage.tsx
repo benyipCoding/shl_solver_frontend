@@ -49,6 +49,8 @@ import {
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
 import { useAutomaticPens } from "@/hooks/useAutomaticPens";
+import { usePenMomentum } from "@/hooks/usePenMomentum";
+import { PenMomentumPanel } from "@/components/market-master/PenMomentumPanel";
 import { useAutomaticSegments } from "@/hooks/useAutomaticSegments";
 import { useSupportResistanceZones } from "@/hooks/useSupportResistanceZones";
 import { SupportResistancePanel } from "./SupportResistancePanel";
@@ -3243,6 +3245,17 @@ export function MarketMasterPage() {
     updateSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
   }, [isMounted, currentIndex, isDataLoading, isHistoryLoading, dataError, isBacktestMode, symbol, timeframe, marketDataEpoch, updateSupportResistance]);
 
+  const {
+    snapshot: penMomentumSnapshot,
+    selectedPair: selectedMomentumPair,
+    selectDirection: selectMomentumDirection,
+  } = usePenMomentum({
+    seriesRef,
+    config: indConfig.penMomentum,
+    ready: isMounted && !isDataLoading && !dataError,
+    marketKey: `${symbol}:${timeframe}`,
+  });
+
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
     if (!isMounted || !indConfig.macd.enabled || !subChartContainerRef.current)
@@ -4698,6 +4711,13 @@ export function MarketMasterPage() {
           automatic={isSupportResistanceAutomatic}
           history={supportResistanceHistory}
           onRetryHistory={retrySupportResistanceHistory}
+        />}
+        {indConfig.penMomentum.enabled && !isDataLoading && !dataError && <PenMomentumPanel
+          snapshot={penMomentumSnapshot}
+          config={indConfig.penMomentum}
+          selectedPair={selectedMomentumPair}
+          onSelect={selectMomentumDirection}
+          decimals={priceDecimals}
         />}
         <KlineRepairSelectOverlay
           active={isRepairSelecting}

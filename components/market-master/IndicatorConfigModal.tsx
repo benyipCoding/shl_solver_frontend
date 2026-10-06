@@ -1,6 +1,8 @@
 import React from "react";
 import { X, Plus, Trash2, BarChart2 } from "lucide-react";
 import { ColorPicker } from "./ColorPicker";
+import { PenMomentumConfigFields } from "./PenMomentumConfigFields";
+import type { IndicatorConfig } from "./market-config";
 
 export const IndicatorConfigModal = ({
   isIndicatorModalOpen,
@@ -47,7 +49,7 @@ export const IndicatorConfigModal = ({
       </div>
 
       <div className="flex h-104 min-h-0 max-lg:h-auto max-lg:flex-1 max-md:flex-col">
-        <div className="w-32 space-y-1 border-r border-gray-800 bg-gray-900/50 p-2 max-md:flex max-md:w-full max-md:space-y-0 max-md:border-b max-md:border-r-0">
+        <div className="w-32 shrink-0 space-y-1 border-r border-gray-800 bg-gray-900/50 p-2 max-md:flex max-md:w-full max-md:overflow-x-auto max-md:space-y-0 max-md:border-b max-md:border-r-0 max-md:[&>button]:w-auto max-md:[&>button]:shrink-0">
           <button
             onClick={() => setSelectedIndTab("EMA")}
             className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors font-medium ${
@@ -88,9 +90,19 @@ export const IndicatorConfigModal = ({
           >
             布林通道
           </button>
+          <button
+            onClick={() => setSelectedIndTab("PEN_MOMENTUM")}
+            className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${selectedIndTab === "PEN_MOMENTUM" ? "bg-gray-800 text-violet-400 shadow-sm" : "text-gray-400 hover:bg-gray-800/50"}`}
+          >
+            分笔动能
+          </button>
         </div>
 
         <div className="flex-1 p-4 overflow-y-auto bg-[#111827]">
+          {selectedIndTab === "PEN_MOMENTUM" && <PenMomentumConfigFields
+            config={draftConfig.penMomentum}
+            onChange={(penMomentum) => setDraftConfig((previous: IndicatorConfig) => ({ ...previous, penMomentum }))}
+          />}
           {selectedIndTab === "EMA" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4 sticky top-0 bg-[#111827] z-10 pb-2 border-b border-gray-800">
