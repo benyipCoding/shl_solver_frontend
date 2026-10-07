@@ -387,17 +387,47 @@ export function MarketMasterPage() {
     resetAutomaticSegmentsState,
     updateAutomaticSegmentsAfterCandle,
   } = useAutomaticSegments({ chartRef, seriesRef });
-  const [isAutomaticStructureEnabled, setIsAutomaticStructureEnabled] =
+  const [isAutomaticPensEnabled, setIsAutomaticPensEnabled] = useState(false);
+  const [isAutomaticSegmentsEnabled, setIsAutomaticSegmentsEnabled] =
     useState(false);
-  const disableAutomaticStructure = useCallback(() => {
-    setIsAutomaticStructureEnabled(false);
+  const disableAutomaticPens = useCallback(() => {
+    setIsAutomaticPensEnabled(false);
     clearAutomaticPens();
+  }, [clearAutomaticPens]);
+  const disableAutomaticSegments = useCallback(() => {
+    setIsAutomaticSegmentsEnabled(false);
     clearAutomaticSegments();
-  }, [clearAutomaticPens, clearAutomaticSegments]);
-  const handleToggleAutomaticStructure = useCallback(() => {
+  }, [clearAutomaticSegments]);
+  const disableAutomaticDrawings = useCallback(() => {
+    disableAutomaticPens();
+    disableAutomaticSegments();
+  }, [disableAutomaticPens, disableAutomaticSegments]);
+  const handleToggleAutomaticPens = useCallback(() => {
     if (!canUseAutomaticDraw) return;
-    if (isAutomaticStructureEnabled) {
-      disableAutomaticStructure();
+    if (isAutomaticPensEnabled) {
+      disableAutomaticPens();
+      return;
+    }
+    if (
+      !chartRef.current ||
+      !seriesRef.current ||
+      seriesRef.current.data().length === 0
+    ) {
+      return;
+    }
+
+    setIsAutomaticPensEnabled(true);
+    drawAutomaticPens();
+  }, [
+    canUseAutomaticDraw,
+    disableAutomaticPens,
+    drawAutomaticPens,
+    isAutomaticPensEnabled,
+  ]);
+  const handleToggleAutomaticSegments = useCallback(() => {
+    if (!canUseAutomaticDraw) return;
+    if (isAutomaticSegmentsEnabled) {
+      disableAutomaticSegments();
       return;
     }
     if (
@@ -409,25 +439,27 @@ export function MarketMasterPage() {
       return;
     }
 
-    setIsAutomaticStructureEnabled(true);
-    drawAutomaticPens();
+    setIsAutomaticSegmentsEnabled(true);
     drawAutomaticSegments();
   }, [
     canUseAutomaticDraw,
-    disableAutomaticStructure,
-    drawAutomaticPens,
+    disableAutomaticSegments,
     drawAutomaticSegments,
     isAutomaticSegmentBusy,
-    isAutomaticStructureEnabled,
+    isAutomaticSegmentsEnabled,
   ]);
   useEffect(() => {
-    if (!canUseAutomaticDraw && isAutomaticStructureEnabled) {
-      disableAutomaticStructure();
+    if (
+      !canUseAutomaticDraw &&
+      (isAutomaticPensEnabled || isAutomaticSegmentsEnabled)
+    ) {
+      disableAutomaticDrawings();
     }
   }, [
     canUseAutomaticDraw,
-    disableAutomaticStructure,
-    isAutomaticStructureEnabled,
+    disableAutomaticDrawings,
+    isAutomaticPensEnabled,
+    isAutomaticSegmentsEnabled,
   ]);
   const emaSeriesRefs = useRef<any>({});
   const bollingerSeriesRefs = useRef<any>({});
@@ -1820,7 +1852,7 @@ export function MarketMasterPage() {
     let cancelled = false;
 
     const clearChartData = () => {
-      disableAutomaticStructure();
+      disableAutomaticDrawings();
       fullDataRef.current = [];
       loadedMarketRef.current = { symbol: "", timeframe: "" };
       fullEmaDataRef.current = {};
@@ -1955,7 +1987,7 @@ export function MarketMasterPage() {
     symbol,
     timeframe,
     syncDisplayedData,
-    disableAutomaticStructure,
+    disableAutomaticDrawings,
     marketDataEpoch,
   ]);
 
@@ -2020,7 +2052,7 @@ export function MarketMasterPage() {
       setIsReplayMode(true);
       setIsPlaying(false);
       resetBacktestAccount();
-      disableAutomaticStructure();
+      disableAutomaticDrawings();
       currentIndexRef.current = startCurrent;
       setCurrentIndex(startCurrent);
       setReplayBounds({ startCurrent, endCurrent });
@@ -2046,7 +2078,7 @@ export function MarketMasterPage() {
     },
     [
       applyReplayEventsUpTo,
-      disableAutomaticStructure,
+      disableAutomaticDrawings,
       resetBacktestAccount,
       syncDisplayedData,
     ]
@@ -2167,7 +2199,7 @@ export function MarketMasterPage() {
             : `session-${Date.now()}`;
         setIsPlaying(false);
         resetBacktestAccount();
-        disableAutomaticStructure();
+        disableAutomaticDrawings();
 
         if (!coversWindow) {
           historyLoadingRef.current = true;
@@ -2299,14 +2331,14 @@ export function MarketMasterPage() {
       setReplayBounds({ startCurrent: 0, endCurrent: 0 });
       resetBacktestAccount();
       setIsPlaying(false);
-      disableAutomaticStructure();
+      disableAutomaticDrawings();
       clearClosedTradeMarkers();
       void restoreLatestWindow();
       return;
     }
 
     setIsPlaying(false);
-    disableAutomaticStructure();
+    disableAutomaticDrawings();
     clearClosedTradeMarkers();
 
     const nextCurrentIndex = fullDataRef.current.length;
@@ -2316,7 +2348,7 @@ export function MarketMasterPage() {
   }, [
     applyCandlePage,
     applyReplayWindow,
-    disableAutomaticStructure,
+    disableAutomaticDrawings,
     clearClosedTradeMarkers,
     fetchSymbolPage,
     isBacktestMode,
@@ -3837,7 +3869,18 @@ export function MarketMasterPage() {
         !event.repeat
       ) {
         event.preventDefault();
-        handleToggleAutomaticStructure();
+        handleToggleAutomaticPens();
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "r" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        event.preventDefault();
+        handleToggleAutomaticSegments();
       }
     };
 
@@ -3846,7 +3889,8 @@ export function MarketMasterPage() {
       window.removeEventListener("keydown", handleAutomaticDrawShortcut);
   }, [
     canUseAutomaticDraw,
-    handleToggleAutomaticStructure,
+    handleToggleAutomaticPens,
+    handleToggleAutomaticSegments,
   ]);
 
   useEffect(() => {
@@ -4700,9 +4744,11 @@ export function MarketMasterPage() {
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
-        isAutomaticStructureEnabled={isAutomaticStructureEnabled}
-        onToggleAutomaticStructure={handleToggleAutomaticStructure}
+        isAutomaticPensEnabled={isAutomaticPensEnabled}
+        onToggleAutomaticPens={handleToggleAutomaticPens}
         automaticPenCount={automaticPenCount}
+        isAutomaticSegmentsEnabled={isAutomaticSegmentsEnabled}
+        onToggleAutomaticSegments={handleToggleAutomaticSegments}
         automaticSegmentCount={automaticSegmentCount}
         isAutomaticSegmentBusy={isAutomaticSegmentBusy}
         onToggleSupportResistance={handleToggleSupportResistance}

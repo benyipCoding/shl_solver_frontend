@@ -23,6 +23,7 @@ import {
   StepForward,
   Pause,
   Play,
+  ChartSpline,
   ChartNoAxesCombined,
   TriangleAlert,
   RefreshCw,
@@ -51,9 +52,11 @@ export const TopBar = ({
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
-  isAutomaticStructureEnabled = false,
-  onToggleAutomaticStructure,
+  isAutomaticPensEnabled = false,
+  onToggleAutomaticPens,
   automaticPenCount = 0,
+  isAutomaticSegmentsEnabled = false,
+  onToggleAutomaticSegments,
   automaticSegmentCount = 0,
   isAutomaticSegmentBusy = false,
   onToggleSupportResistance,
@@ -188,7 +191,7 @@ export const TopBar = ({
           <div
             className={`grid gap-2 ${
               canUseAutomaticDraw
-                ? "grid-cols-[minmax(0,1fr)_4.75rem_2.75rem]"
+                ? "grid-cols-[minmax(0,1fr)_4rem_2.5rem_2.5rem]"
                 : "grid-cols-[minmax(0,1fr)_5.5rem]"
             }`}
           >
@@ -210,47 +213,78 @@ export const TopBar = ({
               )}
             </select>
             {canUseAutomaticDraw ? (
-              <button
-                type="button"
-                onClick={onToggleAutomaticStructure}
-                disabled={
-                  !isAutomaticStructureEnabled &&
-                  (isDataLoading ||
-                    Boolean(dataError) ||
-                    totalCandles === 0 ||
-                    isAutomaticSegmentBusy)
-                }
-                aria-label={
-                  isAutomaticStructureEnabled
-                    ? "关闭并清除自动 Pens 和 Segments"
-                    : "开启自动 Pens 和 Segments"
-                }
-                aria-pressed={isAutomaticStructureEnabled}
-                aria-busy={isAutomaticSegmentBusy}
-                className={`relative flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
-                  isAutomaticStructureEnabled
-                    ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
-                    : "border-slate-700/80 bg-slate-800/80 text-slate-400 active:bg-slate-700"
-                }`}
-                title={
-                  isAutomaticSegmentBusy
-                    ? isAutomaticStructureEnabled
-                      ? "正在绘制 Pens 和 Segments，点击可取消并清除"
-                      : "正在清除 Pens 和 Segments"
-                    : isAutomaticStructureEnabled
-                      ? `关闭并清除自动画线（${automaticPenCount} Pens / ${automaticSegmentCount} Segments）`
-                      : "开启自动 Pens 和 Segments"
-                }
-              >
-                {isAutomaticSegmentBusy ? (
-                  <Loader2 size={20} className="animate-spin" />
-                ) : (
-                  <ChartNoAxesCombined size={20} />
-                )}
-                {isAutomaticStructureEnabled ? (
-                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(103,232,249,0.75)]" />
-                ) : null}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleAutomaticPens}
+                  disabled={
+                    !isAutomaticPensEnabled &&
+                    (isDataLoading || Boolean(dataError) || totalCandles === 0)
+                  }
+                  aria-label={
+                    isAutomaticPensEnabled
+                      ? "关闭并删除自动 Pens"
+                      : "开启自动 Pens"
+                  }
+                  aria-pressed={isAutomaticPensEnabled}
+                  className={`relative flex h-11 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                    isAutomaticPensEnabled
+                      ? "border-yellow-500/40 bg-yellow-500/15 text-yellow-300"
+                      : "border-slate-700/80 bg-slate-800/80 text-slate-400 active:bg-slate-700"
+                  }`}
+                  title={
+                    isAutomaticPensEnabled
+                      ? `关闭并删除自动 Pens（当前 ${automaticPenCount} 笔）`
+                      : "开启自动 Pens"
+                  }
+                >
+                  <ChartSpline size={19} />
+                  {isAutomaticPensEnabled ? (
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-yellow-300 shadow-[0_0_6px_rgba(253,224,71,0.75)]" />
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleAutomaticSegments}
+                  disabled={
+                    !isAutomaticSegmentsEnabled &&
+                    (isDataLoading ||
+                      Boolean(dataError) ||
+                      totalCandles === 0 ||
+                      isAutomaticSegmentBusy)
+                  }
+                  aria-label={
+                    isAutomaticSegmentsEnabled
+                      ? "关闭并删除自动 Segments"
+                      : "开启自动 Segments"
+                  }
+                  aria-pressed={isAutomaticSegmentsEnabled}
+                  aria-busy={isAutomaticSegmentBusy}
+                  className={`relative flex h-11 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                    isAutomaticSegmentsEnabled
+                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                      : "border-slate-700/80 bg-slate-800/80 text-slate-400 active:bg-slate-700"
+                  }`}
+                  title={
+                    isAutomaticSegmentBusy
+                      ? isAutomaticSegmentsEnabled
+                        ? "正在绘制 Segments，点击可取消并删除"
+                        : "正在删除 Segments"
+                      : isAutomaticSegmentsEnabled
+                        ? `关闭并删除自动 Segments（当前 ${automaticSegmentCount} 段）`
+                        : "开启自动 Segments"
+                  }
+                >
+                  {isAutomaticSegmentBusy ? (
+                    <Loader2 size={19} className="animate-spin" />
+                  ) : (
+                    <ChartNoAxesCombined size={19} />
+                  )}
+                  {isAutomaticSegmentsEnabled ? (
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(110,231,183,0.75)]" />
+                  ) : null}
+                </button>
+              </>
             ) : null}
           </div>
 
@@ -563,42 +597,62 @@ export const TopBar = ({
               <span>支撑/阻力{supportResistanceCount ? ` ${supportResistanceCount}` : ""}</span>
             </button>
             {canUseAutomaticDraw ? (
-              <button
-                type="button"
-                onClick={onToggleAutomaticStructure}
-                disabled={
-                  !isAutomaticStructureEnabled &&
-                  (isDataLoading ||
-                    Boolean(dataError) ||
-                    totalCandles === 0 ||
-                    isAutomaticSegmentBusy)
-                }
-                aria-pressed={isAutomaticStructureEnabled}
-                aria-busy={isAutomaticSegmentBusy}
-                className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                  isAutomaticStructureEnabled
-                    ? "bg-cyan-500/15 text-cyan-300"
-                    : "text-gray-400 hover:bg-gray-700 hover:text-cyan-300"
-                }`}
-                title={
-                  isAutomaticSegmentBusy
-                    ? isAutomaticStructureEnabled
-                      ? "正在绘制 Pens 和 Segments，点击可取消并清除"
-                      : "正在清除 Pens 和 Segments"
-                    : isAutomaticStructureEnabled
-                      ? `关闭并清除自动画线（${automaticPenCount} Pens / ${automaticSegmentCount} Segments，快捷键 F）`
-                      : "开启自动 Pens 和 Segments（快捷键 F）"
-                }
-              >
-                {isAutomaticSegmentBusy ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <ChartNoAxesCombined size={18} />
-                )}
-                <span className="hidden xl:inline">
-                  {isAutomaticStructureEnabled ? "关闭自动结构" : "自动结构"}
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleAutomaticPens}
+                  disabled={
+                    !isAutomaticPensEnabled &&
+                    (isDataLoading || Boolean(dataError) || totalCandles === 0)
+                  }
+                  aria-pressed={isAutomaticPensEnabled}
+                  className={`flex items-center rounded-md p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isAutomaticPensEnabled
+                      ? "bg-yellow-500/15 text-yellow-300"
+                      : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
+                  }`}
+                  title={
+                    isAutomaticPensEnabled
+                      ? `关闭并删除自动 Pens（当前 ${automaticPenCount} 笔，快捷键 F）`
+                      : "开启自动 Pens（快捷键 F）"
+                  }
+                >
+                  <ChartSpline size={20} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleAutomaticSegments}
+                  disabled={
+                    !isAutomaticSegmentsEnabled &&
+                    (isDataLoading ||
+                      Boolean(dataError) ||
+                      totalCandles === 0 ||
+                      isAutomaticSegmentBusy)
+                  }
+                  aria-pressed={isAutomaticSegmentsEnabled}
+                  aria-busy={isAutomaticSegmentBusy}
+                  className={`flex items-center rounded-md p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isAutomaticSegmentsEnabled
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "text-gray-400 hover:bg-gray-700 hover:text-emerald-300"
+                  }`}
+                  title={
+                    isAutomaticSegmentBusy
+                      ? isAutomaticSegmentsEnabled
+                        ? "正在绘制 Segments，点击可取消并删除"
+                        : "正在删除 Segments"
+                      : isAutomaticSegmentsEnabled
+                        ? `关闭并删除自动 Segments（当前 ${automaticSegmentCount} 段，快捷键 R）`
+                        : "开启自动 Segments（快捷键 R）"
+                  }
+                >
+                  {isAutomaticSegmentBusy ? (
+                    <Loader2 size={20} className="animate-spin" />
+                  ) : (
+                    <ChartNoAxesCombined size={20} />
+                  )}
+                </button>
+              </>
             ) : null}
             <button
               onClick={clearLines}
