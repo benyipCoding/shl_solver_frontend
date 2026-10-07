@@ -156,6 +156,7 @@ function TradeManagementForm({
   defaultTpDistance,
   riskInputMode,
   setRiskInputMode,
+  onDismiss,
   onSaveRisk,
   onCloseUnits,
 }: Props & {
@@ -301,7 +302,11 @@ function TradeManagementForm({
           <button
             type="button"
             disabled={!hasChanges || !!riskError}
-            onClick={() => setSaveError(onSaveRisk(trade.id, sl, tp))}
+            onClick={() => {
+              const error = onSaveRisk(trade.id, sl, tp);
+              setSaveError(error);
+              if (error === null) onDismiss();
+            }}
             className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             保存止损 / 止盈
