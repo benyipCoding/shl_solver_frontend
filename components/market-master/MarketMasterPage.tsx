@@ -387,14 +387,48 @@ export function MarketMasterPage() {
     resetAutomaticSegmentsState,
     updateAutomaticSegmentsAfterCandle,
   } = useAutomaticSegments({ chartRef, seriesRef });
-  const handleDrawAutomaticPens = useCallback(() => {
+  const [isAutomaticStructureEnabled, setIsAutomaticStructureEnabled] =
+    useState(false);
+  const disableAutomaticStructure = useCallback(() => {
+    setIsAutomaticStructureEnabled(false);
+    clearAutomaticPens();
+    clearAutomaticSegments();
+  }, [clearAutomaticPens, clearAutomaticSegments]);
+  const handleToggleAutomaticStructure = useCallback(() => {
     if (!canUseAutomaticDraw) return;
+    if (isAutomaticStructureEnabled) {
+      disableAutomaticStructure();
+      return;
+    }
+    if (
+      isAutomaticSegmentBusy ||
+      !chartRef.current ||
+      !seriesRef.current ||
+      seriesRef.current.data().length === 0
+    ) {
+      return;
+    }
+
+    setIsAutomaticStructureEnabled(true);
     drawAutomaticPens();
-  }, [canUseAutomaticDraw, drawAutomaticPens]);
-  const handleDrawAutomaticSegments = useCallback(() => {
-    if (!canUseAutomaticDraw) return;
     drawAutomaticSegments();
-  }, [canUseAutomaticDraw, drawAutomaticSegments]);
+  }, [
+    canUseAutomaticDraw,
+    disableAutomaticStructure,
+    drawAutomaticPens,
+    drawAutomaticSegments,
+    isAutomaticSegmentBusy,
+    isAutomaticStructureEnabled,
+  ]);
+  useEffect(() => {
+    if (!canUseAutomaticDraw && isAutomaticStructureEnabled) {
+      disableAutomaticStructure();
+    }
+  }, [
+    canUseAutomaticDraw,
+    disableAutomaticStructure,
+    isAutomaticStructureEnabled,
+  ]);
   const emaSeriesRefs = useRef<any>({});
   const bollingerSeriesRefs = useRef<any>({});
 
@@ -1786,8 +1820,7 @@ export function MarketMasterPage() {
     let cancelled = false;
 
     const clearChartData = () => {
-      clearAutomaticPens();
-      clearAutomaticSegments();
+      disableAutomaticStructure();
       fullDataRef.current = [];
       loadedMarketRef.current = { symbol: "", timeframe: "" };
       fullEmaDataRef.current = {};
@@ -1922,7 +1955,7 @@ export function MarketMasterPage() {
     symbol,
     timeframe,
     syncDisplayedData,
-    clearAutomaticSegments,
+    disableAutomaticStructure,
     marketDataEpoch,
   ]);
 
@@ -1987,8 +2020,7 @@ export function MarketMasterPage() {
       setIsReplayMode(true);
       setIsPlaying(false);
       resetBacktestAccount();
-      clearAutomaticPens();
-      clearAutomaticSegments();
+      disableAutomaticStructure();
       currentIndexRef.current = startCurrent;
       setCurrentIndex(startCurrent);
       setReplayBounds({ startCurrent, endCurrent });
@@ -2014,8 +2046,7 @@ export function MarketMasterPage() {
     },
     [
       applyReplayEventsUpTo,
-      clearAutomaticPens,
-      clearAutomaticSegments,
+      disableAutomaticStructure,
       resetBacktestAccount,
       syncDisplayedData,
     ]
@@ -2136,8 +2167,7 @@ export function MarketMasterPage() {
             : `session-${Date.now()}`;
         setIsPlaying(false);
         resetBacktestAccount();
-        clearAutomaticPens();
-        clearAutomaticSegments();
+        disableAutomaticStructure();
 
         if (!coversWindow) {
           historyLoadingRef.current = true;
@@ -2269,16 +2299,14 @@ export function MarketMasterPage() {
       setReplayBounds({ startCurrent: 0, endCurrent: 0 });
       resetBacktestAccount();
       setIsPlaying(false);
-      clearAutomaticPens();
-      clearAutomaticSegments();
+      disableAutomaticStructure();
       clearClosedTradeMarkers();
       void restoreLatestWindow();
       return;
     }
 
     setIsPlaying(false);
-    clearAutomaticPens();
-    clearAutomaticSegments();
+    disableAutomaticStructure();
     clearClosedTradeMarkers();
 
     const nextCurrentIndex = fullDataRef.current.length;
@@ -2288,8 +2316,7 @@ export function MarketMasterPage() {
   }, [
     applyCandlePage,
     applyReplayWindow,
-    clearAutomaticPens,
-    clearAutomaticSegments,
+    disableAutomaticStructure,
     clearClosedTradeMarkers,
     fetchSymbolPage,
     isBacktestMode,
@@ -3806,20 +3833,11 @@ export function MarketMasterPage() {
         event.key.toLowerCase() === "f" &&
         !event.ctrlKey &&
         !event.metaKey &&
-        !event.altKey
+        !event.altKey &&
+        !event.repeat
       ) {
         event.preventDefault();
-        handleDrawAutomaticPens();
-        return;
-      }
-      if (
-        event.key.toLowerCase() === "r" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey
-      ) {
-        event.preventDefault();
-        handleDrawAutomaticSegments();
+        handleToggleAutomaticStructure();
       }
     };
 
@@ -3828,8 +3846,7 @@ export function MarketMasterPage() {
       window.removeEventListener("keydown", handleAutomaticDrawShortcut);
   }, [
     canUseAutomaticDraw,
-    handleDrawAutomaticPens,
-    handleDrawAutomaticSegments,
+    handleToggleAutomaticStructure,
   ]);
 
   useEffect(() => {
@@ -4618,14 +4635,12 @@ export function MarketMasterPage() {
     if (nextMode !== "idle") hideCandleTooltip();
   };
 
-  const clearAllLines = () => {
+  const clearManualLines = () => {
     cancelPendingDrawing();
     setSelectedShape(null);
     stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
     stateRef.current.lines = [];
     setLines([]);
-    clearAutomaticPens();
-    clearAutomaticSegments();
   };
 
   const formatVal = (val) => (val != null ? val.toFixed(priceDecimals) : "-");
@@ -4685,9 +4700,9 @@ export function MarketMasterPage() {
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
-        drawAutomaticPens={handleDrawAutomaticPens}
+        isAutomaticStructureEnabled={isAutomaticStructureEnabled}
+        onToggleAutomaticStructure={handleToggleAutomaticStructure}
         automaticPenCount={automaticPenCount}
-        drawAutomaticSegments={handleDrawAutomaticSegments}
         automaticSegmentCount={automaticSegmentCount}
         isAutomaticSegmentBusy={isAutomaticSegmentBusy}
         onToggleSupportResistance={handleToggleSupportResistance}
@@ -4695,7 +4710,7 @@ export function MarketMasterPage() {
         supportResistanceCount={supportResistanceSnapshot?.zones.length ?? 0}
         isSupportResistanceBusy={isSupportResistanceBusy || supportResistanceHistory.loading}
         supportResistanceError={supportResistanceHistory.error}
-        clearLines={clearAllLines}
+        clearLines={clearManualLines}
         isBacktestMode={isBacktestMode}
         setIsBacktestMode={setIsBacktestMode}
         onExitBacktest={handleExitBacktest}

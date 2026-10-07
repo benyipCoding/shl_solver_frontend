@@ -23,7 +23,6 @@ import {
   StepForward,
   Pause,
   Play,
-  ChartSpline,
   ChartNoAxesCombined,
   TriangleAlert,
   RefreshCw,
@@ -31,6 +30,7 @@ import {
   X,
   History,
   RotateCcw,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -51,9 +51,9 @@ export const TopBar = ({
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
-  drawAutomaticPens,
+  isAutomaticStructureEnabled = false,
+  onToggleAutomaticStructure,
   automaticPenCount = 0,
-  drawAutomaticSegments,
   automaticSegmentCount = 0,
   isAutomaticSegmentBusy = false,
   onToggleSupportResistance,
@@ -183,20 +183,217 @@ export const TopBar = ({
 
   return (
     <>
-      <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-gray-800 bg-gray-900 px-3 py-2 lg:h-16 lg:flex-nowrap lg:gap-6 lg:px-6 lg:py-0">
-        <div className="order-2 flex w-full min-w-0 basis-full items-center gap-3 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:order-1 lg:w-auto lg:flex-1 lg:basis-auto lg:gap-4 lg:pb-0 2xl:overflow-visible">
+      <header className="shrink-0 border-b border-slate-800/80 bg-gray-900/95 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur lg:flex lg:h-16 lg:flex-nowrap lg:items-center lg:gap-6 lg:px-6 lg:py-0">
+        <div className="flex flex-col gap-2 lg:hidden">
+          <div
+            className={`grid gap-2 ${
+              canUseAutomaticDraw
+                ? "grid-cols-[minmax(0,1fr)_4.75rem_2.75rem]"
+                : "grid-cols-[minmax(0,1fr)_5.5rem]"
+            }`}
+          >
+            <div className="min-w-0 [&>div]:w-full [&_button]:h-11 [&_button]:rounded-xl [&_button]:border-slate-700/80 [&_button]:bg-slate-800/80 [&_button]:shadow-sm">
+              <SymbolSearchSelect value={symbol} onChange={setSymbol} />
+            </div>
+            <select
+              aria-label="K线周期"
+              value={timeframe}
+              onChange={(event) => setTimeframe(event.target.value)}
+              className="h-11 w-full cursor-pointer rounded-xl border border-slate-700/80 bg-slate-800/80 px-3 text-center text-sm font-semibold text-slate-100 shadow-sm outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            >
+              {timeframeOptions.map(
+                (option: { value: string; label: string }) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                )
+              )}
+            </select>
+            {canUseAutomaticDraw ? (
+              <button
+                type="button"
+                onClick={onToggleAutomaticStructure}
+                disabled={
+                  !isAutomaticStructureEnabled &&
+                  (isDataLoading ||
+                    Boolean(dataError) ||
+                    totalCandles === 0 ||
+                    isAutomaticSegmentBusy)
+                }
+                aria-label={
+                  isAutomaticStructureEnabled
+                    ? "关闭并清除自动 Pens 和 Segments"
+                    : "开启自动 Pens 和 Segments"
+                }
+                aria-pressed={isAutomaticStructureEnabled}
+                aria-busy={isAutomaticSegmentBusy}
+                className={`relative flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                  isAutomaticStructureEnabled
+                    ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-300"
+                    : "border-slate-700/80 bg-slate-800/80 text-slate-400 active:bg-slate-700"
+                }`}
+                title={
+                  isAutomaticSegmentBusy
+                    ? isAutomaticStructureEnabled
+                      ? "正在绘制 Pens 和 Segments，点击可取消并清除"
+                      : "正在清除 Pens 和 Segments"
+                    : isAutomaticStructureEnabled
+                      ? `关闭并清除自动画线（${automaticPenCount} Pens / ${automaticSegmentCount} Segments）`
+                      : "开启自动 Pens 和 Segments"
+                }
+              >
+                {isAutomaticSegmentBusy ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  <ChartNoAxesCombined size={20} />
+                )}
+                {isAutomaticStructureEnabled ? (
+                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(103,232,249,0.75)]" />
+                ) : null}
+              </button>
+            ) : null}
+          </div>
+
+          {!isBacktestMode ? (
+            <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-1 rounded-2xl border border-slate-800 bg-slate-950/60 p-1 shadow-inner">
+              <button
+                type="button"
+                onClick={handleOpenBacktestHistory}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-slate-300 transition-colors active:bg-slate-800"
+                title="查看回测记录并还原播放"
+              >
+                <History size={18} className="text-slate-400" />
+                回测记录
+              </button>
+              <button
+                type="button"
+                onClick={handleEnterBacktest}
+                disabled={isBacktestToggleDisabled}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.24)] transition-colors active:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+                title={backtestButtonTitle}
+              >
+                {isDataLoading ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Play size={18} fill="currentColor" />
+                )}
+                {canEnterBacktest ? "开启逐K回测" : compactBacktestButtonLabel}
+              </button>
+            </div>
+          ) : (
+            <div
+              className={`grid gap-1 rounded-2xl border border-slate-800 bg-slate-950/70 p-1 shadow-inner ${
+                isReplayMode || isSuperuser ? "grid-cols-4" : "grid-cols-3"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setIsPlaying(!isPlaying)}
+                disabled={
+                  isDataLoading ||
+                  (isReplayMode
+                    ? isReplayFinished
+                    : currentIndex >= totalCandles)
+                }
+                aria-label={isPlaying ? "暂停播放" : "自动播放"}
+                className={`flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition-colors disabled:opacity-35 ${
+                  isPlaying
+                    ? "bg-amber-500/15 text-amber-300"
+                    : "bg-blue-500/15 text-blue-300 active:bg-blue-500/25"
+                }`}
+              >
+                {isPlaying ? (
+                  <Pause size={20} fill="currentColor" />
+                ) : (
+                  <Play size={20} fill="currentColor" />
+                )}
+                <span>{isPlaying ? "暂停" : "播放"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleNextCandle}
+                disabled={
+                  isDataLoading ||
+                  isPlaying ||
+                  (isReplayMode
+                    ? isReplayFinished
+                    : currentIndex >= totalCandles)
+                }
+                aria-label="下一根K线"
+                className="flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-slate-300 transition-colors active:bg-slate-800 disabled:opacity-35"
+              >
+                <StepForward size={20} />
+                <span>下一根</span>
+              </button>
+              {isReplayMode ? (
+                <button
+                  type="button"
+                  onClick={onRestartReplay}
+                  disabled={isDataLoading}
+                  aria-label="从头播放"
+                  className="flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-slate-300 transition-colors active:bg-slate-800 disabled:opacity-35"
+                >
+                  <RotateCcw size={20} />
+                  <span>重播</span>
+                </button>
+              ) : isSuperuser ? (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label="自动做单"
+                  aria-checked={isAutomaticTradingEnabled}
+                  onClick={onToggleAutomaticTrading}
+                  disabled={
+                    isDataLoading ||
+                    Boolean(dataError) ||
+                    (!isAutomaticTradingEnabled && isHistoryLoading)
+                  }
+                  className={`relative flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition-colors disabled:opacity-35 ${
+                    isAutomaticTradingEnabled
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "text-slate-300 active:bg-slate-800"
+                  }`}
+                >
+                  <Bot size={20} />
+                  <span>自动做单</span>
+                  <span
+                    className={`absolute right-2 top-2 h-1.5 w-1.5 rounded-full ${
+                      isAutomaticTradingEnabled
+                        ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+                        : "bg-slate-600"
+                    }`}
+                  />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setIsExitBacktestConfirmOpen(true)}
+                className="flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-rose-400 transition-colors active:bg-rose-500/10"
+                aria-label={isReplayMode ? "退出回测回放" : "退出逐K回测"}
+                aria-haspopup="dialog"
+                aria-expanded={isExitBacktestConfirmOpen}
+              >
+                <Square size={18} fill="currentColor" />
+                <span>退出</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="order-2 hidden w-full min-w-0 basis-full flex-wrap items-center gap-2 lg:order-1 lg:flex lg:w-auto lg:flex-1 lg:basis-auto lg:flex-nowrap lg:gap-4 lg:overflow-x-auto lg:overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden 2xl:overflow-visible">
           <Link
             href="/"
-            className="mr-1 flex shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4"
+            className="mr-1 hidden shrink-0 items-center gap-2 text-lg font-bold text-white transition-colors hover:text-blue-400 lg:mr-4 lg:flex"
             title="返回主页"
           >
             <CircleDollarSign size={28} className="text-blue-500" />
             <span className="hidden sm:inline">复盘模拟交易</span>
           </Link>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex w-full shrink-0 items-center gap-2 lg:w-auto">
             <SymbolSearchSelect value={symbol} onChange={setSymbol} />
             <select
+              aria-label="K线周期"
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value)}
               className="h-[50px] cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 text-[15px] text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:h-[42px]"
@@ -207,14 +404,16 @@ export const TopBar = ({
                 </option>
               ))}
             </select>
-            <SymbolFavoriteButton symbol={symbol} />
+            <div className="hidden lg:block">
+              <SymbolFavoriteButton symbol={symbol} />
+            </div>
             {canSyncLatest ? (
               <>
                 <button
                   type="button"
                   onClick={onSyncLatest}
                   disabled={isSyncingLatest || isBacktestMode || isRepairingKline}
-                  className="flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
+                  className="hidden h-[42px] shrink-0 items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
                   title={
                     isBacktestMode
                       ? "请先退出逐K回测再同步最新 K 线"
@@ -241,7 +440,7 @@ export const TopBar = ({
                     Boolean(dataError) ||
                     totalCandles === 0
                   }
-                  className={`flex h-[50px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px] ${
+                  className={`hidden h-[42px] shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 lg:flex ${
                     isRepairSelecting
                       ? "border-amber-400 bg-amber-500/30 text-amber-100"
                       : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
@@ -272,19 +471,19 @@ export const TopBar = ({
           </div>
 
           {isDataLoading ? (
-            <div className="text-xs text-blue-400 shrink-0">
+            <div className="hidden shrink-0 text-xs text-blue-400 lg:block">
               加载真实行情中...
             </div>
           ) : !isHistoryLoading && dataError ? (
             <div
-              className="max-w-56 truncate text-xs text-red-400"
+              className="hidden max-w-56 truncate text-xs text-red-400 lg:block"
               title={dataError}
             >
               {dataError}
             </div>
           ) : null}
 
-          <div className="ml-1 flex h-[50px] shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 sm:h-[42px] lg:ml-2">
+          <div className="ml-2 hidden h-[42px] shrink-0 gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1 lg:flex">
             <button
               onClick={() => setMode("idle")}
               className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
@@ -364,66 +563,47 @@ export const TopBar = ({
               <span>支撑/阻力{supportResistanceCount ? ` ${supportResistanceCount}` : ""}</span>
             </button>
             {canUseAutomaticDraw ? (
-              <>
-                <button
-                  onClick={drawAutomaticPens}
-                  disabled={
-                    isDataLoading || Boolean(dataError) || totalCandles === 0
-                  }
-                  aria-pressed={automaticPenCount > 0}
-                  className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-                    automaticPenCount > 0
-                      ? "bg-gray-700 text-yellow-300"
-                      : "text-gray-400 hover:bg-gray-700 hover:text-yellow-300"
-                  }`}
-                  title={
-                    automaticPenCount > 0
-                      ? `重画当前可视区 Pens（已绘制 ${automaticPenCount} 笔，快捷键 F）`
-                      : "自动绘制当前可视区 Pens（快捷键 F）"
-                  }
-                >
-                  <ChartSpline size={20} />
-                </button>
-                <button
-                  onClick={drawAutomaticSegments}
-                  disabled={
-                    isDataLoading ||
+              <button
+                type="button"
+                onClick={onToggleAutomaticStructure}
+                disabled={
+                  !isAutomaticStructureEnabled &&
+                  (isDataLoading ||
                     Boolean(dataError) ||
                     totalCandles === 0 ||
-                    isAutomaticSegmentBusy
-                  }
-                  aria-pressed={automaticSegmentCount > 0}
-                  aria-busy={isAutomaticSegmentBusy}
-                  className={`flex items-center rounded-md p-2.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:p-1.5 ${
-                    automaticSegmentCount > 0
-                      ? "bg-gray-700 text-green-400"
-                      : "text-gray-400 hover:bg-gray-700 hover:text-green-400"
-                  }`}
-                  title={
-                    isAutomaticSegmentBusy
-                      ? "正在分批更新 Segments，请稍候..."
-                      : automaticSegmentCount > 0
-                        ? `重画 Segments（已绘制 ${automaticSegmentCount} 段，快捷键 R）`
-                        : "自动绘制 Segments（快捷键 R）"
-                  }
-                >
-                  {isAutomaticSegmentBusy ? (
-                    <Loader2 size={20} className="animate-spin" />
-                  ) : (
-                    <ChartNoAxesCombined size={20} />
-                  )}
-                </button>
-              </>
+                    isAutomaticSegmentBusy)
+                }
+                aria-pressed={isAutomaticStructureEnabled}
+                aria-busy={isAutomaticSegmentBusy}
+                className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  isAutomaticStructureEnabled
+                    ? "bg-cyan-500/15 text-cyan-300"
+                    : "text-gray-400 hover:bg-gray-700 hover:text-cyan-300"
+                }`}
+                title={
+                  isAutomaticSegmentBusy
+                    ? isAutomaticStructureEnabled
+                      ? "正在绘制 Pens 和 Segments，点击可取消并清除"
+                      : "正在清除 Pens 和 Segments"
+                    : isAutomaticStructureEnabled
+                      ? `关闭并清除自动画线（${automaticPenCount} Pens / ${automaticSegmentCount} Segments，快捷键 F）`
+                      : "开启自动 Pens 和 Segments（快捷键 F）"
+                }
+              >
+                {isAutomaticSegmentBusy ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <ChartNoAxesCombined size={18} />
+                )}
+                <span className="hidden xl:inline">
+                  {isAutomaticStructureEnabled ? "关闭自动结构" : "自动结构"}
+                </span>
+              </button>
             ) : null}
             <button
               onClick={clearLines}
-              disabled={isAutomaticSegmentBusy}
-              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 sm:p-2"
-              title={
-                isAutomaticSegmentBusy
-                  ? "正在更新 Segments，请稍候..."
-                  : "清空画线"
-              }
+              className="rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-red-400 sm:p-2"
+              title="清空手动画线"
             >
               <Trash2 size={20} />
             </button>
@@ -488,17 +668,17 @@ export const TopBar = ({
               <button
                 type="button"
                 onClick={handleOpenBacktestHistory}
-                className="ml-1 flex h-[50px] shrink-0 items-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 sm:h-[42px] lg:ml-3"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 lg:ml-3 lg:h-[42px] lg:shrink-0 lg:flex-none"
                 title="查看回测记录并还原播放"
               >
                 <History size={18} className="shrink-0" />
-                <span className="2xl:hidden">记录</span>
-                <span className="hidden 2xl:inline">回测记录</span>
+                <span className="hidden lg:inline 2xl:hidden">记录</span>
+                <span className="lg:hidden 2xl:inline">回测记录</span>
               </button>
               <button
                 onClick={handleEnterBacktest}
                 disabled={isBacktestToggleDisabled}
-                className="ml-1 flex h-[50px] shrink-0 items-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-[42px]"
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50 lg:ml-1 lg:h-[42px] lg:shrink-0 lg:flex-none"
                 title={backtestButtonTitle}
               >
                 {isDataLoading ? (
@@ -506,20 +686,21 @@ export const TopBar = ({
                 ) : (
                   <StepForward size={18} className="shrink-0" />
                 )}
-                <span className="2xl:hidden">{compactBacktestButtonLabel}</span>
+                <span className="lg:hidden">{canEnterBacktest ? "开启逐K回测" : compactBacktestButtonLabel}</span>
+                <span className="hidden lg:inline 2xl:hidden">{compactBacktestButtonLabel}</span>
                 <span className="hidden 2xl:inline">{backtestButtonLabel}</span>
               </button>
 
               {isHistoryLoading && (
-                <div className="ml-1 shrink-0 text-xs text-blue-300">
+                <div className="ml-1 hidden shrink-0 text-xs text-blue-300 lg:block">
                   正在按需加载历史 K 线
                 </div>
               )}
             </>
           ) : (
-            <div className="ml-1 flex shrink-0 items-center gap-3 rounded-full border border-gray-700 bg-gray-800 px-4 py-1.5 lg:ml-3">
+            <div className="flex w-full shrink-0 items-center justify-between gap-2 rounded-lg border border-gray-700 bg-gray-800 p-1 lg:ml-3 lg:w-auto lg:justify-start lg:gap-3 lg:rounded-full lg:px-4 lg:py-1.5">
               <span
-                className={`min-w-36 text-center text-sm ${
+                className={`hidden min-w-36 text-center text-sm lg:inline ${
                   isReplayMode && isReplayFinished
                     ? "font-semibold text-amber-300"
                     : "text-gray-400"
@@ -540,7 +721,8 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-white disabled:opacity-50"
+                aria-label="下一根K线"
+                className="flex h-11 w-11 items-center justify-center rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 lg:h-auto lg:w-auto lg:p-1.5"
                 title={
                   isReplayMode && isReplayFinished
                     ? "回放已结束"
@@ -557,7 +739,8 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                className={`p-1.5 rounded text-white disabled:opacity-50 ${
+                aria-label={isPlaying ? "暂停播放" : "自动播放"}
+                className={`flex h-11 w-11 items-center justify-center rounded text-white disabled:opacity-50 lg:h-auto lg:w-auto lg:p-1.5 ${
                   isPlaying
                     ? "bg-amber-600 hover:bg-amber-500"
                     : "bg-blue-600 hover:bg-blue-500"
@@ -577,7 +760,7 @@ export const TopBar = ({
                   type="button"
                   onClick={onRestartReplay}
                   disabled={isDataLoading}
-                  className="rounded bg-blue-500/15 p-1.5 text-blue-300 transition-colors hover:bg-blue-500/25 hover:text-blue-200 disabled:opacity-50"
+                  className="flex h-11 w-11 items-center justify-center rounded bg-blue-500/15 text-blue-300 transition-colors hover:bg-blue-500/25 hover:text-blue-200 disabled:opacity-50 lg:h-auto lg:w-auto lg:p-1.5"
                   title="从头播放"
                   aria-label="从头播放"
                 >
@@ -588,21 +771,23 @@ export const TopBar = ({
                 <button
                   type="button"
                   role="switch"
+                  aria-label="自动做单"
                   aria-checked={isAutomaticTradingEnabled}
                   onClick={onToggleAutomaticTrading}
                   disabled={isDataLoading || Boolean(dataError) || (!isAutomaticTradingEnabled && isHistoryLoading)}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${isAutomaticTradingEnabled ? "bg-emerald-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-50 lg:h-auto lg:w-auto lg:px-2 lg:py-1.5 ${isAutomaticTradingEnabled ? "bg-emerald-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
                   title="首单使用终端数量；按趋势起点设止损、随确认拐点收紧，止盈为初始风险距离的 10 倍。加仓使用最近同向自动单保底利润的 50%，每单仅资助一次。关闭只暂停新开仓，已有自动单继续移动止损。"
                 >
-                  <span className={`h-2 w-2 rounded-full ${isAutomaticTradingEnabled ? "bg-white" : "bg-gray-500"}`} />
-                  自动做单
+                  <Bot size={20} className="lg:hidden" />
+                  <span className={`hidden h-2 w-2 rounded-full lg:inline-block ${isAutomaticTradingEnabled ? "bg-white" : "bg-gray-500"}`} />
+                  <span className="hidden lg:inline">自动做单</span>
                 </button>
               )}
-              <div className="h-5 w-px bg-gray-600" />
+              <div className="hidden h-5 w-px bg-gray-600 lg:block" />
               <button
                 type="button"
                 onClick={() => setIsExitBacktestConfirmOpen(true)}
-                className="rounded bg-red-500/15 p-1.5 text-red-400 transition-colors hover:bg-red-500/25 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400"
+                className="flex h-11 w-11 items-center justify-center rounded bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25 hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-400 lg:h-auto lg:w-auto lg:p-1.5"
                 title={isReplayMode ? "退出回测回放" : "退出逐K回测"}
                 aria-label={isReplayMode ? "退出回测回放" : "退出逐K回测"}
                 aria-haspopup="dialog"
@@ -614,7 +799,7 @@ export const TopBar = ({
           )}
         </div>
 
-        <div className="order-1 ml-auto flex w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:w-auto lg:gap-6">
+        <div className="order-1 ml-auto hidden w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:flex lg:w-auto lg:gap-6">
           <div className="flex flex-col items-end leading-tight">
             <span className="hidden text-xs text-gray-500 sm:inline">
               账户余额
