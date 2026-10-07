@@ -27,141 +27,75 @@ const candles = (prices, wick = 1, startTime = 1) => prices.map((price, index) =
   time: startTime + index, open: price, close: price, high: price + wick, low: price - wick,
 }));
 
-test("requires both five candles and sufficient price movement, including equality", () => {
-  assert.equal(generateAutomaticPens(candles([100, 101, 102, 104])).length, 0);
-  assert.equal(generateAutomaticPens(candles([100, 100.1, 100.2, 100.3, 100.4])).length, 0);
-  const pens = generateAutomaticPens(candles([100, 101, 102, 103, 104]));
-  assert.equal(pens.length, 1);
-  assert.equal(pens[0].startPoint.price, 100);
-  assert.equal(pens[0].endPoint.price, 104);
-});
-
-test("ignores a shallow pullback and extends the original trend", () => {
-  const data = candles([100, 101, 102, 103, 104, 103.5, 103, 102.5, 102, 105]);
-  const pens = generateAutomaticPens(data);
-  assert.equal(pens.length, 1);
-  assert.equal(pens[0].startPoint.time, 1);
-  assert.equal(pens[0].endPoint.price, 105);
-});
-
-test("a shallow initial leg qualifies at fifteen candles, but not fourteen, in both directions", () => {
+test("tiny moves form a pen on the fifth candle in either direction, without an amplitude threshold", () => {
   for (const direction of [1, -1]) {
-    const data = candles(Array.from({ length: 15 }, (_, i) => 100 + direction * i * 0.01));
-    assert.equal(generateAutomaticPens(data.slice(0, 14)).length, 0);
+    const data = candles(Array.from({ length: 5 }, (_, i) => 100 + direction * i * 0.01), 50);
+    assert.equal(generateAutomaticPens(data.slice(0, 4)).length, 0);
     const pens = generateAutomaticPens(data);
     assert.equal(pens.length, 1);
     assert.equal(pens[0].trend, direction);
     assert.equal(pens[0].startPoint.index, 0);
-    assert.equal(pens[0].endPoint.index, 14);
+    assert.equal(pens[0].endPoint.index, 4);
   }
 });
 
-test("a shallow reversal qualifies at fifteen candles with an exactly shared pivot", () => {
+test("a shallow reverse move forms a reverse pen once its extrema span five candles", () => {
   for (const direction of [1, -1]) {
     const data = candles([
       ...Array.from({ length: 5 }, (_, i) => 100 + direction * i),
-      ...Array.from({ length: 14 }, (_, i) => 100 + direction * (4 - (i + 1) * 0.01)),
+      ...Array.from({ length: 4 }, (_, i) => 100 + direction * (4 - (i + 1) * 0.01)),
     ]);
     assert.equal(generateAutomaticPens(data.slice(0, -1)).length, 1);
     const pens = generateAutomaticPens(data);
     assert.equal(pens.length, 2);
     assert.deepEqual(pens[0].endPoint, pens[1].startPoint);
     assert.equal(pens[1].trend, -direction);
-    assert.equal(pens[1].endPoint.index - pens[1].startPoint.index + 1, 15);
+    assert.equal(pens[1].endPoint.index - pens[1].startPoint.index + 1, 5);
   }
 });
 
-test("the time-only threshold can be adjusted and defaults to three times the minimum span", () => {
-  const data = candles(Array.from({ length: 30 }, (_, i) => 100 + i * 0.01));
-  const options = { timeOnlyMinCandleCount: 20 };
-  assert.equal(generateAutomaticPens(data.slice(0, 19), undefined, options).length, 0);
-  assert.equal(generateAutomaticPens(data.slice(0, 20), undefined, options).length, 1);
-  assert.equal(generateAutomaticPens(data.slice(0, 17), 6).length, 0);
-  assert.equal(generateAutomaticPens(data.slice(0, 18), 6).length, 1);
-  for (const value of [4, -1, 15.5, NaN, Infinity]) {
-    assert.throws(() => generateAutomaticPens(data, undefined, { timeOnlyMinCandleCount: value }), /timeOnlyMinCandleCount/);
-  }
-});
-
-test("time alone cannot create pens when prices stay identical", () => {
-  assert.equal(generateAutomaticPens(candles(Array(120).fill(100))).length, 0);
-});
-
-test("waiting after a shallow old extreme does not substitute for fifteen candles between endpoints", () => {
-  const prices = [100, 101, 102, 103, 104, 103.9, 103.8, 103.7, 103.6, ...Array(30).fill(103.6)];
-  assert.equal(generateAutomaticPens(candles(prices)).length, 1);
-  const pens = generateAutomaticPens(candles([...prices, 103.5]));
-  assert.equal(pens.length, 2);
-  assert.equal(pens[1].startPoint.index, 4);
-  assert.equal(pens[1].endPoint.index, prices.length);
-});
-
-test("extending the trend restarts the reversal span at the new extreme", () => {
-  const prices = [
-    100, 101, 102, 103, 104,
-    ...Array.from({ length: 10 }, (_, i) => 104 - (i + 1) * 0.01),
-    105,
-    ...Array.from({ length: 14 }, (_, i) => 105 - (i + 1) * 0.01),
-  ];
-  assert.equal(generateAutomaticPens(candles(prices.slice(0, -1))).length, 1);
-  const pens = generateAutomaticPens(candles(prices));
-  assert.equal(pens.length, 2);
-  assert.equal(pens[1].startPoint.index, 15);
-  assert.equal(pens[1].endPoint.index, 29);
-});
-
-test("confirms meaningful reversals in both directions with exactly shared pivots", () => {
-  const pens = generateAutomaticPens(candles([100, 101, 102, 103, 104, 103, 102, 101, 100, 101, 102, 103, 104]));
-  assert.deepEqual(Array.from(pens, (pen) => pen.trend), [1, -1, 1]);
-  assert.deepEqual(pens[0].endPoint, pens[1].startPoint);
-  assert.deepEqual(pens[1].endPoint, pens[2].startPoint);
-});
-
-test("a falling trend ignores a shallow bounce before extending", () => {
-  const pens = generateAutomaticPens(candles([104, 103, 102, 101, 100, 100.5, 101, 101.5, 102, 99]));
-  assert.equal(pens.length, 1);
-  assert.equal(pens[0].trend, -1);
-  assert.equal(pens[0].endPoint.price, 99);
-});
-
-test("the ATR threshold stays fixed before the configured time-only threshold", () => {
-  const data = candles([100, 101, 102, 103, 104]);
-  data.push(...candles(Array.from({ length: 120 }, (_, i) => 104 - (i + 1) * 0.01), 0.005, 6));
-  const pens = generateAutomaticPens(data, undefined, { timeOnlyMinCandleCount: 150 });
-  assert.equal(pens.length, 1);
-  assert.equal(pens[0].endPoint.price, 104);
-});
-
-test("background volatility warms up from history outside the drawing range", () => {
-  const history = candles(Array(100).fill(100), 5);
-  const quiet = candles(Array.from({ length: 30 }, (_, i) => 100 + i * 0.1), 0.01, 101);
-  assert.equal(generateAutomaticPens([...history, ...quiet], undefined, { startIndex: 120 }).length, 0);
-  assert.equal(generateAutomaticPens(quiet.slice(20)).length, 1);
-});
-
-test("warmup candles never become endpoints", () => {
-  const data = candles([90, 92, 94, 96, 100, 101, 102, 103, 104, 105, 106, 107]);
-  const pens = generateAutomaticPens(data, undefined, { startIndex: 4 });
-  assert.ok(pens.length > 0);
-  assert.ok(pens.every((pen) => pen.startPoint.index >= 4));
-});
-
-test("uses bodies for endpoints and wicks for volatility", () => {
-  const data = candles([100, 101, 102, 103, 104]);
-  data[0].open = 99.5;
+test("body endpoints are independent of wicks, gaps before the input, and candle colors", () => {
+  const data = [[100, 100.05], [100.12, 100.1], [100.2, 100.25], [100.32, 100.3], [100.4, 100.45]]
+    .map(([open, close], index) => ({ time: index + 1, open, close }));
   const pens = generateAutomaticPens(data);
-  assert.equal(pens[0].startPoint.price, 99.5);
-  assert.equal(pens[0].endPoint.price, 104);
-  assert.equal(generateAutomaticPens(candles([100, 101, 102, 103, 104], 5)).length, 0);
+  assert.equal(pens.length, 1);
+  assert.equal(pens[0].startPoint.price, 100);
+  assert.equal(pens[0].endPoint.price, 100.45);
+  assert.deepEqual(plain(generateAutomaticPens(data.map((candle) => ({ ...candle, high: 10000, low: -10000 })))), plain(pens));
 });
 
-test("true range includes gaps to the preceding close", () => {
-  const data = candles([90, 100, 100.1, 100.2, 100.3, 100.4], 0.01);
-  assert.equal(generateAutomaticPens(data, undefined, { startIndex: 1 }).length, 0);
+test("restores the legacy new-high-before-new-low order on an outside candle", () => {
+  const data = [[100, 102], [101, 103], [102, 104], [103, 105], [99, 106]]
+    .map(([open, close], index) => ({ time: index + 1, open, close }));
+  const pens = generateAutomaticPens(data);
+  assert.equal(pens.length, 1);
+  assert.equal(pens[0].startPoint.price, 100);
+  assert.equal(pens[0].startPoint.index, 0);
+  assert.equal(pens[0].endPoint.price, 106);
+  assert.equal(pens[0].endPoint.index, 4);
 });
 
-test("flat prices and repeated extrema cannot create zero-length pens or fake elapsed spans", () => {
-  assert.equal(generateAutomaticPens(candles(Array(20).fill(100), 0)).length, 0);
+test("same-direction new extrema extend the final unconfirmed pen; equality does not move it", () => {
+  const data = candles([100, 101, 102, 103, 104, 104, 104, 105, 105]);
+  const pens = generateAutomaticPens(data);
+  assert.equal(pens.length, 1);
+  assert.equal(pens[0].endPoint.price, 105);
+  assert.equal(pens[0].endPoint.index, 7);
+});
+
+test("the minimum span remains configurable independently of price movement", () => {
+  const data = candles(Array.from({ length: 6 }, (_, i) => 100 + i * 0.01));
+  assert.equal(generateAutomaticPens(data.slice(0, 5), 6).length, 0);
+  assert.equal(generateAutomaticPens(data, 6).length, 1);
+});
+
+test("empty, single-candle and unchanged prices do not form pens", () => {
+  for (const data of [[], candles([100]), candles(Array(120).fill(100))]) {
+    assert.equal(generateAutomaticPens(data).length, 0);
+  }
+});
+
+test("a quick reversal cannot gain an extrema span merely by waiting at the same price", () => {
   const prices = [100, 101, 102, 103, 104, 102, 100, ...Array(20).fill(100)];
   assert.equal(generateAutomaticPens(candles(prices)).length, 1);
   const pens = generateAutomaticPens(candles([...prices, 99]));
@@ -173,22 +107,12 @@ test("confirmed pens remain stable as future candles arrive and inputs stay unch
   const data = candles([100, 101, 102, 103, 104, 103, 102, 101, 100, 101, 102, 103, 104, 105, 104, 103, 102, 101]);
   const original = structuredClone(data);
   const full = generateAutomaticPens(data);
+  assert.deepEqual(Array.from(full, (pen) => pen.trend), [1, -1, 1, -1]);
   for (let size = 1; size <= data.length; size++) {
     const partial = generateAutomaticPens(data.slice(0, size));
     assert.deepEqual(plain(partial.slice(0, -1)), plain(full.slice(0, Math.max(0, partial.length - 1))));
   }
   assert.deepEqual(data, original);
-});
-
-test("price scaling does not change pivot selection and the multiplier is adjustable", () => {
-  const data = candles([100, 101, 102, 103, 104, 103, 102, 101, 100]);
-  const scaled = data.map((candle) => ({
-    ...candle, open: candle.open * 100, close: candle.close * 100,
-    high: candle.high * 100, low: candle.low * 100,
-  }));
-  const times = (pens) => Array.from(pens, (pen) => [pen.startPoint.time, pen.endPoint.time]);
-  assert.deepEqual(times(generateAutomaticPens(data)), times(generateAutomaticPens(scaled)));
-  assert.equal(generateAutomaticPens(data, undefined, { minMoveAtrMultiple: 3 }).length, 0);
 });
 
 function hookHarness(initialData, visibleRange) {
@@ -221,15 +145,15 @@ test("enabled drawing can start with zero pens and later acquire its first pen",
   assert.equal(harness.drawn.size, 1);
 });
 
-test("incremental drawing adds the first shallow pen when its fifteenth candle arrives", () => {
-  const data = candles(Array.from({ length: 15 }, (_, i) => 100 + i * 0.01));
-  const harness = hookHarness(data.slice(0, 14), { from: 1, to: 14 });
+test("incremental drawing adds the first shallow pen when its fifth candle arrives", () => {
+  const data = candles(Array.from({ length: 5 }, (_, i) => 100 + i * 0.01));
+  const harness = hookHarness(data.slice(0, 4), { from: 1, to: 4 });
   harness.hook.drawAutomaticPens();
   assert.equal(harness.drawn.size, 0);
   harness.setData(data);
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
-  assert.deepEqual([...harness.drawn][0].data, [{ time: 1, value: 100 }, { time: 15, value: 100.14 }]);
+  assert.deepEqual([...harness.drawn][0].data, [{ time: 1, value: 100 }, { time: 5, value: 100.04 }]);
 });
 
 test("updates preserve the initial drawing boundary and refresh same-bar prices", () => {

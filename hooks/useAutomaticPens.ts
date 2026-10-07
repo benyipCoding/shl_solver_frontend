@@ -84,14 +84,14 @@ export function useAutomaticPens({
     const visibleRange = chart.timeScale().getVisibleRange();
     if (!visibleRange) return;
 
-    // Include earlier history for ATR, without drawing endpoints before the view.
+    // Start from the visible candles; later updates retain this drawing boundary.
     const candles = series
       .data()
       .filter(isCandlestickData)
       .filter((candle) => candle.time <= visibleRange.to);
     const startIndex = candles.findIndex((candle) => candle.time >= visibleRange.from);
     if (startIndex < 0) return;
-    const pens = generateAutomaticPens(candles, undefined, { startIndex });
+    const pens = generateAutomaticPens(candles.slice(startIndex));
 
     clearAutomaticPens(false);
     enabledRef.current = true;
@@ -113,7 +113,7 @@ export function useAutomaticPens({
     const startIndex = candles.findIndex((candle) => candle.time >= startTime);
     const pens = startIndex < 0
       ? []
-      : generateAutomaticPens(candles, undefined, { startIndex });
+      : generateAutomaticPens(candles.slice(startIndex));
 
     // Also handles zero initial pens, several newly revealed legs, and same-bar
     // price changes. Reuse chart series so unchanged lines do not flicker.

@@ -116,6 +116,20 @@ test("empty and short histories return no pair", () => {
   }
 });
 
+test("momentum uses legacy small-amplitude pens while retaining its own ATR normalization", () => {
+  const prices = [...Array(14).fill(100), 100.01, 100.02, 100.03, 100.04,
+    100.03, 100.02, 100.01, 100.005, 100.015, 100.025, 100.035, 100.045];
+  const data = prices.map((price, index) => ({ time: index + 1, open: price, close: price, high: price + 1, low: price - 1 }));
+  const result = calculatePenMomentum(data, config);
+  assert.equal(result.penCount, 3);
+  assert.equal(result.up.previousIndex, 0);
+  assert.equal(result.up.currentIndex, 2);
+  assert.equal(result.up.referenceAtr, 2);
+  assert.ok(Math.abs(result.up.advance - 0.005) < 1e-10);
+  assert.equal(result.up.weak, true);
+  assert.equal(result.up.developing, true);
+});
+
 test("chart subscription reads only revealed candles, updates on rewind, and detaches cleanly", () => {
   const effects = [];
   const results = [];
