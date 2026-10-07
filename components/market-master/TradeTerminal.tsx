@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { OrderUnitsInput } from "./OrderUnitsInput";
 
 type RiskInputMode = "points" | "amount";
 
@@ -117,6 +118,12 @@ export const TradeTerminal = ({
   canPlaceOrder = false,
   isReplayMode = false,
 }: TradeTerminalProps) => {
+  const [orderUnitsInput, setOrderUnitsInput] = useState(() => String(orderUnits));
+  const parsedOrderUnits = Number(orderUnitsInput);
+  const hasValidOrderUnits =
+    /^\d+$/.test(orderUnitsInput.trim()) &&
+    Number.isSafeInteger(parsedOrderUnits) &&
+    parsedOrderUnits > 0;
   const [riskInputMode, setRiskInputMode] = useState<RiskInputMode>("points");
   const [slInput, setSlInput] = useState(() =>
     toInputValue(slDistance, orderUnits, "points", priceDecimals)
@@ -200,8 +207,11 @@ export const TradeTerminal = ({
     };
 
     const handleOrderUnitsChange = (raw: string) => {
-      const parsed = Number(raw);
-      const nextUnits = Math.max(1, Number.isFinite(parsed) ? parsed : 1);
+      setOrderUnitsInput(raw);
+      const nextUnits = Number(raw);
+      // Keep the draft editable without replacing empty or unfinished input.
+      // Only valid quantities update the order and its risk calculations.
+      if (!/^\d+$/.test(raw.trim()) || !Number.isSafeInteger(nextUnits) || nextUnits <= 0) return;
       if (
         riskInputMode === "amount" &&
         orderUnits > 0 &&
@@ -250,18 +260,11 @@ export const TradeTerminal = ({
             </div>
 
             <div className="mb-4 space-y-3">
-              <div>
-                <label className="mb-1.5 block text-base text-gray-400">
-                  交易数量 (Units)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={orderUnits}
-                  onChange={(e) => handleOrderUnitsChange(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 font-mono text-lg text-white outline-none focus:border-blue-500"
-                />
-              </div>
+              <OrderUnitsInput
+                value={orderUnitsInput}
+                onChange={handleOrderUnitsChange}
+                valid={hasValidOrderUnits}
+              />
 
               <div className="rounded-xl border border-gray-800 bg-gray-950/40 p-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
@@ -398,10 +401,10 @@ export const TradeTerminal = ({
               <div className="flex gap-3">
               <button
                 onClick={() => handlePlaceOrder("Sell")}
-                disabled={!canPlaceOrder}
+                disabled={!canPlaceOrder || !hasValidOrderUnits}
                 title={
                   canPlaceOrder
-                    ? "做空"
+                    ? hasValidOrderUnits ? "做空" : "请先输入有效的交易数量"
                     : isReplayMode
                       ? "回放模式下不可下单"
                       : "仅在逐K回测模式下可下单，请先开启逐K回测"
@@ -412,10 +415,10 @@ export const TradeTerminal = ({
               </button>
               <button
                 onClick={() => handlePlaceOrder("Buy")}
-                disabled={!canPlaceOrder}
+                disabled={!canPlaceOrder || !hasValidOrderUnits}
                 title={
                   canPlaceOrder
-                    ? "做多"
+                    ? hasValidOrderUnits ? "做多" : "请先输入有效的交易数量"
                     : isReplayMode
                       ? "回放模式下不可下单"
                       : "仅在逐K回测模式下可下单，请先开启逐K回测"
