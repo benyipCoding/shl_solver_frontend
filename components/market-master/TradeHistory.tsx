@@ -1,5 +1,6 @@
 import React from "react";
 import type { TradePosition } from "./trade-management";
+import { automaticLockedProfit } from "./automatic-pen-risk";
 import {
   ChevronDown,
   ChevronUp,
@@ -8,6 +9,17 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+
+function AutomaticTradeBadge({ trade }: { trade: TradePosition }) {
+  if (!trade.automaticPen) return null;
+  const profit = automaticLockedProfit(trade);
+  const label = trade.status !== "Open" ? "自动" : profit > 0 ? `保底 $${profit.toFixed(2)}` : "自动 · 未保底";
+  return (
+    <span className="ml-1 inline-block text-xs text-emerald-400" title="按当前止损价和剩余数量估算；实际成交可能受跳空或滑点影响。">
+      {label}{trade.automaticPen.fundedChildId ? " · 已资助加仓" : ""}
+    </span>
+  );
+}
 
 export const TradeHistory = ({
   isBottomPanelOpen,
@@ -113,6 +125,7 @@ export const TradeHistory = ({
                       >
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
+                      <AutomaticTradeBadge trade={trade} />
                       <span
                         className={`text-sm font-bold ${
                           trade.type === "Buy"
@@ -241,6 +254,7 @@ export const TradeHistory = ({
                       >
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
+                      <AutomaticTradeBadge trade={trade} />
                     </td>
                     <td
                       className={`px-4 py-2 font-bold ${

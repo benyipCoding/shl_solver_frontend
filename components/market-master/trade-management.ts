@@ -14,6 +14,13 @@ export type TradePosition = {
   parentTradeId?: string | number;
   closeCount?: number;
   visibleOnChart?: boolean;
+  automaticPen?: {
+    initialStop: number;
+    initialRisk: number;
+    fundedBy?: string;
+    fundedChildId?: string;
+    riskBudget?: number;
+  };
 };
 
 export const calculateTradePnl = (

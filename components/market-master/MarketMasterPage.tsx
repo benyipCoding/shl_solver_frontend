@@ -49,6 +49,9 @@ import {
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
 import { useAutomaticPens } from "@/hooks/useAutomaticPens";
+import { useAutomaticPenTrading } from "@/hooks/useAutomaticPenTrading";
+import type { AutomaticPenEvent } from "./automatic-pen-trading";
+import { planAutomaticPenOrder, resolveAutomaticPenExit, trailAutomaticPenStops } from "./automatic-pen-risk";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import { usePenMomentum } from "@/hooks/usePenMomentum";
 // import { PenMomentumPanel } from "@/components/market-master/PenMomentumPanel";
@@ -141,6 +144,7 @@ const toBollingerLineData = (data: any[], key: string) =>
 const CLOSED_TRADE_PROFIT_COLOR = "#15803d";
 const CLOSED_TRADE_LOSS_COLOR = "#b91c1c";
 const CLOSED_TRADE_MARKER_SIZE = 2.4;
+const TRADE_RISK_ENABLED_STORAGE_KEY = "marketMasterTradeRiskEnabled";
 
 const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
   data[currentIndex - 1] ?? null;
@@ -373,6 +377,7 @@ export function MarketMasterPage() {
     drawAutomaticPens,
     resetAutomaticPensState,
     updateAutomaticPensAfterCandle,
+    getAutomaticPenStartTime,
   } = useAutomaticPens({ chartRef, seriesRef });
   const {
     automaticSegmentCount,
@@ -495,6 +500,14 @@ export function MarketMasterPage() {
     setSymbol(getDefaultSymbol());
     setTimeframe(resolveLastTimeframe());
 
+    try {
+      const savedRisk = JSON.parse(localStorage.getItem(TRADE_RISK_ENABLED_STORAGE_KEY) ?? "null");
+      if (typeof savedRisk?.slEnabled === "boolean") setSlEnabled(savedRisk.slEnabled);
+      if (typeof savedRisk?.tpEnabled === "boolean") setTpEnabled(savedRisk.tpEnabled);
+    } catch {
+      // Keep defaults if browser storage is unavailable or contains invalid JSON.
+    }
+
     const persistedConfig = loadPersistedIndicatorConfig();
     if (!persistedConfig) return;
 
@@ -559,6 +572,22 @@ export function MarketMasterPage() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const currentPrice = fullDataRef.current[currentIndex - 1]?.close || 0;
+  const canUseAutomaticTrading = canUseAutomaticDraw && isBacktestMode && !isReplayMode && !isDataLoading && !dataError;
+  const {
+    isAutomaticTradingEnabled,
+    toggleAutomaticTrading,
+    stopAutomaticTrading,
+    advanceAutomaticTrading,
+  } = useAutomaticPenTrading({
+    seriesRef,
+    canTrade: canUseAutomaticTrading,
+    marketKey: `${symbol}:${timeframe}:${marketDataEpoch}`,
+  });
+  const handleToggleAutomaticTrading = useCallback(() => {
+    if (!canUseAutomaticTrading || (!isAutomaticTradingEnabled && isHistoryLoading)) return;
+    const startTime = getAutomaticPenStartTime() ?? chartRef.current?.timeScale().getVisibleRange()?.from;
+    toggleAutomaticTrading(startTime);
+  }, [canUseAutomaticTrading, isAutomaticTradingEnabled, isHistoryLoading, getAutomaticPenStartTime, toggleAutomaticTrading]);
   const activeInstrumentProfile = getInstrumentProfile({
     symbol,
     assetType:
@@ -713,6 +742,19 @@ export function MarketMasterPage() {
   const [tpEnabled, setTpEnabled] = useState(true);
   const [tpDistance, setTpDistance] = useState(40);
 
+  useEffect(() => {
+    // Wait for the initial preferences to load before writing any defaults.
+    if (!isMounted) return;
+    try {
+      localStorage.setItem(
+        TRADE_RISK_ENABLED_STORAGE_KEY,
+        JSON.stringify({ slEnabled, tpEnabled })
+      );
+    } catch {
+      // Storage restrictions should not prevent changing the toggles.
+    }
+  }, [isMounted, slEnabled, tpEnabled]);
+
   const tradesRef = useRef<any[]>(trades);
   useEffect(() => {
     tradesRef.current = trades;
@@ -724,6 +766,7 @@ export function MarketMasterPage() {
   const openTradeManagementRef = useRef<(tradeId: any) => void>(
     () => {}
   );
+  const placeOrderRef = useRef<(type: "Buy" | "Sell", candle: NormalizedCandle, barIndex: number, event?: AutomaticPenEvent) => void>(() => {});
   const tradeConnectionRef = useRef<TradeConnectionPrimitive | null>(null);
   const [managedTradeId, setManagedTradeId] = useState<string | number | null>(null);
   const ignoreContextMenuCloseRef = useRef(false);
@@ -745,13 +788,14 @@ export function MarketMasterPage() {
   }, []);
 
   const resetBacktestAccount = useCallback(() => {
+    stopAutomaticTrading();
     setManagedTradeId(null);
     balanceRef.current = INITIAL_BACKTEST_BALANCE;
     setBalance(INITIAL_BACKTEST_BALANCE);
     tradesRef.current = [];
     setTrades([]);
     clearClosedTradeMarkers();
-  }, [clearClosedTradeMarkers]);
+  }, [clearClosedTradeMarkers, stopAutomaticTrading]);
 
   const requestBacktestCompletion = useCallback(() => {
     if (
@@ -3202,6 +3246,7 @@ export function MarketMasterPage() {
       window.removeEventListener("mouseup", mouseupHandler);
       window.removeEventListener("click", hideMenuOnClick);
       window.removeEventListener("keydown", handleKeyDown);
+      stopAutomaticTrading();
       resetAutomaticPensState();
       resetAutomaticSegmentsState();
       clearSupportResistance();
@@ -3226,6 +3271,7 @@ export function MarketMasterPage() {
     resetAutomaticPensState,
     resetAutomaticSegmentsState,
     clearSupportResistance,
+    stopAutomaticTrading,
     setSelectedIndicator,
     setSelectedShape,
   ]);
@@ -3574,6 +3620,8 @@ export function MarketMasterPage() {
 
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
+    const currentIndex = currentIndexRef.current;
+    if (isDataLoadingRef.current || !seriesRef.current) return;
     const replayEndCurrent = replayEndCurrentIndexRef.current;
     const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
     const hasMoreFuture =
@@ -3676,7 +3724,10 @@ export function MarketMasterPage() {
         if (trade.status !== "Open") return trade;
         let closePrice = null;
         let reason = "";
-        if (trade.type === "Buy") {
+        if (trade.automaticPen) {
+          const exit = resolveAutomaticPenExit(trade, nextCandle);
+          if (exit) { closePrice = exit.price; reason = exit.reason; }
+        } else if (trade.type === "Buy") {
           if (trade.sl !== null && nextCandle.low <= trade.sl) {
             closePrice = trade.sl;
             reason = "SL Hit";
@@ -3709,11 +3760,31 @@ export function MarketMasterPage() {
       settleClosedTrades(nextTrades, newlyClosed, balanceChange, currentIndex);
     }
 
-    setCurrentIndex((prev) => prev + 1);
+    // Existing positions settle against this candle before entering at its close;
+    // the new position must not hit SL/TP using prices from before its entry.
+    currentIndexRef.current = currentIndex + 1;
+    if (!isReplayModeRef.current && isBacktestModeRef.current) {
+      const event = advanceAutomaticTrading(nextCandle);
+      if (event) {
+        // Confirm pivots at this close; tightened stops apply from the next bar.
+        const trailed = trailAutomaticPenStops(tradesRef.current, event, nextCandle.close, priceDecimals);
+        if (trailed.changed.length) {
+          commitTrades(trailed.trades);
+          for (const trade of trailed.changed) {
+            persistRef.current.recordModify({ client_trade_id: String(trade.id), kind: "sl",
+              price: trade.sl, bar_time: nextCandle.time, bar_index: loadedOffsetRef.current + currentIndex });
+          }
+        }
+        if (event.side) placeOrderRef.current(event.side, nextCandle, currentIndex, event);
+      }
+    }
+    setCurrentIndex(currentIndex + 1);
   }, [
     applyReplayEventsUpTo,
     settleClosedTrades,
-    currentIndex,
+    advanceAutomaticTrading,
+    commitTrades,
+    priceDecimals,
     indConfig,
     updateAutomaticPensAfterCandle,
     updateAutomaticSegmentsAfterCandle,
@@ -3824,21 +3895,24 @@ export function MarketMasterPage() {
     return () => clearInterval(interval);
   }, [isPlaying, handleNextCandle]);
 
-  const handlePlaceOrder = (type) => {
+  const handlePlaceOrder = (type, entryCandle = getActiveCandle(fullDataRef.current, currentIndexRef.current), barIndex = currentIndexRef.current - 1, automaticEvent?: AutomaticPenEvent) => {
     if (!isBacktestMode || isReplayModeRef.current) return;
-    if (!fullDataRef.current.length || currentPrice <= 0) return;
-    if (!Number.isInteger(orderUnits) || orderUnits <= 0) {
+    if (!entryCandle || !Number.isFinite(entryCandle.close) || entryCandle.close <= 0) return;
+    const entry = entryCandle.close;
+    const plan = automaticEvent ? planAutomaticPenOrder(automaticEvent, entry, orderUnits, tradesRef.current, priceDecimals) : null;
+    if (automaticEvent && !plan) return;
+    const units = plan?.units ?? orderUnits;
+    if (!Number.isSafeInteger(units) || units <= 0) {
       toast.error("交易数量必须为正整数");
       return;
     }
 
-    const entry = currentPrice;
-    const sl = slEnabled
+    const sl = plan ? plan.sl : slEnabled
       ? type === "Buy"
         ? entry - slDistance
         : entry + slDistance
       : null;
-    const tp = tpEnabled
+    const tp = plan ? plan.tp : tpEnabled
       ? type === "Buy"
         ? entry + tpDistance
         : entry - tpDistance
@@ -3851,14 +3925,20 @@ export function MarketMasterPage() {
       entry,
       sl,
       tp,
-      units: orderUnits,
+      units,
+      ...(plan ? { automaticPen: plan.automaticPen } : {}),
       status: "Open",
       pnl: 0,
       visibleOnChart: true,
-      entryTime: getActiveCandle(fullDataRef.current, currentIndexRef.current)
-        ?.time,
+      entryTime: entryCandle.time,
     };
-    commitTrades([newTrade, ...tradesRef.current]);
+    // Consume funding only after a valid order has actually been created.
+    const fundedBy = plan?.automaticPen.fundedBy;
+    const previousTrades = fundedBy === undefined ? tradesRef.current : tradesRef.current.map((trade) =>
+      String(trade.id) === fundedBy
+        ? { ...trade, automaticPen: { ...trade.automaticPen, fundedChildId: newTrade.id } }
+        : trade);
+    commitTrades([newTrade, ...previousTrades]);
     syncTradeMarkers(tradesRef.current);
     if (newTrade.entryTime != null) {
       const pendingStart = pendingSessionStartRef.current;
@@ -3869,15 +3949,16 @@ export function MarketMasterPage() {
       persistRef.current.recordOpen({
         client_trade_id: String(newTrade.id),
         bar_time: newTrade.entryTime,
-        bar_index: loadedOffsetRef.current + currentIndexRef.current - 1,
+        bar_index: loadedOffsetRef.current + barIndex,
         side: toPersistSide(type),
-        units: orderUnits,
+        units,
         price: entry,
         sl_price: sl,
         tp_price: tp,
       });
     }
   };
+  placeOrderRef.current = handlePlaceOrder;
 
   const handleCloseMarket = (tradeId, unitsOverride?: number) => {
     if (isReplayModeRef.current) return;
@@ -4621,6 +4702,8 @@ export function MarketMasterPage() {
         currentIndex={loadedOffset + currentIndex}
         totalCandles={totalCandles}
         handleNextCandle={handleNextCandle}
+        isAutomaticTradingEnabled={isAutomaticTradingEnabled}
+        onToggleAutomaticTrading={handleToggleAutomaticTrading}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
         isDataLoading={isDataLoading}
@@ -4653,6 +4736,7 @@ export function MarketMasterPage() {
       />
 
       <MarketWorkspace
+        isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         bottomPanelHeight={bottomPanelHeight}
         canPlaceOrder={
           isBacktestMode && !isReplayMode && !isDataLoading && !dataError

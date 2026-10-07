@@ -24,6 +24,7 @@ export function useAutomaticPens({ chartRef, seriesRef }: UseAutomaticPensArgs) 
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const countRef = useRef(0);
   const [automaticPenCount, setAutomaticPenCount] = useState(0);
+  const getAutomaticPenStartTime = useCallback(() => startTimeRef.current, []);
 
   const renderAutomaticPens = useCallback(() => {
     const chart = chartRef.current;
@@ -123,5 +124,5 @@ export function useAutomaticPens({ chartRef, seriesRef }: UseAutomaticPensArgs) 
     renderAutomaticPens();
   }, [chartRef, seriesRef, rebuildAutomaticPens, renderAutomaticPens]);
 
-  return { automaticPenCount, clearAutomaticPens, drawAutomaticPens, resetAutomaticPensState, updateAutomaticPensAfterCandle };
+  return { automaticPenCount, clearAutomaticPens, drawAutomaticPens, resetAutomaticPensState, updateAutomaticPensAfterCandle, getAutomaticPenStartTime };
 }

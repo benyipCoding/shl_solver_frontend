@@ -53,6 +53,7 @@ type MarketWorkspaceProps = {
   bottomPanelHeight: number;
   canPlaceOrder: boolean;
   isReplayMode?: boolean;
+  isAutomaticTradingEnabled?: boolean;
   candleTooltip: CandleTooltip | null;
   candleTooltipElRef: RefObject<HTMLDivElement | null>;
   chartContainerRef: RefObject<HTMLDivElement | null>;
@@ -108,6 +109,7 @@ export function MarketWorkspace({
   bottomPanelHeight,
   canPlaceOrder,
   isReplayMode = false,
+  isAutomaticTradingEnabled = false,
   candleTooltip,
   candleTooltipElRef,
   chartContainerRef,
@@ -359,6 +361,7 @@ export function MarketWorkspace({
       )}
 
       <TradeTerminal
+        isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         isRightPanelOpen={isRightPanelOpen}
         setIsRightPanelOpen={setIsRightPanelOpen}
         symbol={symbol}

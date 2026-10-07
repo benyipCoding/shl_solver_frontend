@@ -68,6 +68,8 @@ export const TopBar = ({
   currentIndex,
   totalCandles,
   handleNextCandle,
+  isAutomaticTradingEnabled = false,
+  onToggleAutomaticTrading,
   isPlaying,
   setIsPlaying,
   isDataLoading,
@@ -582,6 +584,20 @@ export const TopBar = ({
                   <RotateCcw size={18} />
                 </button>
               ) : null}
+              {isSuperuser && !isReplayMode && (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isAutomaticTradingEnabled}
+                  onClick={onToggleAutomaticTrading}
+                  disabled={isDataLoading || Boolean(dataError) || (!isAutomaticTradingEnabled && isHistoryLoading)}
+                  className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${isAutomaticTradingEnabled ? "bg-emerald-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+                  title="首单使用终端数量；按趋势起点设止损、随确认拐点收紧，止盈为初始风险距离的 10 倍。加仓使用最近同向自动单保底利润的 50%，每单仅资助一次。关闭只暂停新开仓，已有自动单继续移动止损。"
+                >
+                  <span className={`h-2 w-2 rounded-full ${isAutomaticTradingEnabled ? "bg-white" : "bg-gray-500"}`} />
+                  自动做单
+                </button>
+              )}
               <div className="h-5 w-px bg-gray-600" />
               <button
                 type="button"
