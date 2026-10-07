@@ -199,28 +199,56 @@ test("confirmed pens remain stable as future candles arrive and inputs stay unch
 function hookHarness(initialData, visibleRange) {
   let data = initialData;
   const drawn = new Set();
+  const viewportListeners = new Set();
+  const dataListeners = new Set();
+  const stats = { reads: 0, writes: 0, creates: 0, count: 0 };
+  const timeScale = {
+    getVisibleRange: () => visibleRange,
+    subscribeVisibleTimeRangeChange: (listener) => viewportListeners.add(listener),
+    unsubscribeVisibleTimeRangeChange: (listener) => viewportListeners.delete(listener),
+  };
   const chart = {
-    timeScale: () => ({ getVisibleRange: () => visibleRange }),
-    addSeries: () => {
-      const series = { data: [], setData: (points) => { series.data = plain(points); } };
-      drawn.add(series);
-      return series;
-    },
-    removeSeries: (series) => drawn.delete(series),
+    timeScale: () => timeScale,
+    addSeries: () => assert.fail("automatic pens must not create chart series"),
   };
   const { useAutomaticPens: runHook } = loadModule("../../hooks/useAutomaticPens.ts", {
-    react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, () => {}] },
+    react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, (count) => { stats.count = count; }] },
     "lightweight-charts": { LineSeries: {} },
     "@/components/market-master/automatic-pens": pensModule,
+    "@/components/market-master/automatic-pens-primitive": {
+      AutomaticPensPrimitive: class {
+        data = [];
+        setPens(pens) {
+          stats.writes++;
+          this.data = plain(pens.length ? [
+            { time: pens[0].startPoint.time, value: pens[0].startPoint.price },
+            ...pens.map((pen) => ({ time: pen.endPoint.time, value: pen.endPoint.price })),
+          ] : []);
+        }
+      },
+    },
   });
-  const hook = runHook({ chartRef: { current: chart }, seriesRef: { current: { data: () => data } } });
-  return { hook, drawn, setData: (next) => { data = next; } };
+  const hook = runHook({ chartRef: { current: chart }, seriesRef: { current: {
+    data: () => { stats.reads++; return data; },
+    subscribeDataChanged: (listener) => dataListeners.add(listener),
+    unsubscribeDataChanged: (listener) => dataListeners.delete(listener),
+    attachPrimitive: (primitive) => { stats.creates++; drawn.add(primitive); },
+    detachPrimitive: (primitive) => drawn.delete(primitive),
+  } } });
+  return {
+    hook, drawn, stats, viewportListeners, dataListeners,
+    legs: () => [...drawn].flatMap((series) => series.data.slice(1).map((point, index) => [series.data[index], point])),
+    setData: (next) => { data = next; },
+    replaceData: (next) => { data = next; dataListeners.forEach((fn) => fn("full")); },
+    append: (candle) => { data.push(candle); dataListeners.forEach((fn) => fn("update")); hook.updateAutomaticPensAfterCandle(candle); },
+    pan: (range) => { visibleRange = range; viewportListeners.forEach((fn) => fn(range)); },
+  };
 }
 
 test("enabled drawing can start with zero pens and later acquire its first pen", () => {
   const harness = hookHarness(candles([100, 101, 102, 103]), { from: 1, to: 4 });
   harness.hook.drawAutomaticPens();
-  assert.equal(harness.drawn.size, 0);
+  assert.equal(harness.legs().length, 0);
   harness.setData(candles([100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
@@ -230,7 +258,7 @@ test("incremental drawing adds the first shallow pen when its fifth candle arriv
   const data = candles(Array.from({ length: 5 }, (_, i) => 100 + i * 0.01));
   const harness = hookHarness(data.slice(0, 4), { from: 1, to: 4 });
   harness.hook.drawAutomaticPens();
-  assert.equal(harness.drawn.size, 0);
+  assert.equal(harness.legs().length, 0);
   harness.setData(data);
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
@@ -254,7 +282,8 @@ test("drawing reconciles multiple new pens, removes invalidated lines, and stays
   harness.hook.drawAutomaticPens();
   harness.setData(candles([100, 101, 102, 103, 104, 103, 102, 101, 100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
-  assert.equal(harness.drawn.size, 3);
+  assert.equal(harness.legs().length, 3);
+  assert.equal(harness.drawn.size, 1);
   harness.setData(candles([100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
@@ -271,10 +300,145 @@ test("逐 K drawing includes the previously missing XAU/USD downward pen", () =>
     harness.setData(xauCandles.slice(0, count));
     harness.hook.updateAutomaticPensAfterCandle();
   }
-  const drawn = Array.from(harness.drawn, (series) => series.data);
+  const drawn = harness.legs();
   assert.ok(drawn.some((points) => points[0].time === unix("2017-01-05T12:00:00Z") && points[1].time === unix("2017-01-06T16:00:00Z")));
   assert.deepEqual(drawn, plain(generateAutomaticPens(xauCandles).map((pen) => [
     { time: pen.startPoint.time, value: pen.startPoint.price },
     { time: pen.endPoint.time, value: pen.endPoint.price },
   ])));
+});
+
+const waveCandles = (count) => candles(Array.from({ length: count }, (_, index) => 100 + (index % 8 <= 4 ? index % 8 : 8 - index % 8)));
+const penLines = (pens) => plain(pens.map((pen) => [
+  { time: pen.startPoint.time, value: pen.startPoint.price },
+  { time: pen.endPoint.time, value: pen.endPoint.price },
+]));
+
+test("streaming generator matches every batch prefix and does not mutate past snapshots", () => {
+  for (const data of [xauCandles, waveCandles(300)]) {
+    const generator = pensModule.createAutomaticPenGenerator();
+    for (let index = 0; index < data.length; index++) {
+      const before = [...generator.pens];
+      const snapshot = plain(before);
+      generator.append(data[index]);
+      assert.deepEqual(plain(before), snapshot);
+      assert.deepEqual(plain(generator.pens), plain(generateAutomaticPens(data.slice(0, index + 1))));
+    }
+  }
+});
+
+test("20,000 playback candles use one bounded overlay without rereading history; panning restores old geometry", () => {
+  const data = waveCandles(20000);
+  const harness = hookHarness(data.slice(0, 5), { from: 1, to: 5 });
+  harness.hook.drawAutomaticPens();
+  const initialReads = harness.stats.reads;
+  for (let index = 5; index < data.length; index++) {
+    harness.pan({ from: Math.max(1, index - 400), to: index + 1 });
+    harness.append(data[index]);
+    assert.ok(harness.stats.count <= pensModule.AUTOMATIC_PENS_MAX_VISIBLE);
+    assert.ok([...harness.drawn][0].data.length <= pensModule.AUTOMATIC_PENS_MAX_VISIBLE + 1);
+  }
+  assert.equal(harness.stats.reads, initialReads);
+  assert.equal(harness.stats.creates, 1);
+  assert.equal(harness.drawn.size, 1);
+  const allPens = generateAutomaticPens(data);
+  const range = { from: 101, to: 301 };
+  harness.pan(range);
+  assert.equal(harness.stats.reads, initialReads);
+  assert.deepEqual(harness.legs(), penLines(pensModule.selectAutomaticPensForViewport(allPens, range)));
+  assert.ok(harness.legs().at(-1)[1].time < 500);
+  harness.pan({ from: 1, to: 20000 });
+  assert.equal(harness.stats.count, pensModule.AUTOMATIC_PENS_MAX_VISIBLE);
+  assert.equal(harness.legs().at(-1)[1].time, allPens.at(-1).endPoint.time);
+});
+
+test("offscreen tail changes do not rewrite the historical viewport", () => {
+  const data = waveCandles(1000);
+  const harness = hookHarness(data.slice(0, 999), { from: 1, to: 999 });
+  harness.hook.drawAutomaticPens();
+  harness.pan({ from: 1, to: 10 });
+  const writes = harness.stats.writes;
+  harness.append(data[999]);
+  assert.equal(harness.stats.writes, writes);
+});
+
+test("viewport selection includes a long pen crossing the whole viewport", () => {
+  const pens = generateAutomaticPens(candles(Array.from({ length: 10000 }, (_, index) => index)));
+  assert.equal(pens.length, 1);
+  assert.deepEqual(plain(pensModule.selectAutomaticPensForViewport(pens, { from: 500, to: 600 })), plain(pens));
+});
+
+test("initial offscreen revealed candles are caught up before taking the append path", () => {
+  const data = waveCandles(100);
+  const harness = hookHarness(data.slice(0, 99), { from: 1, to: 5 });
+  harness.hook.drawAutomaticPens();
+  assert.equal(harness.legs().length, 1);
+  harness.append(data[99]);
+  harness.pan({ from: 1, to: 100 });
+  assert.deepEqual(harness.legs(), penLines(generateAutomaticPens(data)));
+});
+
+test("data replacement, same-bar correction, prepend and rewind keep the original start boundary", () => {
+  const data = waveCandles(30);
+  const harness = hookHarness(data.slice(10), { from: 11, to: 30 });
+  harness.hook.drawAutomaticPens();
+  harness.replaceData(data);
+  assert.deepEqual(harness.legs(), penLines(generateAutomaticPens(data.slice(10))));
+  const edited = { ...data.at(-1), open: 110, close: 111 };
+  harness.setData([...data.slice(0, -1), edited]);
+  harness.hook.updateAutomaticPensAfterCandle(edited);
+  assert.deepEqual(harness.legs(), penLines(generateAutomaticPens([...data.slice(10, -1), edited])));
+  harness.replaceData(data.slice(0, 15));
+  assert.deepEqual(harness.legs(), penLines(generateAutomaticPens(data.slice(10, 15))));
+  harness.replaceData([]);
+  assert.equal(harness.legs().length, 0);
+  assert.equal(harness.stats.count, 0);
+});
+
+test("redraw, clear and chart reset release viewport/data subscriptions", () => {
+  const harness = hookHarness(waveCandles(1000), { from: 1, to: 1000 });
+  harness.hook.drawAutomaticPens();
+  harness.hook.drawAutomaticPens();
+  assert.equal(harness.drawn.size, 1);
+  assert.equal(harness.viewportListeners.size, 1);
+  assert.equal(harness.dataListeners.size, 1);
+  harness.hook.clearAutomaticPens();
+  assert.equal(harness.viewportListeners.size, 0);
+  assert.equal(harness.dataListeners.size, 0);
+  assert.equal(harness.drawn.size, 0);
+  harness.pan({ from: 100, to: 200 });
+  assert.equal(harness.drawn.size, 0);
+  harness.hook.drawAutomaticPens();
+  harness.hook.resetAutomaticPensState();
+  assert.equal(harness.drawn.size, 0);
+  assert.equal(harness.viewportListeners.size, 0);
+  assert.equal(harness.dataListeners.size, 0);
+});
+
+test("overlay projects pen endpoints and requests redraws without changing chart data", () => {
+  const { AutomaticPensPrimitive } = loadModule("./automatic-pens-primitive.ts", { "./automatic-pens": pensModule });
+  const primitive = new AutomaticPensPrimitive();
+  const commands = [];
+  let updates = 0;
+  primitive.attached({
+    chart: { timeScale: () => ({ timeToCoordinate: (time) => time * 10 }) },
+    series: { priceToCoordinate: (price) => 1000 - price * 2 },
+    requestUpdate: () => updates++,
+  });
+  primitive.setPens(generateAutomaticPens(candles([100, 101, 102, 103, 104, 103, 102, 101, 100])));
+  const context = {
+    save() {}, restore() {}, beginPath() {}, stroke() {},
+    moveTo: (x, y) => commands.push(["move", x, y]),
+    lineTo: (x, y) => commands.push(["line", x, y]),
+  };
+  const draw = () => primitive.paneViews()[0].renderer().draw({ useMediaCoordinateSpace: (fn) => fn({ context }) });
+  draw();
+  assert.deepEqual(commands, [["move", 10, 800], ["line", 50, 792], ["move", 50, 792], ["line", 90, 800]]);
+  assert.equal(context.lineWidth, 2);
+  assert.equal(context.strokeStyle, "#ffff00");
+  assert.equal(updates, 2);
+  primitive.detached();
+  commands.length = 0;
+  draw();
+  assert.equal(commands.length, 0);
 });

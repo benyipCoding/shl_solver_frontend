@@ -1,163 +1,127 @@
 import { useCallback, useRef, useState, type RefObject } from "react";
-import {
-  LineSeries,
-  type CandlestickData,
-  type IChartApi,
-  type ISeriesApi,
-  type Time,
-} from "lightweight-charts";
+import type { DataChangedScope, IChartApi, ISeriesApi, Time } from "lightweight-charts";
 
 import {
-  AUTOMATIC_PENS_COLOR,
-  generateAutomaticPens,
+  createAutomaticPenGenerator,
+  selectAutomaticPensForViewport,
   type AutomaticPen,
+  type AutomaticPenCandle,
 } from "@/components/market-master/automatic-pens";
-
-type AutomaticPenSeriesEntry = {
-  pen: AutomaticPen;
-  series: ISeriesApi<"Line", Time>;
-};
+import { AutomaticPensPrimitive } from "@/components/market-master/automatic-pens-primitive";
 
 type UseAutomaticPensArgs = {
   chartRef: RefObject<IChartApi | null>;
   seriesRef: RefObject<ISeriesApi<"Candlestick", Time> | null>;
 };
 
-const isCandlestickData = (
-  candle: CandlestickData<Time> | { time: Time }
-): candle is CandlestickData<Time> => "open" in candle && "close" in candle;
-
-export function useAutomaticPens({
-  chartRef,
-  seriesRef,
-}: UseAutomaticPensArgs) {
-  const penSeriesRef = useRef<AutomaticPenSeriesEntry[]>([]);
-  const enabledRef = useRef(false);
+export function useAutomaticPens({ chartRef, seriesRef }: UseAutomaticPensArgs) {
+  const primitiveRef = useRef<AutomaticPensPrimitive | null>(null);
+  const generatorRef = useRef<ReturnType<typeof createAutomaticPenGenerator> | null>(null);
+  const drawnPensRef = useRef<readonly AutomaticPen[]>([]);
   const startTimeRef = useRef<Time | null>(null);
+  const lastTimeRef = useRef<Time | null>(null);
+  const caughtUpRef = useRef(false);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const countRef = useRef(0);
   const [automaticPenCount, setAutomaticPenCount] = useState(0);
 
-  const clearAutomaticPens = useCallback(
-    (disable = true) => {
-      const chart = chartRef.current;
-      if (chart) {
-        penSeriesRef.current.forEach(({ series }) => chart.removeSeries(series));
+  const renderAutomaticPens = useCallback(() => {
+    const chart = chartRef.current;
+    const generator = generatorRef.current;
+    if (!chart || !generator) return;
+    const pens = selectAutomaticPensForViewport(generator.pens, chart.timeScale().getVisibleRange());
+    const previous = drawnPensRef.current;
+    if (pens.length === previous.length && pens.every((pen, index) => pen === previous[index])) return;
+    // Save identities so offscreen changes do not request redundant redraws.
+    drawnPensRef.current = pens;
+    primitiveRef.current?.setPens(pens);
+    if (countRef.current !== pens.length) {
+      countRef.current = pens.length;
+      setAutomaticPenCount(pens.length);
+    }
+  }, [chartRef]);
+
+  const resetAutomaticPensState = useCallback(() => {
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    primitiveRef.current = null;
+    generatorRef.current = null;
+    drawnPensRef.current = [];
+    startTimeRef.current = null;
+    lastTimeRef.current = null;
+    caughtUpRef.current = false;
+    countRef.current = 0;
+    setAutomaticPenCount(0);
+  }, []);
+
+  const clearAutomaticPens = useCallback(() => {
+    resetAutomaticPensState();
+  }, [resetAutomaticPensState]);
+
+  const rebuildAutomaticPens = useCallback((until?: Time) => {
+    const series = seriesRef.current;
+    const startTime = startTimeRef.current;
+    if (!series || startTime === null) return;
+    const generator = createAutomaticPenGenerator();
+    lastTimeRef.current = null;
+    caughtUpRef.current = true;
+    // Only setData/rewind/same-bar edits need a replay. Ordinary append never
+    // calls series.data(), which copies the entire candle history in the chart.
+    for (const candle of series.data()) {
+      if (!("open" in candle) || candle.time < startTime) continue;
+      if (until !== undefined && candle.time > until) {
+        caughtUpRef.current = false;
+        continue;
       }
-
-      penSeriesRef.current = [];
-      if (disable) {
-        enabledRef.current = false;
-        startTimeRef.current = null;
-      }
-      setAutomaticPenCount(0);
-    },
-    [chartRef]
-  );
-
-  const createAutomaticPenSeries = useCallback(
-    (pen: AutomaticPen) => {
-      const chart = chartRef.current;
-      if (!chart) return null;
-
-      const penSeries = chart.addSeries(LineSeries, {
-        color: AUTOMATIC_PENS_COLOR,
-        lineWidth: 2,
-        lastValueVisible: false,
-        priceLineVisible: false,
-        crosshairMarkerVisible: false,
-        title: "",
-      });
-      penSeries.setData([
-        { time: pen.startPoint.time, value: pen.startPoint.price },
-        { time: pen.endPoint.time, value: pen.endPoint.price },
-      ]);
-
-      return { pen, series: penSeries };
-    },
-    [chartRef]
-  );
+      generator.append(candle);
+      lastTimeRef.current = candle.time;
+    }
+    generatorRef.current = generator;
+  }, [seriesRef]);
 
   const drawAutomaticPens = useCallback(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
     if (!chart || !series) return;
+    const timeScale = chart.timeScale();
+    const range = timeScale.getVisibleRange();
+    if (!range) return;
+    const first = series.data().find((candle) => "open" in candle && candle.time >= range.from && candle.time <= range.to);
+    if (!first) return;
 
-    const visibleRange = chart.timeScale().getVisibleRange();
-    if (!visibleRange) return;
+    clearAutomaticPens();
+    const primitive = new AutomaticPensPrimitive();
+    primitiveRef.current = primitive;
+    series.attachPrimitive(primitive);
+    startTimeRef.current = first.time;
+    rebuildAutomaticPens(range.to);
+    renderAutomaticPens();
+    const onDataChanged = (scope: DataChangedScope) => {
+      if (scope !== "full") return;
+      rebuildAutomaticPens();
+      renderAutomaticPens();
+    };
+    timeScale.subscribeVisibleTimeRangeChange(renderAutomaticPens);
+    series.subscribeDataChanged(onDataChanged);
+    unsubscribeRef.current = () => {
+      timeScale.unsubscribeVisibleTimeRangeChange(renderAutomaticPens);
+      series.unsubscribeDataChanged(onDataChanged);
+      series.detachPrimitive(primitive);
+    };
+  }, [chartRef, seriesRef, clearAutomaticPens, rebuildAutomaticPens, renderAutomaticPens]);
 
-    // Start from the visible candles; later updates retain this drawing boundary.
-    const candles = series
-      .data()
-      .filter(isCandlestickData)
-      .filter((candle) => candle.time <= visibleRange.to);
-    const startIndex = candles.findIndex((candle) => candle.time >= visibleRange.from);
-    if (startIndex < 0) return;
-    const pens = generateAutomaticPens(candles.slice(startIndex));
-
-    clearAutomaticPens(false);
-    enabledRef.current = true;
-    startTimeRef.current = candles[startIndex].time;
-    penSeriesRef.current = pens.flatMap((pen) => {
-      const entry = createAutomaticPenSeries(pen);
-      return entry ? [entry] : [];
-    });
-    setAutomaticPenCount(penSeriesRef.current.length);
-  }, [chartRef, clearAutomaticPens, createAutomaticPenSeries, seriesRef]);
-
-  const updateAutomaticPensAfterCandle = useCallback(() => {
-    const chart = chartRef.current;
-    const series = seriesRef.current;
-    const startTime = startTimeRef.current;
-    if (!enabledRef.current || !chart || !series || startTime === null) return;
-
-    const candles = series.data().filter(isCandlestickData);
-    const startIndex = candles.findIndex((candle) => candle.time >= startTime);
-    const pens = startIndex < 0
-      ? []
-      : generateAutomaticPens(candles.slice(startIndex));
-
-    // Also handles zero initial pens, several newly revealed legs, and same-bar
-    // price changes. Reuse chart series so unchanged lines do not flicker.
-    const entries = penSeriesRef.current;
-    for (let index = entries.length - 1; index >= pens.length; index--) {
-      chart.removeSeries(entries[index].series);
-      entries.pop();
+  const updateAutomaticPensAfterCandle = useCallback((candle?: AutomaticPenCandle) => {
+    const generator = generatorRef.current;
+    if (!generator || !chartRef.current || !seriesRef.current) return;
+    if (candle && caughtUpRef.current && lastTimeRef.current !== null && candle.time > lastTimeRef.current) {
+      generator.append(candle);
+      lastTimeRef.current = candle.time;
+    } else {
+      // Also catches multiple revealed candles and corrections to the last bar.
+      rebuildAutomaticPens();
     }
-    pens.forEach((pen, index) => {
-      const entry = entries[index];
-      if (!entry) {
-        const created = createAutomaticPenSeries(pen);
-        if (created) entries.push(created);
-        return;
-      }
-      const previous = entry.pen;
-      if (
-        previous.startPoint.time !== pen.startPoint.time ||
-        previous.startPoint.price !== pen.startPoint.price ||
-        previous.endPoint.time !== pen.endPoint.time ||
-        previous.endPoint.price !== pen.endPoint.price
-      ) {
-        entry.series.setData([
-          { time: pen.startPoint.time, value: pen.startPoint.price },
-          { time: pen.endPoint.time, value: pen.endPoint.price },
-        ]);
-      }
-      entry.pen = pen;
-    });
-    setAutomaticPenCount(entries.length);
-  }, [chartRef, createAutomaticPenSeries, seriesRef]);
+    renderAutomaticPens();
+  }, [chartRef, seriesRef, rebuildAutomaticPens, renderAutomaticPens]);
 
-  const resetAutomaticPensState = useCallback(() => {
-    penSeriesRef.current = [];
-    enabledRef.current = false;
-    startTimeRef.current = null;
-    setAutomaticPenCount(0);
-  }, []);
-
-  return {
-    automaticPenCount,
-    clearAutomaticPens,
-    drawAutomaticPens,
-    resetAutomaticPensState,
-    updateAutomaticPensAfterCandle,
-  };
+  return { automaticPenCount, clearAutomaticPens, drawAutomaticPens, resetAutomaticPensState, updateAutomaticPensAfterCandle };
 }

@@ -16,6 +16,10 @@
 
 点击工具栏按钮时分析当前可视范围的 K 线。后续逐 K 更新沿用最初的绘制起点，并保留空结果后能继续成笔、同根价格更新及多条新笔同步的修复。
 
+逐 K 播放使用增量生成器，每次只处理新增 K 线，保留实体极值、反向候选和最后一笔状态；不会每次读取图表全部数据或重算历史。修改同根 K 线、回退或整体替换数据时重建计算状态。
+
+绘制使用一个附着于蜡烛序列的画布层，不再为每条笔新建 LineSeries，也不调用折线的 setData（该操作会触发图表历史时间轴扫描）。保持黄色、2 像素线宽，不扩展价格轴。只绘制可视范围相交的分笔及前后各 20 条缓冲，最多 200 条（`AUTOMATIC_PENS_MAX_VISIBLE`）；极度缩小时超过上限则优先显示较新的分笔。工具栏数量表示当前绘制数量。远处的绘制数据会被替换，历史笔只保留轻量端点记录，以便拖动视窗时通过二分查找恢复；历史记录不参与逐 K 全量遍历。清除和销毁图表时解除视窗、数据订阅并移除绘制层。
+
 默认最小跨度由 `AUTOMATIC_PENS_MIN_CANDLE_COUNT = 5` 控制。自动 segments 和分笔动能共用此生成器，因此同步使用旧规则生成的 pens。分笔动能本身的 ATR 比较规则保持不变。
 
 测试：`node --test components/market-master/automatic-pens.test.mjs components/market-master/automatic-segments.test.mjs components/market-master/pen-momentum.test.mjs`。

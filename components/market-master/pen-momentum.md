@@ -1,6 +1,17 @@
 # 分笔动能（初版）
 
-入口：指标配置中心 → 分笔动能 → 启用指标 → 确认应用。默认关闭；配置随其他指标保存到本地。
+> 当前状态：暂时停用（2026-10-07）。配置入口、页面 Hook / 面板、配置类型及持久化处理、专用实现和测试均已注释保留。旧本地配置中的 `penMomentum` 不再读取，保存其他指标配置时也不再写入此字段。
+
+## 恢复步骤
+
+1. 取消 `pen-momentum.ts`、`pen-momentum-primitive.ts`、`PenMomentumPanel.tsx`、`PenMomentumConfigFields.tsx`、`hooks/usePenMomentum.ts` 和 `pen-momentum.test.mjs` 原代码外层的逐行注释（保留原有注释）。
+2. 恢复 `market-config.ts` 中的类型导入、配置字段、默认值、复制及读取逻辑，以及 `market-config.test.mjs` 中已注释的两项测试。
+3. 恢复 `IndicatorConfigModal.tsx` 的导入、标签按钮和配置表单，以及 `MarketMasterPage.tsx` 的导入、Hook 调用和面板。Hook 保持原位置，确保在图表创建后调用。
+4. 运行文末测试命令并检查类型，再将本说明更新为启用状态。
+
+以下保留停用前的功能说明。
+
+ 入口：指标配置中心 → 分笔动能 → 启用指标 → 确认应用。默认关闭；配置随其他指标保存到本地。
 
 ## 配对
 

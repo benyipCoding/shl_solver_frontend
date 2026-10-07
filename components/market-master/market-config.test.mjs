@@ -51,25 +51,26 @@ test("volume enablement and colors persist while draft edits stay isolated", () 
   assert.deepEqual(plain(loadPersistedIndicatorConfig()), plain(draft));
 });
 
-test("legacy indicator settings gain disabled pen momentum and edits persist independently", () => {
-  const legacy = createDefaultIndicatorConfig();
-  delete legacy.penMomentum;
-  legacy.macd.enabled = true;
-  storage.set("marketMasterIndicatorConfig", JSON.stringify(legacy));
-  const restored = loadPersistedIndicatorConfig();
-  assert.equal(restored.macd.enabled, true);
-  assert.deepEqual(plain(restored.penMomentum), plain(createDefaultIndicatorConfig().penMomentum));
-  const draft = cloneIndicatorConfig(restored);
-  draft.penMomentum = { enabled: true, atrPeriod: 20, weakThreshold: 0.8, includeDeveloping: false };
-  assert.equal(restored.penMomentum.enabled, false);
-  persistIndicatorConfig(draft);
-  assert.deepEqual(plain(loadPersistedIndicatorConfig().penMomentum), plain(draft.penMomentum));
-});
+// 分笔动能暂时停用，相关配置测试随实现一起保留。
+// test("legacy indicator settings gain disabled pen momentum and edits persist independently", () => {
+//   const legacy = createDefaultIndicatorConfig();
+//   delete legacy.penMomentum;
+//   legacy.macd.enabled = true;
+//   storage.set("marketMasterIndicatorConfig", JSON.stringify(legacy));
+//   const restored = loadPersistedIndicatorConfig();
+//   assert.equal(restored.macd.enabled, true);
+//   assert.deepEqual(plain(restored.penMomentum), plain(createDefaultIndicatorConfig().penMomentum));
+//   const draft = cloneIndicatorConfig(restored);
+//   draft.penMomentum = { enabled: true, atrPeriod: 20, weakThreshold: 0.8, includeDeveloping: false };
+//   assert.equal(restored.penMomentum.enabled, false);
+//   persistIndicatorConfig(draft);
+//   assert.deepEqual(plain(loadPersistedIndicatorConfig().penMomentum), plain(draft.penMomentum));
+// });
 
-test("invalid saved momentum settings are restored to usable defaults", () => {
-  storage.set("marketMasterIndicatorConfig", JSON.stringify({ penMomentum: { enabled: true, atrPeriod: -2, weakThreshold: "invalid" } }));
-  const config = loadPersistedIndicatorConfig().penMomentum;
-  assert.equal(config.atrPeriod, 14);
-  assert.equal(config.weakThreshold, 0.5);
-  assert.equal(config.includeDeveloping, true);
-});
+// test("invalid saved momentum settings are restored to usable defaults", () => {
+//   storage.set("marketMasterIndicatorConfig", JSON.stringify({ penMomentum: { enabled: true, atrPeriod: -2, weakThreshold: "invalid" } }));
+//   const config = loadPersistedIndicatorConfig().penMomentum;
+//   assert.equal(config.atrPeriod, 14);
+//   assert.equal(config.weakThreshold, 0.5);
+//   assert.equal(config.includeDeveloping, true);
+// });

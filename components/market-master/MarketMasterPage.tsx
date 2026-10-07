@@ -49,8 +49,9 @@ import {
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
 import { useAutomaticPens } from "@/hooks/useAutomaticPens";
-import { usePenMomentum } from "@/hooks/usePenMomentum";
-import { PenMomentumPanel } from "@/components/market-master/PenMomentumPanel";
+// 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
+// import { usePenMomentum } from "@/hooks/usePenMomentum";
+// import { PenMomentumPanel } from "@/components/market-master/PenMomentumPanel";
 import { useAutomaticSegments } from "@/hooks/useAutomaticSegments";
 import { useSupportResistanceZones } from "@/hooks/useSupportResistanceZones";
 import { SupportResistancePanel } from "./SupportResistancePanel";
@@ -3245,16 +3246,17 @@ export function MarketMasterPage() {
     updateSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
   }, [isMounted, currentIndex, isDataLoading, isHistoryLoading, dataError, isBacktestMode, symbol, timeframe, marketDataEpoch, updateSupportResistance]);
 
-  const {
-    snapshot: penMomentumSnapshot,
-    selectedPair: selectedMomentumPair,
-    selectDirection: selectMomentumDirection,
-  } = usePenMomentum({
-    seriesRef,
-    config: indConfig.penMomentum,
-    ready: isMounted && !isDataLoading && !dataError,
-    marketKey: `${symbol}:${timeframe}`,
-  });
+  // 分笔动能暂时停用，同时停止行情订阅、计算和图表高亮。
+  // const {
+  //   snapshot: penMomentumSnapshot,
+  //   selectedPair: selectedMomentumPair,
+  //   selectDirection: selectMomentumDirection,
+  // } = usePenMomentum({
+  //   seriesRef,
+  //   config: indConfig.penMomentum,
+  //   ready: isMounted && !isDataLoading && !dataError,
+  //   marketKey: `${symbol}:${timeframe}`,
+  // });
 
   // ================= 2. 初始化副图表 (MACD) =================
   useEffect(() => {
@@ -3610,7 +3612,7 @@ export function MarketMasterPage() {
     const nextCandle = fullDataRef.current[currentIndex];
     seriesRef.current.update(nextCandle);
     volumeSeriesRef.current?.update(toVolumePoint(nextCandle, indConfig.volume));
-    updateAutomaticPensAfterCandle();
+    updateAutomaticPensAfterCandle(nextCandle);
     updateAutomaticSegmentsAfterCandle();
 
     indConfig.emas.forEach((ema) => {
@@ -4712,6 +4714,7 @@ export function MarketMasterPage() {
           history={supportResistanceHistory}
           onRetryHistory={retrySupportResistanceHistory}
         />}
+        {/* 分笔动能暂时停用。
         {indConfig.penMomentum.enabled && !isDataLoading && !dataError && <PenMomentumPanel
           snapshot={penMomentumSnapshot}
           config={indConfig.penMomentum}
@@ -4719,6 +4722,7 @@ export function MarketMasterPage() {
           onSelect={selectMomentumDirection}
           decimals={priceDecimals}
         />}
+        */}
         <KlineRepairSelectOverlay
           active={isRepairSelecting}
           symbol={symbol}

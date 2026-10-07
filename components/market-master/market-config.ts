@@ -4,7 +4,8 @@ import type {
   SeriesType,
   Time,
 } from "lightweight-charts";
-import type { PenMomentumConfig } from "./pen-momentum";
+// 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
+// import type { PenMomentumConfig } from "./pen-momentum";
 
 export const INITIAL_VISIBLE_COUNT = 200;
 export const INITIAL_BACKTEST_BALANCE = 10000;
@@ -93,7 +94,7 @@ export type BollingerConfig = {
 };
 
 export type IndicatorConfig = {
-  penMomentum: PenMomentumConfig;
+  // penMomentum: PenMomentumConfig;
   emas: EmaConfig[];
   bollinger: BollingerConfig;
   volume: {
@@ -246,7 +247,7 @@ export const applySyncedCrosshair = (
 };
 
 export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
-  penMomentum: { enabled: false, atrPeriod: 14, weakThreshold: 0.5, includeDeveloping: true },
+  // penMomentum: { enabled: false, atrPeriod: 14, weakThreshold: 0.5, includeDeveloping: true },
   emas: [],
   volume: {
     enabled: false,
@@ -282,7 +283,7 @@ export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
 export const cloneIndicatorConfig = (
   config: IndicatorConfig
 ): IndicatorConfig => ({
-  penMomentum: { ...createDefaultIndicatorConfig().penMomentum, ...config.penMomentum },
+  // penMomentum: { ...createDefaultIndicatorConfig().penMomentum, ...config.penMomentum },
   emas: config.emas.map((ema) => ({ ...ema })),
   bollinger: { ...config.bollinger },
   volume: { ...config.volume },
@@ -330,15 +331,16 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
   const histRaw = isRecord(macdRaw.histColors) ? macdRaw.histColors : {};
   const bollingerRaw = isRecord(value.bollinger) ? value.bollinger : {};
   const volumeRaw = isRecord(value.volume) ? value.volume : {};
-  const momentumRaw = isRecord(value.penMomentum) ? value.penMomentum : {};
+  // 分笔动能暂时停用，不再读取旧配置中的启用状态。
+  // const momentumRaw = isRecord(value.penMomentum) ? value.penMomentum : {};
 
   return {
-    penMomentum: {
-      enabled: Boolean(momentumRaw.enabled),
-      atrPeriod: Math.min(200, sanitizePositiveInteger(momentumRaw.atrPeriod, defaults.penMomentum.atrPeriod)),
-      weakThreshold: sanitizePositiveNumber(momentumRaw.weakThreshold, defaults.penMomentum.weakThreshold),
-      includeDeveloping: typeof momentumRaw.includeDeveloping === "boolean" ? momentumRaw.includeDeveloping : true,
-    },
+    // penMomentum: {
+    //   enabled: Boolean(momentumRaw.enabled),
+    //   atrPeriod: Math.min(200, sanitizePositiveInteger(momentumRaw.atrPeriod, defaults.penMomentum.atrPeriod)),
+    //   weakThreshold: sanitizePositiveNumber(momentumRaw.weakThreshold, defaults.penMomentum.weakThreshold),
+    //   includeDeveloping: typeof momentumRaw.includeDeveloping === "boolean" ? momentumRaw.includeDeveloping : true,
+    // },
     emas: Array.isArray(value.emas)
       ? value.emas
           .map(sanitizeEmaConfig)

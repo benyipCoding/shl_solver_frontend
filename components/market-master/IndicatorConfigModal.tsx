@@ -1,8 +1,9 @@
 import React from "react";
 import { X, Plus, Trash2, BarChart2 } from "lucide-react";
 import { ColorPicker } from "./ColorPicker";
-import { PenMomentumConfigFields } from "./PenMomentumConfigFields";
-import type { IndicatorConfig } from "./market-config";
+// 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
+// import { PenMomentumConfigFields } from "./PenMomentumConfigFields";
+// import type { IndicatorConfig } from "./market-config";
 
 export const IndicatorConfigModal = ({
   isIndicatorModalOpen,
@@ -90,19 +91,23 @@ export const IndicatorConfigModal = ({
           >
             布林通道
           </button>
+          {/* 分笔动能暂时停用。
           <button
             onClick={() => setSelectedIndTab("PEN_MOMENTUM")}
             className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${selectedIndTab === "PEN_MOMENTUM" ? "bg-gray-800 text-violet-400 shadow-sm" : "text-gray-400 hover:bg-gray-800/50"}`}
           >
             分笔动能
           </button>
+          */}
         </div>
 
         <div className="flex-1 p-4 overflow-y-auto bg-[#111827]">
+          {/* 分笔动能暂时停用。
           {selectedIndTab === "PEN_MOMENTUM" && <PenMomentumConfigFields
             config={draftConfig.penMomentum}
             onChange={(penMomentum) => setDraftConfig((previous: IndicatorConfig) => ({ ...previous, penMomentum }))}
           />}
+          */}
           {selectedIndTab === "EMA" && (
             <div className="space-y-3">
               <div className="flex items-center justify-between mb-4 sticky top-0 bg-[#111827] z-10 pb-2 border-b border-gray-800">
