@@ -26,9 +26,10 @@ type AutomaticPenCandle = Pick<
 >;
 
 /**
- * Port of the legacy Pens algorithm. It deliberately uses candle bodies rather
- * than wick highs/lows and confirms a turn only after the extrema span at
- * least minCandleCount candles (inclusive).
+ * Body extrema define endpoints. A new leg needs at least minCandleCount
+ * candles between its endpoints, inclusive. Reversal candidates come only
+ * from candles AFTER the current endpoint, never its own opposite body edge.
+ * The final pen remains developing until a qualifying reversal appears.
  */
 export function generateAutomaticPens(
   candlestickData: readonly AutomaticPenCandle[],
@@ -36,136 +37,75 @@ export function generateAutomaticPens(
 ): AutomaticPen[] {
   if (candlestickData.length < 2) return [];
 
-  const firstCandle = candlestickData[0];
-  const high: AutomaticPenPoint = {
-    index: 0,
-    price: Math.max(firstCandle.open, firstCandle.close),
-    time: firstCandle.time,
-  };
-  const low: AutomaticPenPoint = {
-    index: 0,
-    price: Math.min(firstCandle.open, firstCandle.close),
-    time: firstCandle.time,
-  };
+  const point = (index: number, upper: boolean): AutomaticPenPoint => ({
+    index,
+    time: candlestickData[index].time,
+    price: upper
+      ? Math.max(candlestickData[index].open, candlestickData[index].close)
+      : Math.min(candlestickData[index].open, candlestickData[index].close),
+  });
+  const spansEnoughCandles = (start: AutomaticPenPoint, end: AutomaticPenPoint) =>
+    end.index - start.index + 1 >= minCandleCount;
 
-  let currentTrend: AutomaticPenTrend | null = null;
-  let startPoint: AutomaticPenPoint | null = null;
-  let endPoint: AutomaticPenPoint | null = null;
+  let high = point(0, true);
+  let low = point(0, false);
+  let active: AutomaticPen | null = null;
+  let reversalExtreme: AutomaticPenPoint | null = null;
   const pens: AutomaticPen[] = [];
 
-  const updateOppositeExtreme = (
-    newTrend: AutomaticPenTrend,
-    currentHigh: number,
-    currentLow: number,
-    index: number,
-    candle: AutomaticPenCandle
-  ) => {
-    if (newTrend === AutomaticPenTrend.Up) {
-      low.index = index;
-      low.price = currentLow;
-      low.time = candle.time;
-    }
+  for (let index = 1; index < candlestickData.length; index++) {
+    const currentHigh = point(index, true);
+    const currentLow = point(index, false);
 
-    if (newTrend === AutomaticPenTrend.Down) {
-      high.index = index;
-      high.price = currentHigh;
-      high.time = candle.time;
-    }
-  };
-
-  const updateTrend = (
-    newTrend: AutomaticPenTrend,
-    currentHigh: number,
-    currentLow: number,
-    index: number,
-    candle: AutomaticPenCandle
-  ) => {
-    let candleDistance = 0;
-
-    if (currentTrend === newTrend) {
-      candleDistance =
-        newTrend === AutomaticPenTrend.Up
-          ? Math.abs(high.index - (startPoint ? startPoint.index : low.index)) + 1
-          : Math.abs((startPoint ? startPoint.index : high.index) - low.index) + 1;
-
-      if (candleDistance >= minCandleCount) {
-        endPoint =
-          newTrend === AutomaticPenTrend.Up ? { ...high } : { ...low };
-        updateOppositeExtreme(
-          newTrend,
-          currentHigh,
-          currentLow,
-          index,
-          candle
-        );
+    if (!active) {
+      // Preserve the initial high-before-low discovery order of the legacy rule.
+      if (currentHigh.price > high.price) {
+        high = currentHigh;
+        if (spansEnoughCandles(low, high)) {
+          active = { startPoint: low, endPoint: high, trend: AutomaticPenTrend.Up };
+          continue;
+        }
       }
-      return;
+      if (currentLow.price < low.price) {
+        low = currentLow;
+        if (spansEnoughCandles(high, low)) {
+          active = { startPoint: high, endPoint: low, trend: AutomaticPenTrend.Down };
+        }
+      }
+      continue;
     }
 
-    candleDistance =
-      newTrend === AutomaticPenTrend.Up
-        ? Math.abs(high.index - (endPoint ? endPoint.index : low.index)) + 1
-        : Math.abs((endPoint ? endPoint.index : high.index) - low.index) + 1;
-
-    if (candleDistance < minCandleCount) return;
-
-    if (startPoint && endPoint) {
-      pens.push({
-        startPoint,
-        endPoint,
-        trend: currentTrend ?? newTrend,
-      });
+    const isUp: boolean = active.trend === AutomaticPenTrend.Up;
+    const trendExtreme: AutomaticPenPoint = isUp ? currentHigh : currentLow;
+    if (active.trend * (trendExtreme.price - active.endPoint.price) > 0) {
+      active.endPoint = trendExtreme;
+      reversalExtreme = null;
+      // A candle extending the trend cannot also seed a reversal from that
+      // endpoint: OHLC does not establish the order of moves within the candle.
+      continue;
     }
 
-    currentTrend = newTrend;
-    startPoint =
-      newTrend === AutomaticPenTrend.Up ? { ...low } : { ...high };
-    endPoint =
-      newTrend === AutomaticPenTrend.Up ? { ...high } : { ...low };
-    updateOppositeExtreme(newTrend, currentHigh, currentLow, index, candle);
-  };
-
-  candlestickData.forEach((candle, index) => {
-    if (index === 0) return;
-
-    const currentHigh = Math.max(candle.open, candle.close);
-    const currentLow = Math.min(candle.open, candle.close);
-
-    if (currentHigh > high.price) {
-      high.index = index;
-      high.price = currentHigh;
-      high.time = candle.time;
-      updateTrend(
-        AutomaticPenTrend.Up,
-        currentHigh,
-        currentLow,
-        index,
-        candle
-      );
-    }
-
-    if (currentLow < low.price) {
-      low.index = index;
-      low.price = currentLow;
-      low.time = candle.time;
-      updateTrend(
-        AutomaticPenTrend.Down,
-        currentHigh,
-        currentLow,
-        index,
-        candle
-      );
-    }
+    const candidate: AutomaticPenPoint = isUp ? currentLow : currentHigh;
+    if (
+      reversalExtreme &&
+      active.trend * (reversalExtreme.price - candidate.price) <= 0
+    ) continue;
+    reversalExtreme = candidate;
 
     if (
-      index === candlestickData.length - 1 &&
-      startPoint &&
-      endPoint &&
-      currentTrend
+      active.trend * (active.endPoint.price - candidate.price) > 0 &&
+      spansEnoughCandles(active.endPoint, candidate)
     ) {
-      pens.push({ startPoint, endPoint, trend: currentTrend });
+      pens.push(active);
+      active = {
+        startPoint: active.endPoint,
+        endPoint: candidate,
+        trend: isUp ? AutomaticPenTrend.Down : AutomaticPenTrend.Up,
+      };
+      reversalExtreme = null;
     }
-  });
+  }
 
+  if (active) pens.push(active);
   return pens;
 }

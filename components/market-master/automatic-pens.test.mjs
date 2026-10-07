@@ -26,6 +26,87 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 const candles = (prices, wick = 1, startTime = 1) => prices.map((price, index) => ({
   time: startTime + index, open: price, close: price, high: price + wick, low: price - wick,
 }));
+const xauCandles = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201701.json", import.meta.url), "utf8")).candles;
+const unix = (date) => Date.parse(date) / 1000;
+
+test("XAU/USD H4 reversal forms after the large Jan 5 candle without retracing its whole body", () => {
+  const topTime = unix("2017-01-05T12:00:00Z");
+  const firstDownTime = unix("2017-01-06T04:00:00Z");
+  const bottomTime = unix("2017-01-06T16:00:00Z");
+  const first = generateAutomaticPens(xauCandles.filter((candle) => candle.time <= firstDownTime));
+  assert.equal(first.at(-1).trend, -1);
+  assert.equal(first.at(-1).startPoint.time, topTime);
+  assert.equal(first.at(-1).endPoint.time, firstDownTime);
+  assert.equal(first.at(-1).endPoint.price, 1174.825);
+  const atBottom = generateAutomaticPens(xauCandles.filter((candle) => candle.time <= bottomTime));
+  const down = atBottom.at(-1);
+  assert.equal(down.trend, -1);
+  assert.equal(down.startPoint.time, topTime);
+  assert.equal(down.startPoint.price, 1181.47);
+  assert.equal(down.endPoint.time, bottomTime);
+  assert.equal(down.endPoint.price, 1172.305);
+  assert.equal(down.endPoint.index - down.startPoint.index + 1, 8);
+  assert.deepEqual(atBottom.at(-2).endPoint, down.startPoint);
+  const later = generateAutomaticPens(xauCandles);
+  assert.deepEqual(later.find((pen) => pen.trend === -1 && pen.startPoint.time === topTime), down);
+});
+
+test("a reversal inside the endpoint candle body is recognized symmetrically in either direction", () => {
+  const bodies = [[100, 101], [101, 102], [102, 103], [103, 104], [104, 120],
+    [120, 119], [119, 118], [118, 117], [117, 116]];
+  for (const direction of [1, -1]) {
+    const data = bodies.map(([open, close], index) => ({ time: index + 1, open: direction * open, close: direction * close }));
+    assert.equal(generateAutomaticPens(data.slice(0, -1)).length, 1);
+    const pens = generateAutomaticPens(data);
+    assert.equal(pens.length, 2);
+    assert.equal(pens[1].trend, -direction);
+    assert.equal(pens[1].startPoint.price, direction * 120);
+    assert.equal(pens[1].endPoint.price, direction * 116);
+    assert.deepEqual(pens[0].endPoint, pens[1].startPoint);
+  }
+});
+
+test("a new trend endpoint clears all reversal candidates from before that endpoint", () => {
+  const bodies = [[100, 101], [101, 102], [102, 103], [103, 104], [104, 120],
+    [120, 110], [110, 115], [115, 130], [130, 129], [129, 128], [128, 127], [127, 126]];
+  for (const direction of [1, -1]) {
+    const data = bodies.map(([open, close], index) => ({ time: index + 1, open: direction * open, close: direction * close }));
+    assert.equal(generateAutomaticPens(data.slice(0, -1)).length, 1);
+    const pens = generateAutomaticPens(data);
+    assert.equal(pens.length, 2);
+    assert.equal(pens[1].startPoint.index, 7);
+    assert.equal(pens[1].endPoint.index, 11);
+  }
+});
+
+test("an outside candle extends the established trend without seeding a same-candle reversal", () => {
+  const bodies = [[100, 101], [101, 102], [102, 103], [103, 104], [104, 120],
+    [90, 125], [125, 124], [124, 123], [123, 122], [122, 121]];
+  for (const direction of [1, -1]) {
+    const data = bodies.map(([open, close], index) => ({ time: index + 1, open: direction * open, close: direction * close }));
+    const extended = generateAutomaticPens(data.slice(0, 6));
+    assert.equal(extended.length, 1);
+    assert.equal(extended[0].endPoint.index, 5);
+    assert.equal(extended[0].endPoint.price, direction * 125);
+    const pens = generateAutomaticPens(data);
+    assert.equal(pens.length, 2);
+    assert.equal(pens[1].startPoint.index, 5);
+    assert.equal(pens[1].endPoint.index, 9);
+  }
+});
+
+test("confirmed pens on the real H4 fixture do not change as later candles arrive", () => {
+  const full = generateAutomaticPens(xauCandles);
+  for (let size = 1; size <= xauCandles.length; size++) {
+    const partial = generateAutomaticPens(xauCandles.slice(0, size));
+    assert.deepEqual(plain(partial.slice(0, -1)), plain(full.slice(0, Math.max(0, partial.length - 1))));
+    for (const [index, pen] of partial.entries()) {
+      assert.ok(pen.endPoint.index - pen.startPoint.index + 1 >= 5);
+      assert.ok(pen.trend * (pen.endPoint.price - pen.startPoint.price) > 0);
+      if (index > 0) assert.deepEqual(partial[index - 1].endPoint, pen.startPoint);
+    }
+  }
+});
 
 test("tiny moves form a pen on the fifth candle in either direction, without an amplitude threshold", () => {
   for (const direction of [1, -1]) {
@@ -180,4 +261,20 @@ test("drawing reconciles multiple new pens, removes invalidated lines, and stays
   harness.hook.clearAutomaticPens();
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 0);
+});
+
+test("逐 K drawing includes the previously missing XAU/USD downward pen", () => {
+  const initialCount = xauCandles.findIndex((candle) => candle.time === unix("2017-01-05T12:00:00Z")) + 1;
+  const harness = hookHarness(xauCandles.slice(0, initialCount), { from: xauCandles[0].time, to: xauCandles[initialCount - 1].time });
+  harness.hook.drawAutomaticPens();
+  for (let count = initialCount + 1; count <= xauCandles.length; count++) {
+    harness.setData(xauCandles.slice(0, count));
+    harness.hook.updateAutomaticPensAfterCandle();
+  }
+  const drawn = Array.from(harness.drawn, (series) => series.data);
+  assert.ok(drawn.some((points) => points[0].time === unix("2017-01-05T12:00:00Z") && points[1].time === unix("2017-01-06T16:00:00Z")));
+  assert.deepEqual(drawn, plain(generateAutomaticPens(xauCandles).map((pen) => [
+    { time: pen.startPoint.time, value: pen.startPoint.price },
+    { time: pen.endPoint.time, value: pen.endPoint.price },
+  ])));
 });
