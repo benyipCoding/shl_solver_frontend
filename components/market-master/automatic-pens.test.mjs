@@ -66,7 +66,7 @@ test("a reversal inside the endpoint candle body is recognized symmetrically in 
   }
 });
 
-test("a new trend endpoint clears all reversal candidates from before that endpoint", () => {
+test("a new trend endpoint restarts the five-candle reversal span", () => {
   const bodies = [[100, 101], [101, 102], [102, 103], [103, 104], [104, 120],
     [120, 110], [110, 115], [115, 130], [130, 129], [129, 128], [128, 127], [127, 126]];
   for (const direction of [1, -1]) {
@@ -120,7 +120,7 @@ test("tiny moves form a pen on the fifth candle in either direction, without an 
   }
 });
 
-test("a shallow reverse move forms a reverse pen once its extrema span five candles", () => {
+test("a shallow reverse move forms a reverse pen once its endpoints span five candles", () => {
   for (const direction of [1, -1]) {
     const data = candles([
       ...Array.from({ length: 5 }, (_, i) => 100 + direction * i),
@@ -145,7 +145,7 @@ test("body endpoints are independent of wicks, gaps before the input, and candle
   assert.deepEqual(plain(generateAutomaticPens(data.map((candle) => ({ ...candle, high: 10000, low: -10000 })))), plain(pens));
 });
 
-test("restores the legacy new-high-before-new-low order on an outside candle", () => {
+test("preserves the initial up-before-down priority on an outside candle", () => {
   const data = [[100, 102], [101, 103], [102, 104], [103, 105], [99, 106]]
     .map(([open, close], index) => ({ time: index + 1, open, close }));
   const pens = generateAutomaticPens(data);
@@ -176,12 +176,44 @@ test("empty, single-candle and unchanged prices do not form pens", () => {
   }
 });
 
-test("a quick reversal cannot gain an extrema span merely by waiting at the same price", () => {
-  const prices = [100, 101, 102, 103, 104, 102, 100, ...Array(20).fill(100)];
-  assert.equal(generateAutomaticPens(candles(prices)).length, 1);
-  const pens = generateAutomaticPens(candles([...prices, 99]));
-  assert.equal(pens.length, 2);
-  assert.equal(pens[1].endPoint.price, 99);
+test("the first pen forms on candle five without a fresh body extreme", () => {
+  for (const direction of [1, -1]) {
+    for (const last of [102, 103]) {
+      const data = candles([100, 103, 102, 101, last].map((price) => direction * price));
+      assert.equal(generateAutomaticPens(data.slice(0, 4)).length, 0);
+      const [pen] = generateAutomaticPens(data);
+      assert.equal(pen.trend, direction);
+      assert.equal(pen.startPoint.index, 0);
+      assert.equal(pen.endPoint.index, 4);
+      assert.equal(pen.endPoint.price, direction * last);
+    }
+  }
+});
+
+test("reversals form on candle five at an equal or recovered price, without backdating the endpoint", () => {
+  for (const direction of [1, -1]) {
+    for (const last of [100, 102]) {
+      const prices = [100, 101, 102, 103, 104, 102, 100, 101, last];
+      const data = candles(prices.map((price) => direction * price));
+      assert.equal(generateAutomaticPens(data.slice(0, 8)).length, 1);
+      const pens = generateAutomaticPens(data);
+      assert.equal(pens.length, 2);
+      assert.equal(pens[1].trend, -direction);
+      assert.equal(pens[1].startPoint.index, 4);
+      assert.equal(pens[1].endPoint.index, 8);
+      assert.equal(pens[1].endPoint.price, direction * last);
+      const extended = generateAutomaticPens([...data, ...candles([direction * 99], 1, 10)]);
+      assert.equal(extended.length, 2);
+      assert.equal(extended[1].endPoint.price, direction * 99);
+    }
+  }
+});
+
+test("waiting at the current endpoint cannot form a zero-height reverse pen", () => {
+  for (const direction of [1, -1]) {
+    const data = candles([100, 101, 102, 103, 104, ...Array(20).fill(104)].map((price) => direction * price));
+    assert.equal(generateAutomaticPens(data).length, 1);
+  }
 });
 
 test("confirmed pens remain stable as future candles arrive and inputs stay unchanged", () => {

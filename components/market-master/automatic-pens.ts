@@ -28,9 +28,9 @@ export type AutomaticPenCandle = Pick<
 >;
 
 /**
- * Body extrema define endpoints. A new leg needs at least minCandleCount
- * candles between its endpoints, inclusive. Reversal candidates come only
- * from candles AFTER the current endpoint, never its own opposite body edge.
+ * Body prices define endpoints. A new leg needs at least minCandleCount
+ * candles between its endpoints, inclusive, but no fresh price extreme.
+ * Reversals use the current candle AFTER the endpoint, never its own body edge.
  * The final pen remains developing until a qualifying reversal appears.
  */
 export function createAutomaticPenGenerator(
@@ -44,7 +44,6 @@ export function createAutomaticPenGenerator(
   let high: AutomaticPenPoint;
   let low: AutomaticPenPoint;
   let active: AutomaticPen | null = null;
-  let reversalExtreme: AutomaticPenPoint | null = null;
   const pens: AutomaticPen[] = [];
   let totalPens = 0;
   const addPen = (pen: AutomaticPen) => {
@@ -64,21 +63,18 @@ export function createAutomaticPenGenerator(
     }
 
     if (!active) {
-      // Preserve the initial high-before-low discovery order of the legacy rule.
-      if (currentHigh.price > high.price) {
-        high = currentHigh;
-        if (spansEnoughCandles(low, high)) {
-          active = { startPoint: low, endPoint: high, trend: AutomaticPenTrend.Up };
-          addPen(active);
-          return;
-        }
+      // Keep the initial up-before-down priority, but check formation on every
+      // candle, including equal highs/lows and prices inside earlier extrema.
+      if (currentHigh.price > high.price) high = currentHigh;
+      if (currentHigh.price > low.price && spansEnoughCandles(low, currentHigh)) {
+        active = { startPoint: low, endPoint: currentHigh, trend: AutomaticPenTrend.Up };
+        addPen(active);
+        return;
       }
-      if (currentLow.price < low.price) {
-        low = currentLow;
-        if (spansEnoughCandles(high, low)) {
-          active = { startPoint: high, endPoint: low, trend: AutomaticPenTrend.Down };
-          addPen(active);
-        }
+      if (currentLow.price < low.price) low = currentLow;
+      if (currentLow.price < high.price && spansEnoughCandles(high, currentLow)) {
+        active = { startPoint: high, endPoint: currentLow, trend: AutomaticPenTrend.Down };
+        addPen(active);
       }
       return;
     }
@@ -88,19 +84,12 @@ export function createAutomaticPenGenerator(
     if (active.trend * (trendExtreme.price - active.endPoint.price) > 0) {
       active = { ...active, endPoint: trendExtreme };
       pens[pens.length - 1] = active;
-      reversalExtreme = null;
       // A candle extending the trend cannot also seed a reversal from that
       // endpoint: OHLC does not establish the order of moves within the candle.
       return;
     }
 
     const candidate: AutomaticPenPoint = isUp ? currentLow : currentHigh;
-    if (
-      reversalExtreme &&
-      active.trend * (reversalExtreme.price - candidate.price) <= 0
-    ) return;
-    reversalExtreme = candidate;
-
     if (
       active.trend * (active.endPoint.price - candidate.price) > 0 &&
       spansEnoughCandles(active.endPoint, candidate)
@@ -111,7 +100,6 @@ export function createAutomaticPenGenerator(
         trend: isUp ? AutomaticPenTrend.Down : AutomaticPenTrend.Up,
       };
       addPen(active);
-      reversalExtreme = null;
     }
   };
 
