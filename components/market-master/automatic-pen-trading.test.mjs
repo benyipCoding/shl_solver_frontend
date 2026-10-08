@@ -33,36 +33,36 @@ const xauFixture = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201
 const at = (date) => fixture.findIndex((candle) => candle.datetime === date);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-test("GBP/USD uses the earlier five-candle formations for entry and still rejects the invalid structure", () => {
+test("GBP/USD L1 buys when it first forms, L2 sells, and the p5/p6 counterexample does not sell", () => {
   const tracker = trading.createAutomaticPenTradeTracker([]);
   const signals = fixture.flatMap((candle) => {
     const side = tracker.advance(candle);
     return side ? [{ side, date: candle.datetime, price: candle.close }] : [];
   });
-  assert.ok(signals.some((s) => s.side === "Buy" && s.date === "2021-07-28T12:00:00"));
-  assert.ok(signals.some((s) => s.side === "Sell" && s.date === "2021-08-11T20:00:00"));
+  assert.ok(signals.some((s) => s.side === "Buy" && s.date === "2021-08-01T20:00:00"));
+  assert.ok(signals.some((s) => s.side === "Sell" && s.date === "2021-08-12T00:00:00"));
   assert.ok(!signals.some((s) => s.date === "2021-08-02T12:00:00" || s.date === "2021-08-12T04:00:00"));
   assert.ok(!signals.some((s) => s.side === "Sell" && s.date === "2021-08-18T08:00:00"));
   const generated = pens.generateAutomaticPens(fixture);
-  assert.equal(generated[8].endPoint.price, 1.37732); // p1
-  assert.equal(generated[11].endPoint.price, 1.37939); // p2
-  assert.equal(generated[15].endPoint.price, 1.38852); // p3
-  assert.equal(generated[20].endPoint.price, 1.38616); // p4
-  assert.equal(generated[19].endPoint.price, 1.384645); // p5
-  assert.equal(generated[22].endPoint.price, 1.38778); // p6
+  assert.equal(generated[6].endPoint.price, 1.37732); // p1
+  assert.equal(generated[9].endPoint.price, 1.37939); // p2
+  assert.equal(generated[11].endPoint.price, 1.38852); // p3
+  assert.equal(generated[14].endPoint.price, 1.38616); // p4
+  assert.equal(generated[13].endPoint.price, 1.384645); // p5
+  assert.equal(generated[16].endPoint.price, 1.38778); // p6
 });
 
 test("XAU/USD L1 is only the fourth pen after the new high, so old p1/p2 cannot authorize a short", () => {
   const index = xauFixture.findIndex((bar) => bar.datetime === "2011-07-04T00:00:00");
   const generated = pens.generateAutomaticPens(xauFixture.slice(0, index + 1));
-  assert.equal(generated.length, 10);
-  assert.equal(generated[5].endPoint.price, 1556.32); // p0, the new trend origin
-  assert.equal(generated[4].startPoint.price, 1539.505); // invalid old origin
-  assert.equal(generated[4].endPoint.price, 1536.335); // older low
-  assert.equal(generated[7].endPoint.price, 1513.13); // p2
-  assert.equal(generated[6].endPoint.price, 1493.985); // p3
-  assert.ok(generated[7].endPoint.price < generated[4].endPoint.price);
-  assert.ok(generated[9].endPoint.price <= generated[4].endPoint.price);
+  assert.equal(generated.length, 8);
+  assert.equal(generated[3].endPoint.price, 1556.32); // p0, the new trend origin
+  assert.equal(generated[2].startPoint.price, 1530.64); // invalid old origin
+  assert.equal(generated[2].endPoint.price, 1523.955); // p1
+  assert.equal(generated[5].endPoint.price, 1513.13); // p2
+  assert.equal(generated[4].endPoint.price, 1493.985); // p3
+  assert.ok(generated[5].endPoint.price < generated[2].endPoint.price);
+  assert.ok(generated[7].endPoint.price <= generated[2].endPoint.price);
   assert.equal(trading.getAutomaticPenTradeSide(generated), null);
   for (const start of [0, index]) {
     const tracker = trading.createAutomaticPenTradeTracker(xauFixture.slice(0, start));
@@ -155,7 +155,7 @@ test("wait for the third trend pen's final endpoint and the next reversal before
 });
 
 test("uses exactly the two specified pivots, is symmetric, and equality is not a signal", () => {
-  const data = pens.generateAutomaticPens(fixture).slice(0, 14);
+  const data = pens.generateAutomaticPens(fixture).slice(0, 12);
   assert.equal(trading.getAutomaticPenTradeSide(data), "Buy");
   const mirror = data.map((pen) => ({ ...pen, trend: -pen.trend,
     startPoint: { ...pen.startPoint, price: -pen.startPoint.price },
@@ -163,18 +163,18 @@ test("uses exactly the two specified pivots, is symmetric, and equality is not a
   }));
   assert.equal(trading.getAutomaticPenTradeSide(mirror), "Sell");
   const equal = plain(data);
-  equal[11].endPoint.price = equal[8].endPoint.price;
+  equal[9].endPoint.price = equal[6].endPoint.price;
   assert.equal(trading.getAutomaticPenTradeSide(equal), null);
   assert.equal(trading.getAutomaticPenTradeSide(data.slice(0, 5)), null);
 });
 
 test("warmup, repeated bars, extensions and re-enabling never backfill the existing signal", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const tracker = trading.createAutomaticPenTradeTracker(fixture.slice(0, index));
   assert.equal(tracker.advance(fixture[index]), "Buy");
   assert.equal(tracker.advance(fixture[index]), null);
   assert.equal(tracker.advance(fixture[index - 1]), null);
-  for (const candle of fixture.slice(index + 1, at("2021-07-29T00:00:00") + 1)) {
+  for (const candle of fixture.slice(index + 1, at("2021-08-02T12:00:00") + 1)) {
     assert.equal(tracker.advance(candle), null);
   }
   const enabledLater = trading.createAutomaticPenTradeTracker(fixture.slice(0, index + 1));
@@ -183,7 +183,7 @@ test("warmup, repeated bars, extensions and re-enabling never backfill the exist
 });
 
 test("new pullback must respect the older pivot in both directions; touching it is allowed", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const original = pens.generateAutomaticPens(fixture.slice(0, index + 1));
   for (const direction of [1, -1]) {
     const data = original.map((pen) => ({ ...pen, trend: pen.trend * direction,
@@ -202,7 +202,7 @@ test("new pullback must respect the older pivot in both directions; touching it 
 });
 
 test("broken body endpoint skips entry even if the close recovers; wicks alone do not block it", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const p1 = 1.37732;
   const warmup = fixture.slice(0, index);
   const candle = fixture[index];
@@ -215,7 +215,7 @@ test("broken body endpoint skips entry even if the close recovers; wicks alone d
       const tracker = trading.createAutomaticPenTradeTracker(warmup.map(transform));
       const broken = transform({ ...candle, ...body });
       const generated = pens.generateAutomaticPens([...warmup.map(transform), broken]);
-      assert.equal(generated.length, 14); // A new pen did form; only the order is filtered.
+      assert.equal(generated.length, 12); // A new pen did form; only the order is filtered.
       assert.equal(tracker.advance(broken), null);
       assert.equal(tracker.advance(broken), null);
       assert.equal(tracker.advance(transform({ ...candle, time: candle.time + 14400, open: p1 + 0.0001, close: p1 + 0.0002 })), null);
@@ -262,7 +262,7 @@ function hookHarness(initial) {
 }
 
 test("hook gates permissions, clears on market/permission changes, and does not read history on advance", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const h = hookHarness(fixture.slice(0, index));
   h.render({ canTrade: false }); h.hook.toggleAutomaticTrading();
   assert.equal(h.listeners.size, 0);
@@ -282,7 +282,7 @@ test("hook gates permissions, clears on market/permission changes, and does not 
 });
 
 test("data reload/prepend retains the activation boundary and never triggers historical orders", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const h = hookHarness(fixture.slice(0, index));
   h.hook.toggleAutomaticTrading(fixture[0].time);
   h.replace(fixture.slice(0, index + 1));
@@ -293,7 +293,7 @@ test("data reload/prepend retains the activation boundary and never triggers his
 });
 
 test("turning entries off keeps pivot events for protection; re-enabling never backfills", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const h = hookHarness(fixture.slice(0, index));
   h.hook.toggleAutomaticTrading(); h.render();
   h.hook.toggleAutomaticTrading(); h.render();
@@ -344,7 +344,7 @@ function pageHarness(data, index, initialTrades = []) {
     advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null },
     ...risk, priceDecimals: 5,
     automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderUnits: 1234 } },
-    restartingBacktestRef: { current: false }, backtestSampleRef: { current: null },
+    restartingBacktestRef: { current: false }, backtestSampleRef: { current: null }, chartPanGuardRef: { current: null },
     balanceRef: { current: 10000 }, setBalance() {},
     performance, AbortController,
     isAutomaticTradingEnabled: true, automaticAccessRef: { current: true },
@@ -393,7 +393,7 @@ test("page settlement snapshots follow execution order even when same-bar fills 
 });
 
 test("page settles old trades first, enters at the signal close with structural risk, and preserves manual parameters", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const candle = fixture[index];
   const { context, events } = pageHarness(fixture, index, [{ id: "old", type: "Buy", entry: 1.4, units: 10, status: "Open", sl: candle.close, tp: null }]);
   const event = trading.createAutomaticPenTradeTracker(fixture.slice(0, index)).advanceEvent(candle);
@@ -423,8 +423,8 @@ test("page settles old trades first, enters at the signal close with structural 
 
 test("XAU example enters beyond p0, trails beyond p1 only when L2 forms, and persists that bar", () => {
   const data = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201601.json", import.meta.url), "utf8")).candles;
-  const index = data.findIndex((c) => c.datetime === "2016-01-15T08:00:00");
-  const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T16:00:00");
+  const index = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
+  const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T20:00:00");
   const { context, events } = pageHarness(data, index);
   context.automaticTradingConfigRef.current.shortExitEnabled = false;
   context.priceDecimals = 2;
@@ -461,8 +461,8 @@ test("XAU example enters beyond p0, trails beyond p1 only when L2 forms, and per
 
 test("page persists entry without SL, then applies and replays the original trailing stop", () => {
   const data = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201601.json", import.meta.url), "utf8")).candles;
-  const index = data.findIndex((c) => c.datetime === "2016-01-15T08:00:00");
-  const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T16:00:00");
+  const index = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
+  const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T20:00:00");
   const { context, events } = pageHarness(data, index);
   Object.assign(context.automaticTradingConfigRef.current, { initialStopEnabled: false, shortExitEnabled: false });
   context.priceDecimals = 2;
@@ -586,7 +586,7 @@ test("touching the level or piercing it only with a wick does not trigger the fa
 });
 
 test("viewport replacements preserve live signal and ATR state, including activation from a historical window", () => {
-  const index = at("2021-07-28T12:00:00");
+  const index = at("2021-08-01T20:00:00");
   const viewportSyncRef = { current: false };
   const h = hookHarness(fixture.slice(0, 20));
   h.render({ viewportSyncRef, source: () => ({ candles: fixture, count: index }) });
@@ -889,7 +889,7 @@ test("restart is locked while saving, retains results on save failure, and ignor
 
 test("batch and manual stepping produce identical trades, balances and ordered persistence on paged history", async () => {
   const data = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201601.json", import.meta.url), "utf8")).candles;
-  const initial = data.findIndex((c) => c.datetime === "2016-01-15T08:00:00");
+  const initial = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
   const manual = pageHarness(data, initial);
   const batch = pageHarness(data.slice(0, initial + 10), initial);
   const setups = [manual, batch];

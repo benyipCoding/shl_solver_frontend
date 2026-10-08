@@ -57,6 +57,7 @@ import { AutomaticTradingRunDialog, type AutomaticRunView } from "./AutomaticTra
 import { runAutomaticTradingBatch } from "./automatic-trading-runner";
 import { createAutomaticTradeBook } from "./automatic-trade-book";
 import { CHART_WINDOW_BARS, CHART_WINDOW_EDGE, exactCandleIndex, selectChartWindow, sliceChartWindow, type ChartWindow } from "./chart-window";
+import { bindChartPanGuard } from "./chart-pan-guard";
 import { AUTOMATIC_PEN_FAILURE_REASON, AUTOMATIC_PEN_SHORT_EXIT_REASON, automaticPenShortExitUnits, planAutomaticPenOrder, resolveAutomaticPenExit, shouldExitAutomaticPenOnFailedBreakout, trailAutomaticPenStops } from "./automatic-pen-risk";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import { usePenMomentum } from "@/hooks/usePenMomentum";
@@ -619,6 +620,8 @@ export function MarketMasterPage() {
   const indicatorOffsetRef = useRef(0);
   const chartViewportSyncRef = useRef(false);
   const shiftChartWindowRef = useRef<(range: { from: number; to: number }) => void>(() => {});
+  const chartPanGuardRef = useRef<ReturnType<typeof bindChartPanGuard> | null>(null);
+  const resumeChartViewportRef = useRef<() => void>(() => {});
   const fullEmaDataRef = useRef<any>({});
   const fullBollingerDataRef = useRef<any[]>([]);
   const fullMacdDataRef = useRef<any[]>([]);
@@ -645,6 +648,17 @@ export function MarketMasterPage() {
   const preserveVisibleRangeRef = useRef(false);
   const loadOlderHistoryRef = useRef<() => Promise<void>>(async () => {});
   const loadFutureHistoryRef = useRef<() => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    if (!isMounted) return;
+    const guard = bindChartPanGuard(
+      (target) => target instanceof Node && [chartContainerRef.current, subChartContainerRef.current, volumeChartContainerRef.current]
+        .some((container) => container?.contains(target)),
+      () => resumeChartViewportRef.current(),
+    );
+    chartPanGuardRef.current = guard;
+    return () => { guard.dispose(); chartPanGuardRef.current = null; };
+  }, [isMounted]);
 
   useEffect(() => {
     loadedOffsetRef.current = loadedOffset;
@@ -1507,7 +1521,7 @@ export function MarketMasterPage() {
   );
 
   shiftChartWindowRef.current = (range) => {
-    if (restartingBacktestRef.current || preserveVisibleRangeRef.current || chartViewportSyncRef.current || automaticRunRef.current || isDataLoadingRef.current) return;
+    if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || preserveVisibleRangeRef.current || chartViewportSyncRef.current || automaticRunRef.current || isDataLoadingRef.current) return;
     const window = chartWindowRef.current;
     const count = isBacktestModeRef.current ? currentIndexRef.current : fullDataRef.current.length;
     if (!((range.from < CHART_WINDOW_EDGE && window.from > 0) ||
@@ -1520,8 +1534,15 @@ export function MarketMasterPage() {
     preserveVisibleRangeRef.current = true;
     requestAnimationFrame(() => {
       try {
-        if (restartingBacktestRef.current || session !== dataSessionRef.current || chart !== chartRef.current || chartWindowRef.current !== window || automaticRunRef.current) return;
-        syncDisplayedData(fullDataRef.current, currentIndexRef.current, isBacktestModeRef.current, false, { focusRange });
+        if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || session !== dataSessionRef.current || chart !== chartRef.current || chartWindowRef.current !== window || automaticRunRef.current) return;
+        // Range restoration is applied by the library on its next render. An
+        // earlier callback may describe a temporary range or an older wheel move.
+        const latest = chart?.timeScale().getVisibleLogicalRange();
+        if (!latest) return;
+        if (!((latest.from < CHART_WINDOW_EDGE && window.from > 0) ||
+          (latest.to > window.to - window.from - CHART_WINDOW_EDGE && window.to < count))) return;
+        const latestFocus = { from: window.from + latest.from, to: window.from + latest.to };
+        syncDisplayedData(fullDataRef.current, currentIndexRef.current, isBacktestModeRef.current, false, { focusRange: latestFocus });
         updateAutomaticSegmentsAfterCandle();
       } finally { preserveVisibleRangeRef.current = false; }
     });
@@ -1698,7 +1719,7 @@ export function MarketMasterPage() {
   };
 
   const loadOlderHistory = useCallback(async () => {
-    if (restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
+    if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
     const offset = loadedOffsetRef.current;
     if (offset <= 0) return;
     const oldestTime = fullDataRef.current[0]?.time;
@@ -1713,6 +1734,7 @@ export function MarketMasterPage() {
         outputsize: KLINE_PAGE_SIZE,
         endDate: new Date(oldestTime * 1000).toISOString(),
       });
+      await chartPanGuardRef.current?.whenIdle();
       if (session !== dataSessionRef.current) return;
       const olderData = normalizeCandles(page.rawCandles);
       if (!olderData.length) {
@@ -1777,6 +1799,7 @@ export function MarketMasterPage() {
         outputsize: KLINE_PAGE_SIZE,
         afterDate: new Date(newestTime * 1000).toISOString(),
       });
+      await chartPanGuardRef.current?.whenIdle();
       if (session !== dataSessionRef.current) return;
       const newerData = normalizeCandles(page.rawCandles);
       if (!newerData.length) return;
@@ -2672,6 +2695,8 @@ export function MarketMasterPage() {
         horzLines: { color: "#1f2937" },
       },
       crosshair: { mode: 0 },
+      // Inertia also retains the old logical origin after a pointer is released.
+      kineticScroll: { mouse: false, touch: false },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
       timeScale: {
@@ -3327,7 +3352,7 @@ export function MarketMasterPage() {
     chart.subscribeClick(clickHandler);
 
     const handleVisibleLogicalRangeChange = (range) => {
-      if (!range || preserveVisibleRangeRef.current || chartViewportSyncRef.current) return;
+      if (!range || chartPanGuardRef.current?.isActive() || preserveVisibleRangeRef.current || chartViewportSyncRef.current) return;
       if (isDataLoadingRef.current) return;
       shiftChartWindowRef.current(range);
       if (chartWindowRef.current.from > 0 || preserveVisibleRangeRef.current) return;
@@ -3336,6 +3361,7 @@ export function MarketMasterPage() {
       if (loadedCount > 0 && range.to - range.from >= loadedCount - 2) return;
       void loadOlderHistoryRef.current();
     };
+    resumeChartViewportRef.current = () => handleVisibleLogicalRangeChange(chart.timeScale().getVisibleLogicalRange());
     chart
       .timeScale()
       .subscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
@@ -3351,6 +3377,7 @@ export function MarketMasterPage() {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      resumeChartViewportRef.current = () => {};
       window.removeEventListener("resize", handleResize);
       if (ro) ro.disconnect();
       chart.unsubscribeCrosshairMove(crosshairMoveHandler);
@@ -3443,6 +3470,7 @@ export function MarketMasterPage() {
         horzLines: { color: "#1f2937" },
       },
       crosshair: { mode: 0 },
+      kineticScroll: { mouse: false, touch: false },
       width: subChartContainerRef.current.clientWidth,
       height: subChartContainerRef.current.clientHeight,
       timeScale: {
@@ -3575,13 +3603,13 @@ export function MarketMasterPage() {
         subTimeScale.setVisibleLogicalRange(initialRange);
       }
       const syncToSub = (logicalRange) => {
-        if (!logicalRange || isSyncingMain) return;
+        if (!logicalRange || isSyncingMain || chartViewportSyncRef.current) return;
         isSyncingSub = true;
         subTimeScale.setVisibleLogicalRange(logicalRange);
         isSyncingSub = false;
       };
       const syncToMain = (logicalRange) => {
-        if (!logicalRange || isSyncingSub) return;
+        if (!logicalRange || isSyncingSub || chartViewportSyncRef.current) return;
         isSyncingMain = true;
         mainTimeScale.setVisibleLogicalRange(logicalRange);
         isSyncingMain = false;
@@ -3652,6 +3680,7 @@ export function MarketMasterPage() {
         horzLines: { color: "#1f2937" },
       },
       crosshair: { mode: 0 },
+      kineticScroll: { mouse: false, touch: false },
       width: container.clientWidth,
       height: container.clientHeight,
       timeScale: {
@@ -3705,7 +3734,7 @@ export function MarketMasterPage() {
     if (initialRange) volumeTimeScale.setVisibleLogicalRange(initialRange);
     let isSyncingRange = false;
     const syncRange = (target, range) => {
-      if (!range || isSyncingRange) return;
+      if (!range || isSyncingRange || chartViewportSyncRef.current) return;
       isSyncingRange = true;
       try {
         target.setVisibleLogicalRange(range);
