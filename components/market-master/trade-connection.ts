@@ -8,7 +8,7 @@ import type {
 } from "lightweight-charts";
 import type { TradePosition } from "./trade-management";
 
-/** A hover-only overlay: no extra time-scale points, price range or hit targets. */
+/** Hover/selected-trade overlay: no extra time-scale points, price range or hit targets. */
 export class TradeConnectionPrimitive implements ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<"Candlestick"> | null = null;

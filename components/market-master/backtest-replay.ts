@@ -81,6 +81,10 @@ export const fromPersistSide = (side?: string | null) =>
 
 export const fromPersistCloseReason = (reason?: string | null) => {
   switch (reason) {
+    case "PEN_SHORT_EXIT":
+      return "分笔短线减仓";
+    case "PEN_BREAKOUT_FAILED":
+      return "分笔突破失效";
     case "SL_HIT":
       return "SL Hit";
     case "TP_HIT":

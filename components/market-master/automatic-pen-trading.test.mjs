@@ -20,8 +20,12 @@ function loadModule(relativePath, dependencies = {}) {
 const pens = loadModule("./automatic-pens.ts");
 const trading = loadModule("./automatic-pen-trading.ts", { "./automatic-pens": pens });
 const management = loadModule("./trade-management.ts");
+const marketData = loadModule("./market-data.ts");
 const replay = loadModule("./backtest-replay.ts", { "./trade-management": management });
-const risk = loadModule("./automatic-pen-risk.ts", { "./automatic-pens": pens, "./trade-management": management });
+const persistence = loadModule("./backtest-persistence.ts");
+const configModule = loadModule("./automatic-trading-config.ts");
+const runner = loadModule("./automatic-trading-runner.ts");
+const risk = loadModule("./automatic-pen-risk.ts", { "./automatic-trading-config": configModule, "./automatic-pens": pens, "./trade-management": management });
 const fixture = JSON.parse(fs.readFileSync(new URL("./fixtures/gbp-usd-h4-202107.json", import.meta.url), "utf8")).candles;
 const xauFixture = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201106.json", import.meta.url), "utf8")).candles;
 const at = (date) => fixture.findIndex((candle) => candle.datetime === date);
@@ -335,22 +339,30 @@ function pageHarness(data, index, initialTrades = []) {
     fullMacdDataRef: { current: [] }, subChartRef: { current: null },
     advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null },
     ...risk, priceDecimals: 5,
-    setCurrentIndex() {}, setIsPlaying() {}, closeTradeRecord: management.closeTradeRecord,
+    automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderUnits: 1234 } },
+    balanceRef: { current: 10000 }, setBalance() {},
+    performance, AbortController,
+    isAutomaticTradingEnabled: true, automaticAccessRef: { current: true },
+    historyLoadingRef: { current: false }, dataSessionRef: { current: 1 },
+    setAutomaticRun() {}, setTrades() {}, recomputeIndicators() {}, syncDisplayedData() {},
+    runAutomaticTradingBatch: (options) => runner.runAutomaticTradingBatch({ ...options, now: () => performance.now(), yieldToBrowser: async () => {} }),
+    setCurrentIndex() {}, setIsPlaying() {}, closeTradeRecord: management.closeTradeRecord, closeTradeUnits: management.closeTradeUnits,
     isBacktestMode: true, currentPrice: data[index - 1]?.close,
     orderUnits: 1234, slEnabled: true, slDistance: 0.0001, tpEnabled: true, tpDistance: 0.0002,
     crypto: { randomUUID: () => `automatic-order-${++nextId}` },
     tradesRef: { current: initialTrades },
     syncTradeMarkers() {}, getActiveCandle: (data, count) => data[count - 1],
     pendingSessionStartRef: { current: { marker: "pending" } },
-    persistRef: { current: { startSession: () => events.push("session"), recordOpen: (order) => events.push(plain(order)), recordModify: (order) => events.push(plain(order)) } },
+    persistRef: { current: { beginBatch() {}, endBatch: async () => {}, startSession: () => events.push("session"), recordOpen: (order) => events.push(plain(order)), recordModify: (order) => events.push(plain(order)), recordClose: (order) => events.push(plain(order)) } },
     toPersistSide: (side) => side === "Buy" ? "buy" : "sell",
     toast: { error: (message) => assert.fail(message) },
   };
   context.commitTrades = (next) => { context.tradesRef.current = next; };
   context.settleClosedTrades = (next) => { events.push("settle"); context.tradesRef.current = next; };
   vm.createContext(context);
-  vm.runInContext(transpile(`globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")};`), context);
+  vm.runInContext(transpile(`globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
   context.placeOrderRef.current = context.placeOrder;
+  context.handleNextCandle = context.step;
   return { context, events };
 }
 
@@ -388,6 +400,7 @@ test("XAU example enters beyond p0, trails beyond p1 only when L2 forms, and per
   const index = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
   const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T20:00:00");
   const { context, events } = pageHarness(data, index);
+  context.automaticTradingConfigRef.current.shortExitEnabled = false;
   context.priceDecimals = 2;
   context.step();
   const initial = context.tradesRef.current[0];
@@ -454,6 +467,187 @@ test("a stop tightened at candle close cannot retroactively close on that candle
   assert.equal(context.tradesRef.current[0].closePrice, 109.6);
 });
 
+function breakoutFailureCandles(direction = 1, endpoint = 125, wickOnly = false) {
+  const bars = pivotCandles([100, 130, 110, 150, 135, 160, 140]);
+  for (const price of [endpoint, 133, 137, 141, 145]) bars.push({ time: bars.length + 1, open: price, close: price });
+  return bars.map((c, i) => {
+    const low = wickOnly && i === 25 ? 125 : c.close;
+    return direction === 1 ? { ...c, high: c.close, low } : { ...c, open: 300 - c.open, close: 300 - c.close, high: 300 - low, low: 300 - c.close };
+  });
+}
+
+test("a failed sixth-pen breakout exits at the seventh pen's formation close, even after recovery, on both sides", () => {
+  for (const direction of [1, -1]) {
+    const data = breakoutFailureCandles(direction);
+    const { context, events } = pageHarness(data, 24);
+    context.step();
+    const initial = context.tradesRef.current[0];
+    assert.equal(initial.type, direction === 1 ? "Buy" : "Sell");
+    assert.equal(initial.automaticPen.breakoutPrice, direction === 1 ? 130 : 170);
+    assert.equal(initial.automaticPen.entryPenStartTime, 21);
+    // Partial close bookkeeping keeps the setup with the remaining position.
+    context.tradesRef.current[0] = { ...initial, units: 20 };
+    context.settleClosedTrades = context.settleReal;
+    while (context.currentIndexRef.current < 29) {
+      context.step();
+      assert.equal(context.tradesRef.current[0].status, "Open");
+      assert.equal(context.tradesRef.current[0].sl, initial.sl);
+    }
+    context.step();
+    const closed = context.tradesRef.current[0];
+    assert.equal(closed.status, "Closed");
+    assert.equal(closed.reason, "分笔突破失效");
+    assert.equal(closed.closePrice, data[29].close);
+    assert.equal(closed.closeTime, data[29].time);
+    assert.equal(closed.units, 20);
+    assert.equal(closed.pnl, 100);
+    assert.equal(context.balanceRef.current, 10100);
+    const record = events.find((e) => e.close_reason);
+    assert.equal(record.bar_index, 5029);
+    assert.equal(record.bar_time, data[29].time);
+    assert.equal(record.units, 20);
+    assert.equal(record.price, data[29].close);
+    assert.equal(events.filter((e) => e.kind === "sl").length, 0); // exit before trailing
+    const persistedReason = persistence.toPersistCloseReason(record.close_reason);
+    assert.equal(persistedReason, "PEN_BREAKOUT_FAILED");
+    const restored = replay.applyReplayTradeEvents([{ ...initial, units: 20 }], [{ ...record, sequence_no: 1, event_type: "CLOSE", close_reason: persistedReason }]);
+    assert.equal(restored.trades[0].reason, closed.reason);
+    assert.equal(restored.balanceChange, closed.pnl);
+    context.step(); // no duplicate settlement at the end of the data
+    assert.equal(events.filter((e) => e.close_reason).length, 1);
+  }
+});
+
+test("touching the level or piercing it only with a wick does not trigger the failure exit", () => {
+  for (const direction of [1, -1]) {
+    for (const [endpoint, wickOnly] of [[130, false], [130, true], [132, false]]) {
+      const data = breakoutFailureCandles(direction, endpoint, wickOnly);
+      const { context } = pageHarness(data, 24);
+      while (context.currentIndexRef.current < data.length) context.step();
+      assert.equal(context.tradesRef.current[0].status, "Open");
+    }
+  }
+});
+
+test("both sides reduce half only at their seventh pen, persist and replay the fill, then manage the remainder", () => {
+  for (const direction of [1, -1]) {
+    const data = breakoutFailureCandles(direction, 130);
+    // Continue the seventh pen, then confirm an eighth and ninth without hitting the stop.
+    for (const price of [150, 155, 160, 165, 161, 157, 153, 149, 153, 157, 161, 165]) {
+      const value = direction === 1 ? price : 300 - price;
+      data.push({ time: data.length + 1, open: value, close: value, high: value, low: value });
+    }
+    const { context, events } = pageHarness(data, 24);
+    context.settleClosedTrades = context.settleReal;
+    context.step();
+    const initial = context.tradesRef.current[0];
+    assert.equal(initial.automaticPen.shortExitPercent, 50);
+    // Changes to global settings and disabling new entries do not change this order's exits.
+    context.automaticTradingConfigRef.current.shortExitEnabled = false;
+    context.automaticTradingConfigRef.current.shortExitPercent = 25;
+    const advance = context.advanceAutomaticTrading;
+    context.advanceAutomaticTrading = (bar) => { const event = advance(bar); return event && { ...event, side: null }; };
+    while (context.currentIndexRef.current < 29) context.step();
+    assert.equal(events.filter((e) => e.close_reason).length, 0);
+    context.step();
+    const remaining = context.tradesRef.current.find((t) => t.status === "Open");
+    const fill = context.tradesRef.current.find((t) => t.status === "Closed");
+    assert.equal(remaining.id, initial.id);
+    assert.equal(remaining.units, 617);
+    assert.equal(remaining.tp, initial.tp);
+    assert.equal(remaining.automaticPen.shortExitDone, true);
+    assert.ok(direction * (remaining.sl - initial.sl) > 0);
+    assert.equal(fill.reason, "分笔短线减仓");
+    assert.equal(fill.units, 617);
+    assert.equal(fill.closePrice, data[29].close);
+    assert.equal(fill.closeTime, data[29].time);
+    assert.equal(fill.parentTradeId, initial.id);
+    assert.equal(fill.pnl, 3085);
+    assert.equal(context.balanceRef.current, 13085);
+    const record = events.find((e) => e.close_reason);
+    assert.equal(record.client_trade_id, initial.id);
+    assert.equal(record.client_event_id, `close:${fill.id}`);
+    assert.equal(record.bar_index, 5029);
+    assert.equal(record.units, 617);
+    const saved = events.filter((e) => e.client_trade_id).map((e, i) => ({ ...e, sequence_no: i + 1,
+      event_type: e.close_reason ? "CLOSE" : e.kind === "sl" ? "MODIFY_SL" : "OPEN",
+      side: e.side?.toUpperCase(), close_reason: persistence.toPersistCloseReason(e.close_reason),
+    }));
+    assert.equal(saved.find((e) => e.event_type === "CLOSE").close_reason, "PEN_SHORT_EXIT");
+    const restored = replay.applyReplayTradeEvents([], saved);
+    assert.equal(restored.balanceChange, 3085);
+    assert.equal(restored.trades.find((t) => t.status === "Open").units, 617);
+    assert.equal(restored.trades.find((t) => t.status === "Open").sl, remaining.sl);
+    assert.equal(restored.trades.find((t) => t.status === "Closed").reason, fill.reason);
+    while (context.currentIndexRef.current < data.length) context.step();
+    assert.equal(events.filter((e) => e.close_reason).length, 1);
+    // The rest can still exit at its newly tightened stop, with no duplicate units or P&L.
+    const survivor = context.tradesRef.current.find((t) => t.status === "Open");
+    data.push({ time: data.length + 1, open: survivor.sl, close: survivor.sl, high: survivor.sl, low: survivor.sl });
+    context.step();
+    assert.equal(context.tradesRef.current.filter((t) => t.status === "Open").length, 0);
+    assert.equal(context.tradesRef.current.reduce((sum, t) => sum + t.units, 0), initial.units);
+    const last = events.filter((e) => e.close_reason).at(-1);
+    assert.equal(last.close_reason, "SL Hit");
+    assert.equal(last.units, 617);
+    assert.equal(context.balanceRef.current, 10000 + context.tradesRef.current.reduce((sum, t) => sum + t.pnl, 0));
+  }
+});
+
+test("short exit settings handle disabled, custom, full, odd and manually reduced quantities", () => {
+  for (const [enabled, percent, units, reducedUnits, expected] of [
+    [false, 50, 100, null, 0], [true, 25, 100, null, 25], [true, 100, 100, null, 100],
+    [true, 50, 101, null, 50], [true, 50, 1, null, 0], [true, 50, 100, 30, 15],
+  ]) {
+    const data = breakoutFailureCandles(1, 130);
+    const { context, events } = pageHarness(data, 24);
+    context.settleClosedTrades = context.settleReal;
+    Object.assign(context.automaticTradingConfigRef.current, { shortExitEnabled: enabled, shortExitPercent: percent, firstOrderUnits: units });
+    context.step();
+    if (reducedUnits !== null) context.tradesRef.current[0] = { ...context.tradesRef.current[0], units: reducedUnits };
+    while (context.currentIndexRef.current < data.length) context.step();
+    const fills = events.filter((e) => e.close_reason);
+    assert.equal(fills.length, expected ? 1 : 0);
+    if (expected) assert.equal(fills[0].units, expected);
+    const remaining = context.tradesRef.current.find((t) => t.status === "Open");
+    assert.equal(remaining?.units ?? 0, (reducedUnits ?? units) - expected);
+    if (!enabled) assert.equal(remaining.automaticPen.shortExitPercent, 0);
+  }
+});
+
+test("SL/TP on the seventh formation candle take precedence over short exits", () => {
+  for (const kind of ["SL", "TP"]) {
+    const data = breakoutFailureCandles(1, 130);
+    const { context, events } = pageHarness(data, 24);
+    context.settleClosedTrades = context.settleReal;
+    while (context.currentIndexRef.current < 29) context.step();
+    const trade = context.tradesRef.current[0];
+    data[29] = { ...data[29], low: kind === "SL" ? trade.sl : 145, high: kind === "TP" ? trade.tp : 145 };
+    context.step();
+    assert.equal(context.tradesRef.current[0].reason, `${kind} Hit`);
+    assert.equal(context.tradesRef.current[0].units, 1234);
+    assert.equal(events.filter((e) => e.close_reason).length, 1);
+  }
+});
+
+test("the failure exit remains enabled when new entries are off, and SL/TP always settle first", () => {
+  for (const mode of ["entries-off", "SL", "TP"]) {
+    const data = breakoutFailureCandles();
+    const { context, events } = pageHarness(data, 24);
+    context.step();
+    if (mode === "entries-off") {
+      const advance = context.advanceAutomaticTrading;
+      context.advanceAutomaticTrading = (c) => { const event = advance(c); return event && { ...event, side: null }; };
+    } else {
+      context.tradesRef.current[0] = { ...context.tradesRef.current[0], ...(mode === "SL" ? { sl: 138 } : { tp: 142 }) };
+    }
+    context.settleClosedTrades = context.settleReal;
+    while (context.currentIndexRef.current < data.length) context.step();
+    assert.equal(context.tradesRef.current[0].reason, mode === "entries-off" ? "分笔突破失效" : `${mode} Hit`);
+    assert.equal(events.filter((e) => e.close_reason).length, 1);
+  }
+});
+
 test("auto-trading switch is visible only to superusers in interactive backtest", () => {
   let user = { is_superuser: true };
   const Empty = () => null;
@@ -467,10 +661,126 @@ test("auto-trading switch is visible only to superusers in interactive backtest"
   });
   const props = { isBacktestMode: true, totalCandles: 10000, currentIndex: 200, timeframeOptions: [], balance: 10000, totalFloatingPnl: 0 };
   const html = (extra = {}) => renderToStaticMarkup(React.createElement(TopBar, { ...props, ...extra }));
-  assert.match(html(), /role="switch" aria-checked="false"/);
-  assert.match(html({ isAutomaticTradingEnabled: true }), /aria-checked="true"/);
+  assert.match(html(), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="false"/);
+  assert.match(html({ isAutomaticTradingEnabled: true }), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="true"/);
   assert.doesNotMatch(html({ isReplayMode: true }), /自动做单/);
   assert.doesNotMatch(html({ isBacktestMode: false }), /自动做单/);
   user = { is_superuser: false };
   assert.doesNotMatch(html(), /自动做单/);
+});
+
+test("batch and manual stepping produce identical trades, balances and ordered persistence on paged history", async () => {
+  const data = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201601.json", import.meta.url), "utf8")).candles;
+  const initial = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
+  const manual = pageHarness(data, initial);
+  const batch = pageHarness(data.slice(0, initial + 10), initial);
+  const setups = [manual, batch];
+  for (const { context } of setups) {
+    context.priceDecimals = 2;
+    context.settleClosedTrades = context.settleReal;
+    context.automaticTradingConfigRef.current = { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderMode: "amount", firstOrderRiskAmount: 200 };
+  }
+  while (manual.context.currentIndexRef.current < data.length) manual.context.step();
+  let chartUpdates = 0, renders = 0, loads = 0;
+  batch.context.seriesRef.current.update = () => { chartUpdates++; };
+  batch.context.setCurrentIndex = () => { renders++; };
+  batch.context.automaticRunRef.current = { suppress: true, cancelled: false };
+  await runner.runAutomaticTradingBatch({ limit: Infinity, cursor: () => batch.context.currentIndexRef.current,
+    available: () => batch.context.fullDataRef.current.length, total: () => data.length, advance: batch.context.step,
+    loadMore: async () => { loads++; batch.context.fullDataRef.current = data.slice(0, Math.min(data.length, batch.context.fullDataRef.current.length + 15)); },
+    cancelled: () => false, progress() {}, now: () => 0, yieldToBrowser: async () => {},
+  });
+  assert.ok(loads > 0);
+  assert.equal(chartUpdates, 0);
+  assert.equal(renders, 0);
+  assert.deepEqual(plain(batch.context.tradesRef.current), plain(manual.context.tradesRef.current));
+  assert.equal(batch.context.balanceRef.current, manual.context.balanceRef.current);
+  assert.deepEqual(batch.events, manual.events);
+});
+
+test("actual page batch handler computes 1000 steps, flushes charts once, reports results and releases the running lock", async () => {
+  const data = Array.from({ length: 1200 }, (_, i) => ({ ...fixture[i % fixture.length], time: fixture[i % fixture.length].time + Math.floor(i / fixture.length) * 10000000 }));
+  const { context } = pageHarness(data, 1);
+  context.totalCandlesRef.current = 5000 + data.length;
+  context.commitTrades = context.commitReal;
+  context.settleClosedTrades = context.settleReal;
+  let chartUpdates = 0, fullRefreshes = 0, tradeRenders = 0;
+  const progress = [];
+  context.seriesRef.current.update = () => { chartUpdates++; };
+  context.syncDisplayedData = (rows, cursor, backtest) => { fullRefreshes++; assert.equal(cursor, 1001); assert.equal(backtest, true); };
+  context.setTrades = () => { tradeRenders++; };
+  context.setAutomaticRun = (next) => progress.push(next);
+  await context.runBulk(1000);
+  assert.equal(context.currentIndexRef.current, 1001);
+  assert.equal(chartUpdates, 0);
+  assert.equal(fullRefreshes, 1);
+  assert.equal(tradeRenders, 1);
+  assert.equal(progress.at(-1).status, "done");
+  assert.equal(progress.at(-1).processed, 1000);
+  assert.ok(progress.at(-1).result.closed > 0);
+  assert.equal(context.automaticRunRef.current, null);
+});
+
+function connectPageHistory(context) {
+  const totals = [];
+  Object.assign(context, {
+    ...marketData, toUnixSeconds: replay.toUnixSeconds,
+    earliestUnixRef: { current: null }, latestUnixRef: { current: null },
+    replayNeedsMoreFutureRef: { current: false },
+    setTotalCandles: (total) => totals.push(total), setLoadedOffset() {},
+    setIsHistoryLoading() {}, setHistoryLoadKind() {},
+  });
+  vm.runInContext(transpile(`globalThis.applyCandlePage = ${pageHandler("applyCandlePage")}; globalThis.loadFutureHistory = ${pageHandler("loadFutureHistory")};`), context);
+  context.loadFutureHistoryRef = { current: context.loadFutureHistory };
+  return totals;
+}
+
+test("merged history counts from the loaded window origin, not the newly fetched page offset", () => {
+  const bars = Array.from({ length: 28086 }, (_, i) => ({ time: i + 1, open: 100, close: 100, high: 100, low: 100 }));
+  const { context } = pageHarness(bars.slice(5000, 24999), 100);
+  context.loadedOffsetRef.current = 5000;
+  const totals = connectPageHistory(context);
+  context.applyCandlePage({ total: 28086, offset: 24999 }, bars.slice(5000), { skipDisplaySync: true });
+  // Previously 24999 + 23086 = 48085: the user's 28086 / 48085 mismatch.
+  assert.equal(context.totalCandlesRef.current, 28086);
+  assert.deepEqual(totals, [28086]);
+  assert.equal(context.loadedOffsetRef.current, 5000);
+  assert.equal(context.currentIndexRef.current, 100);
+});
+
+test("actual play-to-end loads every future page and ends at 48085 / 48085", async () => {
+  const total = 48085, offset = 5000, start = 86;
+  const bars = Array.from({ length: total }, (_, i) => ({
+    time: 1600000000 + i * 14400, datetime: new Date((1600000000 + i * 14400) * 1000).toISOString(),
+    open: 100, close: 100, high: 100, low: 100,
+  }));
+  const { context } = pageHarness(bars.slice(offset, offset + 5000), start);
+  context.loadedOffsetRef.current = offset;
+  context.totalCandlesRef.current = total;
+  const totals = connectPageHistory(context), loads = [], seen = [], reports = [];
+  context.fetchSymbolPage = async ({ afterDate, outputsize }) => {
+    const lastTime = Date.parse(afterDate) / 1000;
+    const pageOffset = bars.findIndex((bar) => bar.time === lastTime); // inclusive boundary overlaps one bar
+    assert.ok(pageOffset >= 0);
+    loads.push(pageOffset);
+    return { total, offset: pageOffset, rawCandles: bars.slice(pageOffset, pageOffset + outputsize) };
+  };
+  const step = context.handleNextCandle;
+  context.handleNextCandle = () => {
+    seen.push(context.loadedOffsetRef.current + context.currentIndexRef.current);
+    step();
+  };
+  context.setAutomaticRun = (value) => reports.push(value);
+  let displayedIndex;
+  context.setCurrentIndex = (index) => { displayedIndex = offset + index; };
+  await context.runBulk(Infinity);
+  assert.ok(loads.length > 1);
+  assert.ok(totals.every((value) => value === total));
+  assert.equal(displayedIndex, total);
+  assert.equal(context.loadedOffsetRef.current + context.currentIndexRef.current, total);
+  assert.deepEqual(seen, Array.from({ length: total - offset - start }, (_, i) => offset + start + i));
+  assert.equal(reports.at(-1).status, "done");
+  assert.equal(reports.at(-1).processed, total - offset - start);
+  assert.equal(reports.at(-1).processed, reports.at(-1).target);
+  assert.equal(context.automaticRunRef.current, null);
 });

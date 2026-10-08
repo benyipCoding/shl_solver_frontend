@@ -9,8 +9,10 @@ import {
 export type AutomaticTradingCandle = AutomaticPenCandle & { high?: number; low?: number };
 export type AutomaticPenEvent = {
   pen: AutomaticPen;
+  previousPen: AutomaticPen | null;
   side: "Buy" | "Sell" | null;
   trendOrigin: AutomaticPenPoint | null;
+  breakoutPoint: AutomaticPenPoint | null;
   atr: number | null;
 };
 
@@ -70,8 +72,10 @@ export function createAutomaticPenTradeTracker(candles: readonly AutomaticTradin
     const index = generator.pens.length - 1;
     return {
       pen: generator.pens[index],
+      previousPen: index > 0 ? generator.pens[index - 1] : null,
       side: getAutomaticPenTradeSide(generator.pens),
       trendOrigin: index >= 5 ? generator.pens[index - 5].startPoint : null,
+      breakoutPoint: index >= 5 ? generator.pens[index - 5].endPoint : null,
       atr,
     };
   };

@@ -1,14 +1,30 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import type { TradePosition } from "./trade-management";
 import { automaticLockedProfit } from "./automatic-pen-risk";
+import { DEFAULT_TRADE_HISTORY_FILTERS, filterTradeHistory, tradeHistoryPnl, type TradeHistoryFilters } from "./trade-history";
 import {
   ChevronDown,
   ChevronUp,
-  Activity,
-  Bot,
   Eye,
   EyeOff,
 } from "lucide-react";
+
+type TradeHistoryProps = {
+  isBottomPanelOpen: boolean;
+  setIsBottomPanelOpen: (open: boolean) => void;
+  trades: TradePosition[];
+  currentPrice: number;
+  priceDecimals: number;
+  toggleTradeVisibility: (tradeId: unknown) => void;
+  handleCloseMarket: (tradeId: unknown) => void;
+  onManageTrade?: (tradeId: unknown) => void;
+  onLocateTrade?: (tradeId: unknown) => void;
+  focusedTradeId?: string | number | null;
+  handleAIReview?: (trade?: unknown) => void;
+  isMaximized: boolean;
+  panelHeight: number;
+  isReplayMode?: boolean;
+};
 
 function AutomaticTradeBadge({ trade }: { trade: TradePosition }) {
   if (!trade.automaticPen) return null;
@@ -30,29 +46,45 @@ export const TradeHistory = ({
   toggleTradeVisibility,
   handleCloseMarket,
   onManageTrade,
-  handleAIReview,
+  onLocateTrade,
+  focusedTradeId = null,
   isMaximized,
   panelHeight,
   isReplayMode = false,
-}: any) => {
+}: TradeHistoryProps) => {
+  const [filters, setFilters] = useState<TradeHistoryFilters>({ ...DEFAULT_TRADE_HISTORY_FILTERS });
+  const filteredTrades = useMemo(() => filterTradeHistory(trades, filters, currentPrice), [trades, filters, currentPrice]);
+  const hasFilters = Object.values(filters).some((value) => value !== "all");
+  const filterSelect = (key: keyof TradeHistoryFilters, label: string, options: [string, string][]) => (
+    <select aria-label={label} value={filters[key]}
+      onChange={(event) => setFilters({ ...filters, [key]: event.target.value })}
+      title={key === "pnl" ? "持仓按浮动盈亏筛选，已平仓按已结盈亏筛选" : label}
+      className={`max-w-full cursor-pointer rounded border px-1.5 py-1 text-xs outline-none focus:border-blue-500 ${filters[key] !== "all" ? "border-blue-500/50 bg-blue-950 text-blue-200" : "border-gray-700 bg-gray-900 text-gray-300"}`}>
+      {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+    </select>
+  );
+  const statusFilter = () => filterSelect("status", "筛选交易状态", [["all", "全部状态"], ["Open", "持仓中"], ["Closed", "已平仓"]]);
+  const sideFilter = () => filterSelect("side", "筛选交易方向", [["all", "全部方向"], ["Buy", "做多"], ["Sell", "做空"]]);
+  const pnlFilter = () => filterSelect("pnl", "筛选交易盈亏", [["all", "全部盈亏"], ["loss", "仅亏损"], ["profit", "仅盈利"], ["flat", "持平"]]);
   if (isMaximized) return null;
 
   const rowInteractions = (trade: Pick<TradePosition, "status" | "id">) => {
-    if (trade.status !== "Open" || isReplayMode || !onManageTrade) return {};
+    if (!onLocateTrade) return {};
     return {
       tabIndex: 0,
-      title: "点击管理订单：止损、止盈或部分平仓",
+      title: trade.status === "Open" ? "点击定位开仓位置" : "点击定位开仓至平仓区间",
+      "aria-current": focusedTradeId === trade.id ? "true" as const : undefined,
       onClick: (event: React.MouseEvent<HTMLElement>) => {
         if (
           (event.target as Element).closest("button, a, input, select, textarea")
         ) return;
-        onManageTrade(trade.id);
+        onLocateTrade(trade.id);
       },
       onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onManageTrade(trade.id);
+          onLocateTrade(trade.id);
         }
       },
     };
@@ -72,9 +104,10 @@ export const TradeHistory = ({
         onClick={() => setIsBottomPanelOpen(!isBottomPanelOpen)}
         title={isBottomPanelOpen ? "收起交易记录" : "展开交易记录"}
       >
-        <span>交易记录 (持仓与历史)</span>
+        <span>交易记录 <span className="ml-1 text-xs text-gray-500">{filteredTrades.length} / {trades.length}</span><span className="ml-3 hidden text-xs text-gray-500 lg:inline">点击订单定位图表</span></span>
 
         <div className="flex items-center gap-4">
+          {hasFilters && <button type="button" onClick={(event) => { event.stopPropagation(); setFilters({ ...DEFAULT_TRADE_HISTORY_FILTERS }); }} className="text-xs text-blue-400 hover:text-blue-300">清除筛选</button>}
           {/* <button
             onClick={(e) => {
               e.stopPropagation();
@@ -84,7 +117,7 @@ export const TradeHistory = ({
           >
             <Activity size={14} /> 生成 AI 习惯画像
           </button> */}
-          <button className="text-gray-500 hover:text-white transition-colors">
+          <button aria-label={isBottomPanelOpen ? "收起交易记录" : "展开交易记录"} className="text-gray-500 hover:text-white transition-colors">
             {isBottomPanelOpen ? (
               <ChevronDown size={18} />
             ) : (
@@ -95,24 +128,21 @@ export const TradeHistory = ({
       </div>
       {isBottomPanelOpen && (
         <div className="flex-1 overflow-auto">
+          <div className="sticky top-0 z-10 flex gap-2 border-b border-gray-800 bg-gray-900 p-2 md:hidden">{statusFilter()}{sideFilter()}{pnlFilter()}</div>
           <div className="space-y-2 p-2 md:hidden">
-            {trades.length === 0 && (
+            {filteredTrades.length === 0 && (
               <div className="py-6 text-center text-sm text-gray-600">
-                暂无交易数据
+                {trades.length ? "没有符合筛选条件的订单" : "暂无交易数据"}
               </div>
             )}
-            {trades.map((trade: any) => {
+            {filteredTrades.map((trade) => {
               const isOpen = trade.status === "Open";
-              const currentPnl = isOpen
-                ? trade.type === "Buy"
-                  ? (currentPrice - trade.entry) * trade.units
-                  : (trade.entry - currentPrice) * trade.units
-                : trade.pnl;
+              const currentPnl = tradeHistoryPnl(trade, currentPrice);
               return (
                 <article
                   key={trade.id}
                   {...rowInteractions(trade)}
-                  className={`rounded-lg border border-gray-800 bg-gray-900/80 p-3 ${isOpen && !isReplayMode ? "cursor-pointer hover:bg-gray-800/50 focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
+                  className={`rounded-lg border p-3 ${focusedTradeId === trade.id ? "border-blue-500/60 bg-blue-500/10" : "border-gray-800 bg-gray-900/80"} ${onLocateTrade ? "cursor-pointer hover:bg-gray-800/50 focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -193,6 +223,9 @@ export const TradeHistory = ({
                           : "隐藏标线"}
                       </button>
                       {!isReplayMode && (
+                        <button onClick={() => onManageTrade?.(trade.id)} className="min-h-9 rounded border border-gray-700 px-3 text-xs text-gray-300 hover:bg-gray-800">管理</button>
+                      )}
+                      {!isReplayMode && (
                         <button
                           onClick={() => handleCloseMarket(trade.id)}
                           className="min-h-9 rounded bg-gray-700 px-4 text-xs text-white transition-colors hover:bg-gray-600"
@@ -208,41 +241,37 @@ export const TradeHistory = ({
           </div>
 
           <table className="hidden w-full whitespace-nowrap text-left text-sm md:table">
-            <thead className="bg-gray-800/50 text-gray-500 sticky top-0 z-10">
+            <thead className="bg-gray-900 text-gray-500 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-2 font-normal">状态</th>
-                <th className="px-4 py-2 font-normal">方向</th>
+                <th className="px-4 py-2 font-normal">{statusFilter()}</th>
+                <th className="px-4 py-2 font-normal">{sideFilter()}</th>
                 <th className="px-4 py-2 font-normal text-right">数量</th>
                 <th className="px-4 py-2 font-normal text-right">开仓价</th>
                 <th className="px-4 py-2 font-normal text-right">止损 (SL)</th>
                 <th className="px-4 py-2 font-normal text-right">止盈 (TP)</th>
                 <th className="px-4 py-2 font-normal text-right">平仓价</th>
                 <th className="px-4 py-2 font-normal text-right">
-                  浮动/已结盈亏
+                  <span className="mr-2">浮动/已结盈亏</span>{pnlFilter()}
                 </th>
                 <th className="px-4 py-2 font-normal text-center">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {trades.length === 0 && (
+              {filteredTrades.length === 0 && (
                 <tr>
                   <td colSpan={9} className="text-center py-6 text-gray-600">
-                    暂无交易数据
+                    {trades.length ? "没有符合筛选条件的订单" : "暂无交易数据"}
                   </td>
                 </tr>
               )}
-              {trades.map((trade: any) => {
+              {filteredTrades.map((trade) => {
                 const isOpen = trade.status === "Open";
-                const currentPnl = isOpen
-                  ? trade.type === "Buy"
-                    ? (currentPrice - trade.entry) * trade.units
-                    : (trade.entry - currentPrice) * trade.units
-                  : trade.pnl;
+                const currentPnl = tradeHistoryPnl(trade, currentPrice);
                 return (
                   <tr
                     key={trade.id}
                     {...rowInteractions(trade)}
-                    className={`hover:bg-gray-800/30 ${isOpen && !isReplayMode ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
+                    className={`${focusedTradeId === trade.id ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40" : "hover:bg-gray-800/30"} ${onLocateTrade ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
                   >
                     <td className="px-4 py-2">
                       <span
@@ -282,7 +311,7 @@ export const TradeHistory = ({
                         : "-"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-gray-400">
-                      {isOpen ? "-" : trade.closePrice.toFixed(priceDecimals)}
+                      {isOpen ? "-" : trade.closePrice?.toFixed(priceDecimals) ?? "-"}
                     </td>
                     <td
                       className={`px-4 py-2 text-right font-mono font-bold ${
@@ -314,6 +343,9 @@ export const TradeHistory = ({
                               <Eye size={16} />
                             )}
                           </button>
+                          {!isReplayMode && (
+                            <button onClick={() => onManageTrade?.(trade.id)} className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800">管理</button>
+                          )}
                           {!isReplayMode && (
                             <button
                               onClick={() => handleCloseMarket(trade.id)}

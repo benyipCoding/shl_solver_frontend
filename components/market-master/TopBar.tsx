@@ -72,6 +72,7 @@ export const TopBar = ({
   totalCandles,
   handleNextCandle,
   isAutomaticTradingEnabled = false,
+  automaticStepCandles = 1000,
   onToggleAutomaticTrading,
   isPlaying,
   setIsPlaying,
@@ -101,6 +102,9 @@ export const TopBar = ({
   const isSuperuser = !isAuthLoading && Boolean(user?.is_superuser);
   const canSyncLatest = isSuperuser;
   const canUseAutomaticDraw = isSuperuser;
+  const batchTrading = isAutomaticTradingEnabled && !isReplayMode;
+  const stepLabel = batchTrading ? `推进 ${automaticStepCandles} 根 K 线` : "下一根K线";
+  const playLabel = batchTrading ? "运行策略到结尾" : isPlaying ? "暂停播放" : "自动播放";
   const [isExitBacktestConfirmOpen, setIsExitBacktestConfirmOpen] =
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
@@ -186,7 +190,7 @@ export const TopBar = ({
 
   return (
     <>
-      <header className="shrink-0 border-b border-slate-800/80 bg-gray-900/95 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur lg:flex lg:h-16 lg:flex-nowrap lg:items-center lg:gap-6 lg:px-6 lg:py-0">
+      <header className="relative z-40 shrink-0 border-b border-slate-800/80 bg-gray-900/95 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur lg:flex lg:h-16 lg:flex-nowrap lg:items-center lg:gap-6 lg:px-6 lg:py-0">
         <div className="flex flex-col gap-2 lg:hidden">
           <div
             className={`grid gap-2 ${
@@ -329,7 +333,7 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                aria-label={isPlaying ? "暂停播放" : "自动播放"}
+                aria-label={playLabel}
                 className={`flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium transition-colors disabled:opacity-35 ${
                   isPlaying
                     ? "bg-amber-500/15 text-amber-300"
@@ -341,7 +345,7 @@ export const TopBar = ({
                 ) : (
                   <Play size={20} fill="currentColor" />
                 )}
-                <span>{isPlaying ? "暂停" : "播放"}</span>
+                <span>{batchTrading ? "运行到结尾" : isPlaying ? "暂停" : "播放"}</span>
               </button>
               <button
                 type="button"
@@ -353,11 +357,11 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                aria-label="下一根K线"
+                aria-label={stepLabel}
                 className="flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-slate-300 transition-colors active:bg-slate-800 disabled:opacity-35"
               >
                 <StepForward size={20} />
-                <span>下一根</span>
+                <span>{batchTrading ? `推进 ${automaticStepCandles} 根` : "下一根"}</span>
               </button>
               {isReplayMode ? (
                 <button
@@ -373,9 +377,9 @@ export const TopBar = ({
               ) : isSuperuser ? (
                 <button
                   type="button"
-                  role="switch"
                   aria-label="自动做单"
-                  aria-checked={isAutomaticTradingEnabled}
+                  aria-haspopup="dialog"
+                  aria-pressed={isAutomaticTradingEnabled}
                   onClick={onToggleAutomaticTrading}
                   disabled={
                     isDataLoading ||
@@ -775,12 +779,12 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                aria-label="下一根K线"
+                aria-label={stepLabel}
                 className="flex h-11 w-11 items-center justify-center rounded bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-50 lg:h-auto lg:w-auto lg:p-1.5"
                 title={
                   isReplayMode && isReplayFinished
                     ? "回放已结束"
-                    : "步进一根 K 线（快捷键 D）"
+                    : `${stepLabel}（快捷键 D）`
                 }
               >
                 <StepForward size={18} />
@@ -793,7 +797,7 @@ export const TopBar = ({
                     ? isReplayFinished
                     : currentIndex >= totalCandles)
                 }
-                aria-label={isPlaying ? "暂停播放" : "自动播放"}
+                aria-label={playLabel}
                 className={`flex h-11 w-11 items-center justify-center rounded text-white disabled:opacity-50 lg:h-auto lg:w-auto lg:p-1.5 ${
                   isPlaying
                     ? "bg-amber-600 hover:bg-amber-500"
@@ -802,7 +806,7 @@ export const TopBar = ({
                 title={
                   isReplayMode && isReplayFinished
                     ? "回放已结束"
-                    : isPlaying
+                    : batchTrading ? "运行策略到历史数据结尾（快捷键 P）" : isPlaying
                       ? "暂停播放（快捷键 P）"
                       : "自动播放（快捷键 P）"
                 }
@@ -824,13 +828,13 @@ export const TopBar = ({
               {isSuperuser && !isReplayMode && (
                 <button
                   type="button"
-                  role="switch"
                   aria-label="自动做单"
-                  aria-checked={isAutomaticTradingEnabled}
+                  aria-haspopup="dialog"
+                  aria-pressed={isAutomaticTradingEnabled}
                   onClick={onToggleAutomaticTrading}
                   disabled={isDataLoading || Boolean(dataError) || (!isAutomaticTradingEnabled && isHistoryLoading)}
                   className={`flex h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-semibold transition-colors disabled:opacity-50 lg:h-auto lg:w-auto lg:px-2 lg:py-1.5 ${isAutomaticTradingEnabled ? "bg-emerald-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
-                  title="首单使用终端数量；按趋势起点设止损、随确认拐点收紧，止盈为初始风险距离的 10 倍。加仓使用最近同向自动单保底利润的 50%，每单仅资助一次。关闭只暂停新开仓，已有自动单继续移动止损。"
+                  title="打开策略配置中心：选择策略、设置首单仓位与加仓风险。启用后单步批量推进，播放运行到结尾。"
                 >
                   <Bot size={20} className="lg:hidden" />
                   <span className={`hidden h-2 w-2 rounded-full lg:inline-block ${isAutomaticTradingEnabled ? "bg-white" : "bg-gray-500"}`} />

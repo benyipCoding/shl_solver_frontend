@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
+
+const transpile = (source) => ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+function load(name) {
+  const target = { exports: {} };
+  vm.runInNewContext(transpile(fs.readFileSync(new URL(`${name}.ts`, import.meta.url), "utf8")), {
+    module: target, exports: target.exports, require: load,
+  });
+  return target.exports;
+}
+const history = load("./trade-history");
+const base = { id: "long", type: "Buy", entry: 100, entryTime: 101, units: 10, sl: 90, tp: 130, status: "Open", pnl: 0 };
+
+test("filters combine status, side and actual displayed P&L without altering the positions", () => {
+  const trades = [base, { ...base, id: "short", type: "Sell" },
+    { ...base, id: "loss", status: "Closed", pnl: -30 },
+    { ...base, id: "win", type: "Sell", status: "Closed", pnl: 20 },
+    { ...base, id: "flat", status: "Closed", pnl: 0 }];
+  const snapshot = JSON.stringify(trades);
+  const ids = (filters, price = 95) => Array.from(history.filterTradeHistory(trades, { ...history.DEFAULT_TRADE_HISTORY_FILTERS, ...filters }, price), (t) => t.id);
+  assert.deepEqual(ids({ pnl: "loss" }), ["long", "loss"]);
+  assert.deepEqual(ids({ pnl: "loss", status: "Closed" }), ["loss"]);
+  assert.deepEqual(ids({ pnl: "profit", side: "Sell" }), ["short", "win"]);
+  assert.deepEqual(ids({ pnl: "loss" }, 105), ["short", "loss"]);
+  assert.deepEqual(ids({ pnl: "flat" }), ["flat"]);
+  assert.deepEqual(ids({ pnl: "loss", side: "Sell", status: "Closed" }), []);
+  assert.equal(JSON.stringify(trades), snapshot);
+});
+
+test("focus fits a complete trade with context, while open and same-candle trades remain readable", () => {
+  const candles = Array.from({ length: 1000 }, (_, i) => ({ time: i + 1 }));
+  const trade = { ...base, status: "Closed", closeTime: 401 };
+  const range = history.tradeFocusRange(trade, candles, 700);
+  assert.ok(range.from < 100 && range.to > 400 && range.to < 700);
+  const openRange = history.tradeFocusRange(base, candles, 700);
+  assert.ok(openRange.from <= 100 && openRange.to >= 100 && openRange.to - openRange.from >= 79);
+  const fillRange = history.tradeFocusRange({ ...trade, closeTime: 101 }, candles, 700);
+  assert.ok(fillRange.to - fillRange.from >= 79);
+  const last = history.tradeFocusRange({ ...base, entryTime: 700 }, candles, 700);
+  assert.equal(last.to, 699);
+  assert.equal(history.tradeFocusRange(trade, candles, 400), null); // close candle is still in the future
+  assert.equal(history.tradeFocusRange(base, candles.slice(200), 800), null); // missing entry
+  assert.equal(history.tradeFocusRange(base, [], 0), null);
+});
+
+const page = ts.createSourceFile("page.tsx", fs.readFileSync(new URL("./MarketMasterPage.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let locate;
+function visit(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(page) === "handleLocateTrade") locate = node.initializer.arguments[0].getText(page);
+  ts.forEachChild(node, visit);
+}
+visit(page);
+
+test("actual row navigation updates all viewports and highlights the order without advancing or settling trades", () => {
+  const calls = [], errors = [], callbacks = [];
+  const chart = (name) => ({ timeScale: () => ({ setVisibleLogicalRange: (range) => calls.push([name, range]) }),
+    priceScale: () => ({ applyOptions: () => {} }) });
+  const position = { ...base, status: "Closed", closeTime: 201, closePrice: 90, pnl: -100 };
+  const context = {
+    ...history, chartRef: { current: chart("main") }, subChartRef: { current: chart("macd") }, volumeChartRef: { current: chart("volume") },
+    fullDataRef: { current: Array.from({ length: 1000 }, (_, i) => ({ time: i + 1 })) },
+    isDataLoadingRef: { current: false }, automaticRunRef: { current: null }, isBacktestModeRef: { current: true },
+    currentIndexRef: { current: 700 }, tradesRef: { current: [position] }, focusedTradeIdRef: { current: null },
+    preserveVisibleRangeRef: { current: false }, setIsPlaying: (value) => assert.equal(value, false),
+    setFocusedTradeId: (id) => calls.push(["selected", id]), setIsRightPriceAutoScaleEnabled() {},
+    tradeConnectionRef: { current: { setTrade: (trade) => calls.push(["highlight", trade.id]) } },
+    toast: { error: (message) => errors.push(message) }, requestAnimationFrame: (callback) => callbacks.push(callback),
+  };
+  vm.createContext(context);
+  vm.runInContext(transpile(`globalThis.locate = ${locate}`), context);
+  const snapshot = JSON.stringify(position);
+  context.locate("long");
+  const ranges = calls.filter(([name]) => ["main", "macd", "volume"].includes(name));
+  assert.equal(ranges.length, 3);
+  assert.equal(JSON.stringify(ranges[0][1]), JSON.stringify(ranges[1][1]));
+  assert.equal(JSON.stringify(ranges[0][1]), JSON.stringify(ranges[2][1]));
+  assert.equal(context.currentIndexRef.current, 700);
+  assert.equal(JSON.stringify(position), snapshot);
+  assert.equal(context.focusedTradeIdRef.current, "long");
+  assert.ok(calls.some(([name, id]) => name === "highlight" && id === "long"));
+  assert.equal(context.preserveVisibleRangeRef.current, true);
+  callbacks.forEach((callback) => callback());
+  assert.equal(context.preserveVisibleRangeRef.current, false);
+  context.currentIndexRef.current = 150;
+  const count = calls.length;
+  context.locate("long");
+  assert.equal(calls.length, count);
+  assert.equal(errors.length, 1);
+  context.automaticRunRef.current = { suppress: true };
+  context.locate("long");
+  assert.equal(calls.length, count);
+});

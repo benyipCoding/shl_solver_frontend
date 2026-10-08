@@ -151,7 +151,7 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
 
           {/* Dropdown Menu */}
           {isProfileOpen && (
-            <div className="absolute right-0 mt-10 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 animate-fadeIn origin-top-right">
+            <div className="absolute right-0 top-full z-50 mt-2 w-48 origin-top-right animate-fadeIn rounded-xl border border-slate-100 bg-white py-1 shadow-lg">
               <div className="px-4 py-3 border-b border-slate-50">
                 <p className="text-sm font-medium text-slate-900 truncate">
                   {user.username || "用户"}

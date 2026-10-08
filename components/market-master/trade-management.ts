@@ -17,6 +17,12 @@ export type TradePosition = {
   automaticPen?: {
     initialStop: number;
     initialRisk: number;
+    stopAtrMultiplier?: number;
+    minStopTicks?: number;
+    entryPenStartTime?: number;
+    breakoutPrice?: number;
+    shortExitPercent?: number;
+    shortExitDone?: boolean;
     fundedBy?: string;
     fundedChildId?: string;
     riskBudget?: number;

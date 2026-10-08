@@ -264,8 +264,8 @@ export const TradeTerminal = ({
             <div className="mb-4 space-y-3">
               {isAutomaticTradingEnabled && (
                 <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/30 p-3 text-xs leading-5 text-emerald-200">
-                  自动做单：首单沿用下方数量，止损跟随分笔拐点，止盈为初始止损距离的 10 倍。
-                  加仓按最近同向自动单保底利润的 50% 计算，每单仅资助一次。下方止损止盈设置用于手动下单。
+                  自动做单已启用：首单仓位、止损止盈和加仓比例使用“策略配置中心”的参数。
+                  下方数量与止损止盈设置用于手动下单。
                 </div>
               )}
               <OrderUnitsInput

@@ -14,6 +14,7 @@ import {
 } from "./market-config";
 import { TradeHistory } from "./TradeHistory";
 import { TradeTerminal } from "./TradeTerminal";
+import type { TradePosition } from "./trade-management";
 
 type LegendData = {
   open: number;
@@ -64,6 +65,8 @@ type MarketWorkspaceProps = {
   handleAIReview: (trade?: unknown) => void;
   handleCloseMarket: (tradeId: unknown) => void;
   onManageTrade: (tradeId: unknown) => void;
+  onLocateTrade: (tradeId: unknown) => void;
+  focusedTradeId: string | number | null;
   handleCloseAll: () => void;
   openTradeCount: number;
   handlePlaceOrder: (type: "Buy" | "Sell") => void;
@@ -101,7 +104,7 @@ type MarketWorkspaceProps = {
   totalCandles: number;
   tpDistance: number;
   tpEnabled: boolean;
-  trades: unknown[];
+  trades: TradePosition[];
   children?: ReactNode;
 };
 
@@ -120,6 +123,8 @@ export function MarketWorkspace({
   handleAIReview,
   handleCloseMarket,
   onManageTrade,
+  onLocateTrade,
+  focusedTradeId,
   handleCloseAll,
   openTradeCount,
   handlePlaceOrder,
@@ -345,6 +350,8 @@ export function MarketWorkspace({
           toggleTradeVisibility={toggleTradeVisibility}
           handleCloseMarket={handleCloseMarket}
           onManageTrade={onManageTrade}
+          onLocateTrade={onLocateTrade}
+          focusedTradeId={focusedTradeId}
           handleAIReview={handleAIReview}
           isMaximized={isMaximized}
           panelHeight={bottomPanelHeight}

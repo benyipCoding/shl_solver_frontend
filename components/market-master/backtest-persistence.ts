@@ -3,6 +3,12 @@ export const toPersistSide = (type: string) =>
 
 export const toPersistCloseReason = (reason?: string) => {
   switch (reason) {
+    case "分笔短线减仓":
+    case "PEN_SHORT_EXIT":
+      return "PEN_SHORT_EXIT";
+    case "分笔突破失效":
+    case "PEN_BREAKOUT_FAILED":
+      return "PEN_BREAKOUT_FAILED";
     case "SL Hit":
     case "SL_HIT":
       return "SL_HIT";
@@ -93,17 +99,43 @@ export const createBacktestPersistClient = () => {
   let fetchFn: FetchLike = fetch;
   let publicId: string | null = null;
   let queue: Promise<void> = Promise.resolve();
+  let batchMode = false;
+  let bufferedEvents: Record<string, unknown>[] = [];
+  let pendingError: unknown = null;
 
-  const enqueue = (task: () => Promise<void>) => {
+  const enqueue = (task: () => Promise<void>, recover = false) => {
     if (!enabled) return;
     queue = queue
-      .then(task)
+      .then(() => { if (recover || !pendingError) return task(); })
       .catch((error) => {
+        pendingError = error;
         console.error("[backtest-persist]", error);
       });
   };
 
   const requirePublicId = () => publicId;
+  const sendEvents = (events: Record<string, unknown>[], batch: boolean) => {
+    enqueue(async () => {
+      const sessionId = requirePublicId();
+      if (!sessionId) throw new Error("回测场次尚未创建，无法保存交易记录");
+      await parsePayload(await fetchFn(`/api/market_master/backtest/sessions/${sessionId}/events`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batch ? { events } : events[0]),
+      }));
+    });
+  };
+  const flushEvents = () => {
+    if (!bufferedEvents.length) return;
+    const events = bufferedEvents;
+    bufferedEvents = [];
+    sendEvents(events, true);
+  };
+  const recordEvent = (event: Record<string, unknown>) => {
+    if (!enabled) return;
+    if (!batchMode) { sendEvents([event], false); return; }
+    bufferedEvents.push(event);
+    if (bufferedEvents.length >= 200) flushEvents();
+  };
 
   return {
     configure(options: { enabled: boolean; fetchFn: FetchLike }) {
@@ -112,6 +144,8 @@ export const createBacktestPersistClient = () => {
     },
     startSession(payload: BacktestSessionStartPayload) {
       enqueue(async () => {
+        pendingError = null;
+        publicId = null;
         const data = await parsePayload(
           await fetchFn("/api/market_master/backtest/sessions", {
             method: "POST",
@@ -119,77 +153,21 @@ export const createBacktestPersistClient = () => {
             body: JSON.stringify(payload),
           })
         );
-        publicId = data?.public_id || publicId;
-      });
+        publicId = data?.public_id || null;
+      }, true);
     },
     recordOpen(payload: BacktestOpenPayload) {
-      enqueue(async () => {
-        const sessionId = requirePublicId();
-        if (!sessionId) return;
-        await parsePayload(
-          await fetchFn(
-            `/api/market_master/backtest/sessions/${sessionId}/events`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                event_type: "OPEN",
-                ...payload,
-              }),
-            }
-          )
-        );
-      });
+      recordEvent({ event_type: "OPEN", ...payload });
     },
     recordClose(payload: BacktestClosePayload) {
-      enqueue(async () => {
-        const sessionId = requirePublicId();
-        if (!sessionId) return;
-        await parsePayload(
-          await fetchFn(
-            `/api/market_master/backtest/sessions/${sessionId}/events`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                event_type: "CLOSE",
-                client_trade_id: payload.client_trade_id,
-                client_event_id: payload.client_event_id,
-                units: payload.units,
-                bar_time: payload.bar_time,
-                bar_index: payload.bar_index,
-                price: payload.price,
-                close_reason: toPersistCloseReason(payload.close_reason),
-              }),
-            }
-          )
-        );
-      });
+      recordEvent({ event_type: "CLOSE", ...payload, close_reason: toPersistCloseReason(payload.close_reason) });
     },
     recordModify(payload: BacktestModifyPayload) {
-      enqueue(async () => {
-        const sessionId = requirePublicId();
-        if (!sessionId) return;
-        await parsePayload(
-          await fetchFn(
-            `/api/market_master/backtest/sessions/${sessionId}/events`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                event_type:
-                  payload.kind === "sl" ? "MODIFY_SL" : "MODIFY_TP",
-                client_trade_id: payload.client_trade_id,
-                bar_time: payload.bar_time,
-                bar_index: payload.bar_index,
-                price: payload.price,
-              }),
-            }
-          )
-        );
-      });
+      const { kind, ...event } = payload;
+      recordEvent({ event_type: kind === "sl" ? "MODIFY_SL" : "MODIFY_TP", ...event });
     },
     completeSession(payload: BacktestCompletePayload) {
+      flushEvents();
       enqueue(async () => {
         const sessionId = requirePublicId();
         if (!sessionId) return;
@@ -208,6 +186,9 @@ export const createBacktestPersistClient = () => {
     },
     reset() {
       publicId = null;
+      pendingError = null;
+      bufferedEvents = [];
+      batchMode = false;
     },
     async listSessions(page = 1, size = 20) {
       return parsePayload(
@@ -230,6 +211,13 @@ export const createBacktestPersistClient = () => {
           { method: "DELETE" }
         )
       );
+    },
+    beginBatch() { batchMode = true; },
+    async endBatch() {
+      batchMode = false;
+      flushEvents();
+      await queue;
+      if (pendingError) throw pendingError;
     },
     async shareSession(publicIdValue: string, signal?: AbortSignal) {
       return parsePayload(await fetchFn(

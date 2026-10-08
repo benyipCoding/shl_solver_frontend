@@ -18,7 +18,8 @@ function load(path, dependencies = {}) {
 const pens = load("./automatic-pens.ts");
 const management = load("./trade-management.ts");
 const trading = load("./automatic-pen-trading.ts", { "./automatic-pens": pens });
-const risk = load("./automatic-pen-risk.ts", { "./automatic-pens": pens, "./trade-management": management });
+const configModule = load("./automatic-trading-config.ts");
+const risk = load("./automatic-pen-risk.ts", { "./automatic-trading-config": configModule, "./automatic-pens": pens, "./trade-management": management });
 const position = (extra = {}) => ({ id: "parent", type: "Buy", entry: 100, entryTime: 1, units: 100,
   sl: 90, tp: 250, status: "Open", pnl: 0, automaticPen: { initialStop: 90, initialRisk: 10 }, ...extra });
 const event = (extra = {}) => ({ side: "Buy", atr: 5, trendOrigin: { price: 100, time: 0 },
@@ -136,4 +137,42 @@ test("gap stops fill at open, ambiguous bars favor SL, targets remain conservati
   assert.equal(risk.resolveAutomaticPenExit(sell, { open: 120, high: 125, low: 100 }).price, 120);
   assert.equal(risk.resolveAutomaticPenExit(sell, { open: 100, high: 115, low: 60 }).reason, "SL Hit");
   assert.equal(risk.resolveAutomaticPenExit(sell, { open: 60, high: 120, low: 50 }).price, 70);
+});
+
+test("failed breakout exit is bound to its own sixth pen, leaving manual, older and closed positions alone", () => {
+  const trade = position({ automaticPen: { initialStop: 90, initialRisk: 10, entryPenStartTime: 21, breakoutPrice: 130 } });
+  const seventh = event({ side: null, pen: { trend: 1, startPoint: { time: 26, price: 125 }, endPoint: { time: 30, price: 145 } },
+    previousPen: { trend: -1, startPoint: { time: 21, price: 160 }, endPoint: { time: 26, price: 125 } } });
+  assert.equal(risk.shouldExitAutomaticPenOnFailedBreakout(trade, seventh), true);
+  for (const extra of [
+    { status: "Closed" }, { automaticPen: undefined },
+    { automaticPen: { ...trade.automaticPen, entryPenStartTime: 1 } },
+    { automaticPen: { initialStop: 90, initialRisk: 10 } },
+  ]) assert.equal(risk.shouldExitAutomaticPenOnFailedBreakout({ ...trade, ...extra }, seventh), false);
+  const ninth = { ...seventh, previousPen: { ...seventh.previousPen, startPoint: { time: 35, price: 155 } } };
+  assert.equal(risk.shouldExitAutomaticPenOnFailedBreakout(trade, ninth), false);
+});
+
+test("short exits match only the order's seventh pen, round down, and retain funding metadata", () => {
+  const trade = position({ units: 101, sl: 110, automaticPen: { initialStop: 90, initialRisk: 10,
+    entryPenStartTime: 21, shortExitPercent: 50, fundedBy: "earlier", fundedChildId: "child" } });
+  const seventh = event({ side: null, pen: { trend: 1, startPoint: { time: 26, price: 130 } },
+    previousPen: { trend: -1, startPoint: { time: 21, price: 160 }, endPoint: { time: 26, price: 130 } } });
+  assert.equal(risk.automaticPenShortExitUnits(trade, seventh), 50);
+  for (const patch of [{ status: "Closed" }, { automaticPen: undefined },
+    ...[{ shortExitDone: true }, { shortExitPercent: 0 }, { shortExitPercent: undefined }, { entryPenStartTime: 1 }]
+      .map((extra) => ({ automaticPen: { ...trade.automaticPen, ...extra } })),
+  ]) assert.equal(risk.automaticPenShortExitUnits({ ...trade, ...patch }, seventh), 0);
+  assert.equal(risk.automaticPenShortExitUnits(trade, { ...seventh, previousPen: null }), 0);
+  assert.equal(risk.automaticPenShortExitUnits(trade, { ...seventh, pen: { ...seventh.pen, trend: -1 } }), 0);
+  assert.equal(risk.automaticPenShortExitUnits({ ...trade, units: 1 }, seventh), 0);
+  const { remaining } = management.closeTradeUnits(trade, 50, 120, 30);
+  assert.equal(remaining.sl, 110);
+  assert.equal(remaining.tp, trade.tp);
+  assert.equal(remaining.automaticPen.fundedBy, "earlier");
+  assert.equal(remaining.automaticPen.fundedChildId, "child");
+  assert.equal(risk.automaticLockedProfit(remaining), 510);
+  const unspent = { ...remaining, automaticPen: { ...remaining.automaticPen, fundedChildId: undefined } };
+  const plan = risk.planAutomaticPenOrder(event(), 118, 100, [unspent], 2);
+  assert.equal(plan.automaticPen.riskBudget, 255); // only half of the remainder's locked profit
 });
