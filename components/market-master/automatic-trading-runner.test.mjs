@@ -26,6 +26,12 @@ test("configuration has valid defaults, restores settings, and rejects invalid p
   const migrated = config.readAutomaticTradingConfig('{"addRiskPercent":25}');
   assert.equal(migrated.shortExitEnabled, true);
   assert.equal(migrated.shortExitPercent, 50);
+  assert.equal(migrated.initialStopEnabled, true);
+  assert.equal(config.readAutomaticTradingConfig('{"initialStopEnabled":false}').initialStopEnabled, false);
+  for (const initialStopEnabled of ["false", 0, null]) {
+    assert.ok(config.automaticTradingConfigError({ ...defaults, initialStopEnabled }));
+    assert.equal(config.readAutomaticTradingConfig(JSON.stringify({ initialStopEnabled })).initialStopEnabled, true);
+  }
   assert.equal(config.readAutomaticTradingConfig('{"shortExitEnabled":false,"shortExitPercent":25}').shortExitEnabled, false);
   for (const patch of [{ shortExitEnabled: "true" }, { shortExitPercent: 0 }, { shortExitPercent: 101 }, { shortExitPercent: NaN }]) {
     assert.ok(config.automaticTradingConfigError({ ...defaults, ...patch }));

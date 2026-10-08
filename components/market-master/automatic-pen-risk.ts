@@ -30,7 +30,7 @@ export function automaticLockedProfit(trade: TradePosition): number {
 
 export type AutomaticOrderPlan = {
   units: number;
-  sl: number;
+  sl: number | null;
   tp: number;
   automaticPen: NonNullable<TradePosition["automaticPen"]>;
 };
@@ -72,7 +72,8 @@ export function planAutomaticPenOrder(
   const tick = 10 ** -decimals;
   const tp = Math.max(tick, roundOutward(entry + direction(side) * risk * config.takeProfitR, decimals, side === "Buy"));
   if (!Number.isFinite(tp) || direction(side) * (tp - entry) <= 0) return null;
-  return { units, sl, tp, automaticPen: {
+  // Keep the structural reference for sizing and TP even without an entry stop.
+  return { units, sl: config.initialStopEnabled ? sl : null, tp, automaticPen: {
     initialStop: sl,
     initialRisk: risk,
     stopAtrMultiplier: config.stopAtrMultiplier,

@@ -114,6 +114,7 @@ export const sortReplayEvents = (events: BacktestReplayEvent[] = []) =>
 export const applyReplayTradeEvents = (
   trades: TradePosition[],
   events: BacktestReplayEvent[],
+  startingBalance?: number,
 ) => {
   let nextTrades = [...trades];
   let balanceChange = 0;
@@ -157,6 +158,9 @@ export const applyReplayTradeEvents = (
           fromPersistCloseReason(event.close_reason),
         );
         balanceChange += closed.pnl;
+        if (startingBalance !== undefined && Number.isFinite(startingBalance)) {
+          closed.balanceAfter = startingBalance + balanceChange;
+        }
         return remaining ? [remaining, closed] : [closed];
       });
     }

@@ -10,6 +10,25 @@ export const DEFAULT_TRADE_HISTORY_FILTERS: TradeHistoryFilters = { status: "all
 export const tradeHistoryPnl = (trade: TradePosition, currentPrice: number) =>
   trade.status === "Open" ? calculateTradePnl(trade, currentPrice) : trade.pnl;
 
+export const tradeHistoryBalance = (trade: TradePosition) =>
+  trade.status === "Closed" && Number.isFinite(trade.balanceAfter) ? trade.balanceAfter! : null;
+
+export type TradeHistorySort = { key: "pnl" | "balance"; direction: "asc" | "desc" } | null;
+
+/** Sort all filtered records before pagination; missing values stay last both ways. */
+export function sortTradeHistory(trades: readonly TradePosition[], sort: TradeHistorySort, currentPrice: number) {
+  if (!sort) return trades;
+  const direction = sort.direction === "asc" ? 1 : -1;
+  return trades.map((trade, index) => ({ trade, index,
+    value: sort.key === "balance" ? tradeHistoryBalance(trade) : tradeHistoryPnl(trade, currentPrice),
+  })).sort((a, b) => {
+    if (a.value === null && b.value === null) return a.index - b.index;
+    if (a.value === null) return 1;
+    if (b.value === null) return -1;
+    return direction * (a.value - b.value) || a.index - b.index;
+  }).map(({ trade }) => trade);
+}
+
 export function filterTradeHistory(trades: readonly TradePosition[], filters: TradeHistoryFilters, currentPrice: number) {
   return trades.filter((trade) => {
     if (filters.status !== "all" && trade.status !== filters.status) return false;

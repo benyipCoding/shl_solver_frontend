@@ -73,6 +73,38 @@ test("first orders use terminal units and symmetric p0 stops with a distant 10R 
   assert.equal(risk.planAutomaticPenOrder(event(), 119, 0, [], 2), null);
 });
 
+test("disabling entry stops preserves sizing and targets for both sides, including funded adds", () => {
+  for (const side of ["Buy", "Sell"]) {
+    const buy = side === "Buy";
+    const signal = event({ side, trendOrigin: { price: buy ? 100 : 138, time: 0 } });
+    const sponsor = position({ type: side, sl: buy ? 110 : 90 });
+    for (const firstOrderMode of ["units", "amount", "balancePercent"]) {
+      for (const trades of [[], [sponsor]]) {
+        const config = { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderMode };
+        const enabled = risk.planAutomaticPenOrder(signal, 119, 100, trades, 2, config, 10000);
+        const disabled = risk.planAutomaticPenOrder(signal, 119, 100, trades, 2, { ...config, initialStopEnabled: false }, 10000);
+        assert.equal(disabled.sl, null);
+        assert.equal(disabled.units, enabled.units);
+        assert.equal(disabled.tp, enabled.tp);
+        assert.equal(JSON.stringify(disabled.automaticPen), JSON.stringify(enabled.automaticPen));
+      }
+    }
+    const config = { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, initialStopEnabled: false };
+    const plan = risk.planAutomaticPenOrder(signal, 119, 100, [], 2, config);
+    const trade = position({ ...plan, type: side, entry: 119 });
+    assert.equal(risk.automaticLockedProfit(trade), 0);
+    assert.equal(risk.planAutomaticPenOrder(signal, 119, 100, [trade], 2, config), null);
+    const crossing = buy ? { open: 119, high: 120, low: 90 } : { open: 119, high: 150, low: 118 };
+    assert.equal(risk.resolveAutomaticPenExit(trade, crossing), null);
+    const confirm = event({ side: null, pen: { trend: buy ? 1 : -1, startPoint: { price: buy ? 125 : 110, time: 20 } } });
+    const result = risk.trailAutomaticPenStops([trade], confirm, buy ? 130 : 105, 2);
+    assert.equal(result.changed.length, 1);
+    assert.equal(result.trades[0].sl, buy ? 124 : 111);
+    assert.equal(trade.sl, null);
+    assert.equal(risk.resolveAutomaticPenExit(result.trades[0], crossing).reason, "SL Hit");
+  }
+});
+
 test("funding uses stop-locked profit and remaining units, never floating profit", () => {
   assert.equal(risk.automaticLockedProfit(position()), 0);
   assert.equal(risk.automaticLockedProfit(position({ sl: 100 })), 0);

@@ -350,7 +350,7 @@ function pageHarness(data, index, initialTrades = []) {
     historyLoadingRef: { current: false }, dataSessionRef: { current: 1 },
     setAutomaticRun() {}, setTrades() {}, recomputeIndicators() {}, syncDisplayedData() {},
     runAutomaticTradingBatch: (options) => runner.runAutomaticTradingBatch({ ...options, now: () => performance.now(), yieldToBrowser: async () => {} }),
-    setCurrentIndex() {}, setIsPlaying() {}, closeTradeRecord: management.closeTradeRecord, closeTradeUnits: management.closeTradeUnits,
+    setCurrentIndex() {}, setIsPlaying() {}, closeTradeRecord: management.closeTradeRecord, closeTradeUnits: management.closeTradeUnits, withSettlementBalances: management.withSettlementBalances,
     isBacktestMode: true, currentPrice: data[index - 1]?.close,
     orderUnits: 1234, slEnabled: true, slDistance: 0.0001, tpEnabled: true, tpDistance: 0.0002,
     crypto: { randomUUID: () => `automatic-order-${++nextId}` },
@@ -370,6 +370,26 @@ function pageHarness(data, index, initialTrades = []) {
   context.handleNextCandle = context.step;
   return { context, events };
 }
+
+test("page settlement snapshots follow execution order even when same-bar fills offset to zero", () => {
+  const { context, events } = pageHarness(fixture, 1);
+  const a = { id: "a:close:1", parentTradeId: "a", status: "Closed", closeTime: 1, closePrice: 110, units: 10, pnl: 100 };
+  const b = { id: "b", status: "Closed", closeTime: 1, closePrice: 90, units: 10, pnl: -100 };
+  const open = { id: "a", status: "Open", units: 10, pnl: 0 };
+  context.settleReal([b, open, a], [a, b], 0, 0);
+  assert.equal(context.balanceRef.current, 10000);
+  assert.equal(context.tradesRef.current.find((t) => t.id === a.id).balanceAfter, 10100);
+  assert.equal(context.tradesRef.current.find((t) => t.id === b.id).balanceAfter, 10000);
+  assert.equal(context.tradesRef.current.find((t) => t.id === "a").balanceAfter, undefined);
+  assert.equal(a.balanceAfter, undefined);
+  assert.deepEqual(events.map((event) => event.client_event_id), ["close:a:close:1", "close:b"]);
+  const oldFill = context.tradesRef.current.find((t) => t.id === a.id);
+  const later = { ...open, status: "Closed", closeTime: 2, closePrice: 120, pnl: 200 };
+  context.settleReal([later, ...context.tradesRef.current.filter((t) => t.id !== "a")], [later], 200, 1);
+  assert.equal(context.balanceRef.current, 10200);
+  assert.equal(context.tradesRef.current[0].balanceAfter, 10200);
+  assert.equal(oldFill.balanceAfter, 10100);
+});
 
 test("page settles old trades first, enters at the signal close with structural risk, and preserves manual parameters", () => {
   const index = at("2021-08-01T20:00:00");
@@ -436,6 +456,36 @@ test("XAU example enters beyond p0, trails beyond p1 only when L2 forms, and per
   const restored = replay.applyReplayTradeEvents([], saved);
   assert.equal(restored.trades[0].pnl, closed.pnl);
   assert.equal(restored.balanceChange, closed.pnl);
+});
+
+test("page persists entry without SL, then applies and replays the original trailing stop", () => {
+  const data = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201601.json", import.meta.url), "utf8")).candles;
+  const index = data.findIndex((c) => c.datetime === "2016-01-15T12:00:00");
+  const trailIndex = data.findIndex((c) => c.datetime === "2016-01-18T20:00:00");
+  const { context, events } = pageHarness(data, index);
+  Object.assign(context.automaticTradingConfigRef.current, { initialStopEnabled: false, shortExitEnabled: false });
+  context.priceDecimals = 2;
+  context.step();
+  const initial = context.tradesRef.current[0];
+  assert.equal(initial.sl, null);
+  assert.ok(initial.automaticPen.initialStop > 1109.87);
+  const opened = events.find((e) => e.client_trade_id === initial.id);
+  assert.equal(opened.sl_price, null);
+  const savedOpen = { ...opened, side: "SELL", event_type: "OPEN", sequence_no: 1 };
+  assert.equal(replay.applyReplayTradeEvents([], [savedOpen]).trades[0].sl, null);
+  // Updating the preference must not install an entry stop on an existing order.
+  context.automaticTradingConfigRef.current.initialStopEnabled = true;
+  while (context.currentIndexRef.current < trailIndex) context.step();
+  assert.equal(context.tradesRef.current[0].sl, null);
+  context.step();
+  const updated = context.tradesRef.current[0];
+  assert.ok(updated.sl > 1091.89 && updated.sl < initial.automaticPen.initialStop);
+  assert.equal(updated.tp, initial.tp);
+  const modify = events.find((e) => e.kind === "sl");
+  assert.equal(modify.bar_time, data[trailIndex].time);
+  assert.equal(modify.price, updated.sl);
+  const restored = replay.applyReplayTradeEvents([], [savedOpen, { ...modify, event_type: "MODIFY_SL", sequence_no: 2 }]);
+  assert.equal(restored.trades[0].sl, updated.sl);
 });
 
 test("funded sizing is persisted, funding consumed once, and a blocked add does not mutate positions", () => {

@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from "react";
 import type { TradePosition } from "./trade-management";
 import { automaticLockedProfit } from "./automatic-pen-risk";
-import { DEFAULT_TRADE_HISTORY_FILTERS, filterTradeHistory, tradeHistoryPnl, type TradeHistoryFilters } from "./trade-history";
+import { DEFAULT_TRADE_HISTORY_FILTERS, filterTradeHistory, sortTradeHistory, tradeHistoryBalance, tradeHistoryPnl, type TradeHistoryFilters, type TradeHistorySort } from "./trade-history";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronDown,
   ChevronUp,
   Eye,
@@ -53,12 +56,25 @@ export const TradeHistory = ({
   isReplayMode = false,
 }: TradeHistoryProps) => {
   const [filters, setFilters] = useState<TradeHistoryFilters>({ ...DEFAULT_TRADE_HISTORY_FILTERS });
+  const [sort, setSort] = useState<TradeHistorySort>(null);
   const filteredTrades = useMemo(() => filterTradeHistory(trades, filters, currentPrice), [trades, filters, currentPrice]);
+  const sortedTrades = useMemo(() => sortTradeHistory(filteredTrades, sort, currentPrice), [filteredTrades, sort, currentPrice]);
   const hasFilters = Object.values(filters).some((value) => value !== "all");
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(filteredTrades.length / 50));
   const activePage = Math.min(page, pageCount - 1);
-  const pageTrades = filteredTrades.slice(activePage * 50, (activePage + 1) * 50);
+  const pageTrades = sortedTrades.slice(activePage * 50, (activePage + 1) * 50);
+  const sortButton = (key: NonNullable<TradeHistorySort>["key"], label: string) => {
+    const direction = sort?.key === key ? sort.direction : null;
+    const Icon = direction === "desc" ? ArrowDown : direction === "asc" ? ArrowUp : ArrowUpDown;
+    return <button type="button" aria-label={`按${key === "pnl" ? "盈亏" : "余额"}排序`}
+      title={`${key === "balance" ? "每次成交结算后的账户余额，持仓尚未结算。" : "持仓使用浮动盈亏，已平仓使用已结盈亏。"}点击切换：从大到小 → 从小到大 → 默认顺序`}
+      onClick={() => { setSort(direction === "asc" ? null : { key, direction: direction === "desc" ? "asc" : "desc" }); setPage(0); }}
+      className={`inline-flex items-center gap-1 rounded px-1 py-1 hover:text-blue-300 focus-visible:outline-2 focus-visible:outline-blue-500 ${direction ? "text-blue-300" : "text-gray-400"}`}>
+      {label}<Icon size={14} aria-hidden="true" />
+    </button>;
+  };
+  const balanceLabel = (trade: TradePosition) => tradeHistoryBalance(trade)?.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? "—";
   const filterSelect = (key: keyof TradeHistoryFilters, label: string, options: [string, string][]) => (
     <select aria-label={label} value={filters[key]}
       onChange={(event) => { setFilters({ ...filters, [key]: event.target.value }); setPage(0); }}
@@ -132,7 +148,10 @@ export const TradeHistory = ({
       </div>
       {isBottomPanelOpen && (
         <div className="flex-1 overflow-auto">
-          <div className="sticky top-0 z-10 flex gap-2 border-b border-gray-800 bg-gray-900 p-2 md:hidden">{statusFilter()}{sideFilter()}{pnlFilter()}</div>
+          <div className="sticky top-0 z-10 border-b border-gray-800 bg-gray-900 p-2 md:hidden">
+            <div className="flex flex-wrap gap-2">{statusFilter()}{sideFilter()}{pnlFilter()}</div>
+            <div className="mt-1 flex gap-3 text-xs">{sortButton("pnl", "盈亏")}{sortButton("balance", "余额")}</div>
+          </div>
           <div className="space-y-2 p-2 md:hidden">
             {filteredTrades.length === 0 && (
               <div className="py-6 text-center text-sm text-gray-600">
@@ -184,6 +203,10 @@ export const TradeHistory = ({
                     </span>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div className="col-span-2">
+                      <dt className="text-gray-600">余额（结算后）</dt>
+                      <dd className="font-mono text-gray-300">{balanceLabel(trade)}</dd>
+                    </div>
                     <div>
                       <dt className="text-gray-600">数量</dt>
                       <dd className="font-mono text-gray-300">{trade.units}</dd>
@@ -255,16 +278,17 @@ export const TradeHistory = ({
                 <th className="px-4 py-2 font-normal text-right">止损 (SL)</th>
                 <th className="px-4 py-2 font-normal text-right">止盈 (TP)</th>
                 <th className="px-4 py-2 font-normal text-right">平仓价</th>
-                <th className="px-4 py-2 font-normal text-right">
-                  <span className="mr-2">浮动/已结盈亏</span>{pnlFilter()}
+                <th className="px-4 py-2 font-normal text-right" aria-sort={sort?.key === "pnl" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}>
+                  <span className="mr-2">{sortButton("pnl", "浮动/已结盈亏")}</span>{pnlFilter()}
                 </th>
+                <th className="px-4 py-2 font-normal text-right" aria-sort={sort?.key === "balance" ? sort.direction === "asc" ? "ascending" : "descending" : "none"}>{sortButton("balance", "余额")}</th>
                 <th className="px-4 py-2 font-normal text-center">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {filteredTrades.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="text-center py-6 text-gray-600">
+                  <td colSpan={10} className="text-center py-6 text-gray-600">
                     {trades.length ? "没有符合筛选条件的订单" : "暂无交易数据"}
                   </td>
                 </tr>
@@ -330,6 +354,7 @@ export const TradeHistory = ({
                       {currentPnl > 0 ? "+" : ""}
                       {currentPnl.toFixed(2)}
                     </td>
+                    <td className="px-4 py-2 text-right font-mono text-gray-300" title={isOpen ? "持仓尚未结算" : "本次成交结算后的账户余额"}>{balanceLabel(trade)}</td>
                     <td className="px-4 py-2 text-center">
                       {isOpen ? (
                         <div className="flex items-center justify-center gap-3">

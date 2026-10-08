@@ -66,6 +66,12 @@ export function AutomaticTradingConfigModal({ config, enabled, balance, onApply,
             </section>
             <section className="space-y-3 border-t border-slate-800 pt-4">
               <h3 className="font-semibold">止损、止盈与运行</h3>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+                <input type="checkbox" role="switch" checked={draft.initialStopEnabled} onChange={(e) => setDraft({ ...draft, initialStopEnabled: e.target.checked })} className="h-4 w-4 accent-emerald-500" />
+                初始进场设置止损
+              </label>
+              <p className="text-xs leading-5 text-slate-400">默认开启，在趋势起点之外设置初始止损。关闭后，新订单（含加仓单）进场时不设止损，后续仍按原规则设置并移动止损。</p>
+              {!draft.initialStopEnabled && <p className="text-xs leading-5 text-slate-500">仓位和止盈仍按趋势起点及缓冲计算的参考止损距离确定；首次移动止损前没有止损保护，止损预算仅用于计算仓位。</p>}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {numberField("stopAtrMultiplier", "止损 ATR 缓冲倍数", "× ATR(14)", "0.1")}
                 {numberField("minStopTicks", "最小止损缓冲", "报价单位", "1")}

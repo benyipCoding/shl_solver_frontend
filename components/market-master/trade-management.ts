@@ -8,6 +8,8 @@ export type TradePosition = {
   tp: number | null;
   status: "Open" | "Closed";
   pnl: number;
+  /** Account cash balance immediately after this fill; absent while still open. */
+  balanceAfter?: number;
   closeTime?: number;
   closePrice?: number;
   reason?: string;
@@ -34,6 +36,22 @@ export const calculateTradePnl = (
   price: number,
   units = trade.units,
 ) => (trade.type === "Buy" ? price - trade.entry : trade.entry - price) * units;
+
+/** Capture execution order before display sorting, including fills sharing a bar. */
+export function withSettlementBalances<T extends TradePosition>(
+  trades: T[], newlyClosed: readonly TradePosition[], startingBalance: number,
+): T[] {
+  if (!newlyClosed.length) return trades;
+  const balances = new Map<TradePosition["id"], number>();
+  let change = 0;
+  for (const trade of newlyClosed) {
+    change += trade.pnl;
+    balances.set(trade.id, startingBalance + change);
+  }
+  return trades.map((trade) => balances.has(trade.id)
+    ? { ...trade, balanceAfter: balances.get(trade.id)! }
+    : trade);
+}
 
 export type TradeRiskInputMode = "price" | "points" | "amount";
 export type TradeRiskKind = "sl" | "tp";

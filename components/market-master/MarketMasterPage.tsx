@@ -134,7 +134,7 @@ import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 import { TradeManagementDialog } from "./TradeManagementDialog";
 import { TradeConnectionPrimitive } from "./trade-connection";
 import { tradeFocusRange } from "./trade-history";
-import { closeTradeRecord, closeTradeUnits, getRiskPriceError, type TradePosition } from "./trade-management";
+import { closeTradeRecord, closeTradeUnits, getRiskPriceError, withSettlementBalances, type TradePosition } from "./trade-management";
 
 const BOLLINGER_LINE_DEFINITIONS = [
   { key: "upper", colorKey: "upperColor" },
@@ -902,12 +902,12 @@ export function MarketMasterPage() {
     seriesMarkersRef.current?.setMarkers([]);
   }, []);
 
-  const resetBacktestAccount = useCallback(() => {
+  const resetBacktestAccount = useCallback((initialBalance = INITIAL_BACKTEST_BALANCE) => {
     if (automaticRunRef.current) automaticRunRef.current.cancelled = true;
     stopAutomaticTrading();
     setManagedTradeId(null);
-    balanceRef.current = INITIAL_BACKTEST_BALANCE;
-    setBalance(INITIAL_BACKTEST_BALANCE);
+    balanceRef.current = initialBalance;
+    setBalance(initialBalance);
     tradesRef.current = [];
     setTrades([]);
     clearClosedTradeMarkers();
@@ -946,8 +946,9 @@ export function MarketMasterPage() {
       balanceChange = 0,
       barIndex?: number
     ) => {
-      commitTrades(nextTrades);
-      syncTradeMarkers(nextTrades);
+      const settledTrades = withSettlementBalances(nextTrades, newlyClosed, balanceRef.current);
+      commitTrades(settledTrades);
+      syncTradeMarkers(settledTrades);
       if (balanceChange !== 0) {
         const nextBalance = balanceRef.current + balanceChange;
         balanceRef.current = nextBalance;
@@ -1015,7 +1016,7 @@ export function MarketMasterPage() {
       replayEventsRef.current = remaining;
       if (!due.length) return;
 
-      const { trades: nextTrades, balanceChange } = applyReplayTradeEvents(tradesRef.current, due);
+      const { trades: nextTrades, balanceChange } = applyReplayTradeEvents(tradesRef.current, due, balanceRef.current);
 
       commitTrades(nextTrades);
       syncTradeMarkers(nextTrades);
@@ -2106,7 +2107,8 @@ export function MarketMasterPage() {
       isReplayModeRef.current = true;
       setIsReplayMode(true);
       setIsPlaying(false);
-      resetBacktestAccount();
+      const initialBalance = Number(detail.initial_balance ?? INITIAL_BACKTEST_BALANCE);
+      resetBacktestAccount(Number.isFinite(initialBalance) ? initialBalance : INITIAL_BACKTEST_BALANCE);
       disableAutomaticDrawings();
       currentIndexRef.current = startCurrent;
       setCurrentIndex(startCurrent);

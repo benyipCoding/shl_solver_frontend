@@ -32,6 +32,35 @@ test("filters combine status, side and actual displayed P&L without altering the
   assert.equal(JSON.stringify(trades), snapshot);
 });
 
+test("P&L sorts the whole filtered list before pagination, follows floating values and keeps ties stable", () => {
+  const trades = Array.from({ length: 120 }, (_, i) => ({ ...base, id: `closed-${i}`, status: "Closed", pnl: i - 60, balanceAfter: 10000 + i }));
+  trades.unshift({ ...base, id: "open" });
+  trades.push({ ...base, id: "same-profit", status: "Closed", pnl: 59 });
+  const before = JSON.stringify(trades);
+  const ids = (rows) => Array.from(rows, (trade) => trade.id);
+  assert.deepEqual(ids(history.sortTradeHistory(trades, { key: "pnl", direction: "desc" }, 110).slice(0, 3)), ["open", "closed-119", "same-profit"]);
+  assert.equal(history.sortTradeHistory(trades, { key: "pnl", direction: "asc" }, 90)[0].id, "open");
+  const losses = history.filterTradeHistory(trades, { ...history.DEFAULT_TRADE_HISTORY_FILTERS, pnl: "loss", status: "Closed" }, 110);
+  const sorted = history.sortTradeHistory(losses, { key: "pnl", direction: "asc" }, 110);
+  assert.equal(sorted[0].pnl, -60);
+  assert.equal(sorted.slice(50)[0].pnl, -10);
+  assert.equal(history.sortTradeHistory(trades, null, 110), trades);
+  assert.equal(JSON.stringify(trades), before);
+});
+
+test("balance sorting uses immutable settlement values, includes zero and keeps unsettled records last", () => {
+  const trades = [{ ...base, id: "a", status: "Closed", balanceAfter: 15000 },
+    { ...base, id: "open", balanceAfter: 99999 }, // An open position has no settled balance.
+    { ...base, id: "zero", status: "Closed", balanceAfter: 0 },
+    { ...base, id: "old", status: "Closed" },
+    { ...base, id: "b", status: "Closed", balanceAfter: 9000 }];
+  const ids = (direction) => Array.from(history.sortTradeHistory(trades, { key: "balance", direction }, 100000), (trade) => trade.id);
+  assert.deepEqual(ids("desc"), ["a", "b", "zero", "open", "old"]);
+  assert.deepEqual(ids("asc"), ["zero", "b", "a", "open", "old"]);
+  const filtered = history.filterTradeHistory(trades, { ...history.DEFAULT_TRADE_HISTORY_FILTERS, status: "Closed" }, 10);
+  assert.equal(history.sortTradeHistory(filtered, { key: "balance", direction: "asc" }, 10)[1].balanceAfter, 9000);
+});
+
 test("focus fits a complete trade with context, while open and same-candle trades remain readable", () => {
   const candles = Array.from({ length: 1000 }, (_, i) => ({ time: i + 1 }));
   const trade = { ...base, status: "Closed", closeTime: 401 };

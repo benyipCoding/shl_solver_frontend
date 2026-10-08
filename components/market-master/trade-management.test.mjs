@@ -282,6 +282,21 @@ test("persistence sends partial quantity, stable event ID and explicit null risk
   assert.equal(requests[3].price, null);
 });
 
+test("replay reconstructs balances from recorded execution order and a custom starting balance", () => {
+  const event = (id, type, price, units) => ({ sequence_no: 1, client_trade_id: id, event_type: type, price, units, side: "BUY", bar_time: 1 });
+  const first = applyReplayTradeEvents([], [event("a", "OPEN", 100, 10), event("b", "OPEN", 200, 20),
+    event("a", "CLOSE", 110, 4), event("b", "CLOSE", 198, 20)], 15000);
+  assert.equal(first.balanceChange, 0);
+  assert.equal(first.trades.find((t) => t.id === "a:close:1").balanceAfter, 15040);
+  assert.equal(first.trades.find((t) => t.id === "b").balanceAfter, 15000);
+  assert.equal(first.trades.find((t) => t.id === "a").balanceAfter, undefined);
+  const next = applyReplayTradeEvents(first.trades, [event("a", "CLOSE", 95, 6)], 15000 + first.balanceChange);
+  assert.equal(next.balanceChange, -30);
+  assert.equal(next.trades.find((t) => t.id === "a").balanceAfter, 14970);
+  assert.equal(next.trades.find((t) => t.id === "a:close:1").balanceAfter, 15040);
+  assert.equal(first.trades.find((t) => t.id === "a").status, "Open");
+});
+
 test("hover connection uses actual entry/exit prices, supports same-bar fills and clears", () => {
   const primitive = new TradeConnectionPrimitive();
   const path = [];
