@@ -95,6 +95,10 @@ export const TopBar = ({
   replayPlayed = 0,
   replayTotal = 0,
   onRestartReplay,
+  onRestartBacktest,
+  canRestartBacktest = false,
+  isRestartingBacktest = false,
+  isAutomaticRunBusy = false,
 }: any) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -103,6 +107,9 @@ export const TopBar = ({
   const canSyncLatest = isSuperuser;
   const canUseAutomaticDraw = isSuperuser;
   const batchTrading = isAutomaticTradingEnabled && !isReplayMode;
+  const showRestartBacktest = isSuperuser && !isReplayMode && Boolean(onRestartBacktest);
+  const restartDisabled = !canRestartBacktest || isDataLoading || isHistoryLoading || Boolean(dataError) || isAutomaticRunBusy || isRestartingBacktest;
+  const restartTitle = "剩余持仓按当前价格平仓并保存上一轮，保留同一样本和策略配置，重置账户与进度；可改参数后再播放";
   const stepLabel = batchTrading ? `推进 ${automaticStepCandles} 根 K 线` : "下一根K线";
   const playLabel = batchTrading ? "运行策略到结尾" : isPlaying ? "暂停播放" : "自动播放";
   const [isExitBacktestConfirmOpen, setIsExitBacktestConfirmOpen] =
@@ -321,7 +328,7 @@ export const TopBar = ({
           ) : (
             <div
               className={`grid gap-1 rounded-2xl border border-slate-800 bg-slate-950/70 p-1 shadow-inner ${
-                isReplayMode || isSuperuser ? "grid-cols-4" : "grid-cols-3"
+                showRestartBacktest ? "grid-cols-5" : isReplayMode || isSuperuser ? "grid-cols-4" : "grid-cols-3"
               }`}
             >
               <button
@@ -403,6 +410,11 @@ export const TopBar = ({
                   />
                 </button>
               ) : null}
+              {showRestartBacktest && <button type="button" onClick={onRestartBacktest} disabled={restartDisabled}
+                aria-label="从头再跑" title={restartTitle}
+                className="flex h-13 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium text-blue-300 transition-colors active:bg-blue-500/15 disabled:opacity-35">
+                <RotateCcw size={20} /><span>从头再跑</span>
+              </button>}
               <button
                 type="button"
                 onClick={() => setIsExitBacktestConfirmOpen(true)}
@@ -841,6 +853,11 @@ export const TopBar = ({
                   <span className="hidden lg:inline">自动做单</span>
                 </button>
               )}
+              {showRestartBacktest && <button type="button" onClick={onRestartBacktest} disabled={restartDisabled}
+                aria-label="从头再跑" title={restartTitle}
+                className="flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-blue-500/15 px-2 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/25 disabled:opacity-50">
+                <RotateCcw size={16} /><span>从头再跑</span>
+              </button>}
               <div className="hidden h-5 w-px bg-gray-600 lg:block" />
               <button
                 type="button"

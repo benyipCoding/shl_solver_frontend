@@ -344,6 +344,7 @@ function pageHarness(data, index, initialTrades = []) {
     advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null },
     ...risk, priceDecimals: 5,
     automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderUnits: 1234 } },
+    restartingBacktestRef: { current: false }, backtestSampleRef: { current: null },
     balanceRef: { current: 10000 }, setBalance() {},
     performance, AbortController,
     isAutomaticTradingEnabled: true, automaticAccessRef: { current: true },
@@ -733,12 +734,157 @@ test("auto-trading switch is visible only to superusers in interactive backtest"
   });
   const props = { isBacktestMode: true, totalCandles: 10000, currentIndex: 200, timeframeOptions: [], balance: 10000, totalFloatingPnl: 0 };
   const html = (extra = {}) => renderToStaticMarkup(React.createElement(TopBar, { ...props, ...extra }));
+  const restartProps = { onRestartBacktest() {}, canRestartBacktest: true };
+  assert.equal((html(restartProps).match(/aria-label="从头再跑"/g) || []).length, 2);
+  assert.match(html({ ...restartProps, isAutomaticRunBusy: true }), /disabled="" aria-label="从头再跑"/);
+  assert.match(html({ ...restartProps, isRestartingBacktest: true }), /disabled="" aria-label="从头再跑"/);
+  assert.doesNotMatch(html({ ...restartProps, isReplayMode: true }), /aria-label="从头再跑"/);
   assert.match(html(), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="false"/);
   assert.match(html({ isAutomaticTradingEnabled: true }), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="true"/);
   assert.doesNotMatch(html({ isReplayMode: true }), /自动做单/);
   assert.doesNotMatch(html({ isBacktestMode: false }), /自动做单/);
   user = { is_superuser: false };
   assert.doesNotMatch(html(), /自动做单/);
+  assert.doesNotMatch(html(restartProps), /aria-label="从头再跑"/);
+});
+
+function installRestartHarness(context, sample) {
+  const completed = [], starts = [], messages = [];
+  Object.assign(context, {
+    INITIAL_BACKTEST_BALANCE: 10000,
+    backtestSampleRef: { current: sample },
+    backtestCompletionRequestedRef: { current: false }, wasBacktestModeRef: { current: true },
+    clientSessionIdRef: { current: "original-session" }, stateRef: { current: { lastHoveredTime: 123 } },
+    setIsRestartingBacktest() {}, setManagedTradeId() {}, clearClosedTradeMarkers() {},
+    disableAutomaticDrawings() {}, resetSupportResistance() {},
+    stopAutomaticTrading: () => { context.isAutomaticTradingEnabled = false; context.advanceAutomaticTrading = () => null; },
+    toggleAutomaticTrading: (startTime) => {
+      const warmup = context.fullDataRef.current.slice(0, context.currentIndexRef.current).filter((bar) => startTime == null || bar.time >= startTime);
+      context.advanceAutomaticTrading = trading.createAutomaticPenTradeTracker(warmup).advanceEvent;
+      context.isAutomaticTradingEnabled = true;
+    },
+    toast: { success: (message) => messages.push(message), error: (message) => messages.push(message) },
+  });
+  context.persistRef.current.completeSession = (payload) => completed.push(plain(payload));
+  context.persistRef.current.startSession = (payload) => starts.push(plain(payload));
+  context.settleClosedTrades = context.settleReal;
+  vm.runInContext(transpile(`globalThis.forceCloseAllOpenTrades = ${pageHandler("forceCloseAllOpenTrades")}; globalThis.requestBacktestCompletion = ${pageHandler("requestBacktestCompletion")}; globalThis.resetBacktestAccount = ${pageHandler("resetBacktestAccount")}; globalThis.restart = ${pageHandler("handleRestartBacktest")};`), context);
+  return { completed, starts, messages };
+}
+
+test("restart reuses candles and strategy warmup, saves a separate run, survives prepends and keeps a fixed end", async () => {
+  const data = Array.from({ length: 10000 }, (_, i) => ({ ...fixture[i % fixture.length], time: fixture[i % fixture.length].time + Math.floor(i / fixture.length) * 10000000 }));
+  const { context, events } = pageHarness(data, 1);
+  context.totalCandlesRef.current = 5000 + data.length;
+  context.settleClosedTrades = context.settleReal;
+  const sample = { start: { symbol: "GBP/USD", timeframe: "H4", interval: "4h", start_bar_time: data[0].time, initial_balance: 10000 },
+    endIndex: 5000 + data.length, automatic: { cursorTime: data[0].time, contextTime: data[0].time } };
+  const { completed, starts } = installRestartHarness(context, sample);
+  await context.runBulk(Infinity);
+  const clean = (trades) => JSON.parse(JSON.stringify(trades, (key, value) => ["id", "parentTradeId", "fundedBy", "fundedChildId"].includes(key) ? undefined : value));
+  const first = clean(context.tradesRef.current), firstBalance = context.balanceRef.current;
+  const settledBalance = firstBalance + context.tradesRef.current.filter((trade) => trade.status === "Open")
+    .reduce((sum, trade) => sum + management.closeTradeRecord(trade, data.at(-1).close, "Forced Market Close", data.at(-1).time).pnl, 0);
+  assert.ok(first.length > 10);
+  const preceding = Array.from({ length: 10 }, (_, i) => ({ ...data[0], time: data[0].time - (10 - i) * 300 }));
+  context.fullDataRef.current = [...preceding, ...data];
+  context.loadedOffsetRef.current -= preceding.length;
+  context.currentIndexRef.current += preceding.length;
+  context.totalCandlesRef.current += 500; // Server metadata grew; comparisons must not use newer bars.
+  const source = context.fullDataRef.current;
+  await context.restart();
+  assert.equal(context.fullDataRef.current, source);
+  assert.equal(context.currentIndexRef.current, 11);
+  assert.equal(context.balanceRef.current, 10000);
+  assert.equal(context.tradesRef.current.length, 0);
+  assert.equal(context.isAutomaticTradingEnabled, true);
+  assert.equal(context.restartingBacktestRef.current, false);
+  assert.equal(completed[0].ending_balance, settledBalance);
+  assert.equal(completed[0].cursor_bar_index, sample.endIndex - 1);
+  assert.equal(context.pendingSessionStartRef.current.start_bar_index, 5000);
+  const secondSession = context.clientSessionIdRef.current;
+  assert.notEqual(secondSession, "original-session");
+  await context.runBulk(Infinity);
+  assert.deepEqual(clean(context.tradesRef.current), first);
+  assert.equal(context.balanceRef.current, firstBalance);
+  assert.equal(context.loadedOffsetRef.current + context.currentIndexRef.current, sample.endIndex);
+  assert.equal(starts.at(-1).client_session_id, secondSession);
+  context.step();
+  assert.equal(context.loadedOffsetRef.current + context.currentIndexRef.current, sample.endIndex);
+  await context.restart();
+  assert.equal(completed.length, 2);
+  assert.notEqual(context.clientSessionIdRef.current, secondSession);
+  context.automaticTradingConfigRef.current.firstOrderUnits = 2468;
+  events.length = 0;
+  await context.runBulk(Infinity);
+  assert.equal(events.find((event) => event.side)?.units, 2468);
+  assert.notDeepEqual(clean(context.tradesRef.current), first);
+  assert.equal(context.fullDataRef.current, source);
+});
+
+test("restart settles open positions at the revealed candle before saving and retains settlement on failure", async () => {
+  const data = [100, 110, 999].map((price, i) => ({ time: i + 1, open: price, close: price, high: price, low: price }));
+  const { context, events } = pageHarness(data, 2, [
+    { id: "long", status: "Open", type: "Buy", units: 10, entry: 100, entryTime: 1 },
+    { id: "short", status: "Open", type: "Sell", units: 5, entry: 100, entryTime: 1 },
+  ]);
+  const sample = { start: { start_bar_time: 1, initial_balance: 10000 }, endIndex: 5003 };
+  const { completed } = installRestartHarness(context, sample);
+  const complete = context.persistRef.current.completeSession;
+  context.persistRef.current.completeSession = (payload) => {
+    assert.equal(events.filter((event) => event.close_reason).length, 2);
+    assert.ok(context.tradesRef.current.every((trade) => trade.status === "Closed"));
+    complete(payload);
+  };
+  context.persistRef.current.endBatch = async () => { throw Error("offline"); };
+  await context.restart();
+  assert.equal(completed[0].ending_balance, 10050);
+  assert.equal(completed[0].mark_price, 110);
+  assert.equal(context.balanceRef.current, 10050);
+  assert.equal(context.currentIndexRef.current, 2);
+  assert.equal(context.tradesRef.current.length, 2);
+  for (const event of events.filter((event) => event.close_reason)) {
+    assert.equal(event.price, 110);
+    assert.equal(event.bar_time, 2);
+    assert.equal(event.bar_index, 5001);
+    assert.equal(event.close_reason, "Forced Market Close");
+  }
+  context.persistRef.current.endBatch = async () => {};
+  await context.restart();
+  assert.equal(events.filter((event) => event.close_reason).length, 2);
+  assert.equal(completed.at(-1).ending_balance, 10050);
+  assert.equal(context.balanceRef.current, 10000);
+  assert.equal(context.tradesRef.current.length, 0);
+  assert.equal(context.currentIndexRef.current, 1);
+});
+
+test("restart is locked while saving, retains results on save failure, and ignores a stale market", async () => {
+  const { context } = pageHarness(fixture, 100, [{ id: "kept", status: "Closed", pnl: 50 }]);
+  const sample = { start: { start_bar_time: fixture[20].time, initial_balance: 10000 }, endIndex: 5000 + fixture.length };
+  const { messages, completed } = installRestartHarness(context, sample);
+  const originalTrades = context.tradesRef.current;
+  let release;
+  context.persistRef.current.endBatch = () => new Promise((resolve) => { release = resolve; });
+  const pending = context.restart();
+  assert.equal(context.restartingBacktestRef.current, true);
+  context.step();
+  await context.restart();
+  assert.equal(context.currentIndexRef.current, 100);
+  assert.equal(completed.length, 1);
+  context.dataSessionRef.current++;
+  release(); await pending;
+  assert.deepEqual(context.tradesRef.current, originalTrades);
+  assert.equal(context.currentIndexRef.current, 100);
+  context.persistRef.current.endBatch = async () => { throw Error("offline"); };
+  await context.restart();
+  assert.deepEqual(context.tradesRef.current, originalTrades);
+  assert.equal(context.restartingBacktestRef.current, false);
+  assert.ok(messages.at(-1).includes("尚未重置"));
+  context.persistRef.current.endBatch = async () => {};
+  context.isAutomaticTradingEnabled = false;
+  await context.restart();
+  assert.equal(context.currentIndexRef.current, 21);
+  assert.equal(context.isAutomaticTradingEnabled, false);
 });
 
 test("batch and manual stepping produce identical trades, balances and ordered persistence on paged history", async () => {

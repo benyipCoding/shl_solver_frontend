@@ -331,6 +331,14 @@ export function MarketMasterPage() {
   const pendingSessionStartRef = useRef<BacktestSessionStartPayload | null>(
     null
   );
+  // Times survive history prepends; the right edge stays fixed across parameter trials.
+  const backtestSampleRef = useRef<{
+    start: BacktestSessionStartPayload;
+    endIndex: number;
+    automatic?: { cursorTime: number; contextTime: Time };
+  } | null>(null);
+  const restartingBacktestRef = useRef(false);
+  const [isRestartingBacktest, setIsRestartingBacktest] = useState(false);
   const replayDetailRef = useRef<any>(null);
   const pendingReplayRef = useRef<any>(null);
   const replayEventsRef = useRef<any[]>([]);
@@ -682,7 +690,12 @@ export function MarketMasterPage() {
     automaticTradingConfigRef.current = config;
     try { localStorage.setItem(AUTOMATIC_TRADING_STORAGE_KEY, JSON.stringify(config)); } catch { /* Optional browser preference. */ }
     if (!isAutomaticTradingEnabled) {
-      const startTime = getAutomaticPenStartTime() ?? chartRef.current?.timeScale().getVisibleRange()?.from;
+      const startTime = backtestSampleRef.current?.automatic?.contextTime ?? getAutomaticPenStartTime() ?? chartRef.current?.timeScale().getVisibleRange()?.from;
+      const sample = backtestSampleRef.current;
+      const candle = fullDataRef.current[currentIndexRef.current - 1];
+      if (sample && !sample.automatic && candle) {
+        sample.automatic = { cursorTime: candle.time, contextTime: startTime ?? fullDataRef.current[0].time };
+      }
       toggleAutomaticTrading(startTime);
     }
     setIsAutomaticConfigOpen(false);
@@ -1494,7 +1507,7 @@ export function MarketMasterPage() {
   );
 
   shiftChartWindowRef.current = (range) => {
-    if (preserveVisibleRangeRef.current || chartViewportSyncRef.current || automaticRunRef.current || isDataLoadingRef.current) return;
+    if (restartingBacktestRef.current || preserveVisibleRangeRef.current || chartViewportSyncRef.current || automaticRunRef.current || isDataLoadingRef.current) return;
     const window = chartWindowRef.current;
     const count = isBacktestModeRef.current ? currentIndexRef.current : fullDataRef.current.length;
     if (!((range.from < CHART_WINDOW_EDGE && window.from > 0) ||
@@ -1507,7 +1520,7 @@ export function MarketMasterPage() {
     preserveVisibleRangeRef.current = true;
     requestAnimationFrame(() => {
       try {
-        if (session !== dataSessionRef.current || chart !== chartRef.current || chartWindowRef.current !== window || automaticRunRef.current) return;
+        if (restartingBacktestRef.current || session !== dataSessionRef.current || chart !== chartRef.current || chartWindowRef.current !== window || automaticRunRef.current) return;
         syncDisplayedData(fullDataRef.current, currentIndexRef.current, isBacktestModeRef.current, false, { focusRange });
         updateAutomaticSegmentsAfterCandle();
       } finally { preserveVisibleRangeRef.current = false; }
@@ -1685,7 +1698,7 @@ export function MarketMasterPage() {
   };
 
   const loadOlderHistory = useCallback(async () => {
-    if (automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
+    if (restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
     const offset = loadedOffsetRef.current;
     if (offset <= 0) return;
     const oldestTime = fullDataRef.current[0]?.time;
@@ -1748,7 +1761,7 @@ export function MarketMasterPage() {
   }, [applyCandlePage, fetchSymbolPage]);
 
   const loadFutureHistory = useCallback(async () => {
-    if (isDataLoadingRef.current || historyLoadingRef.current) return;
+    if (restartingBacktestRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
     const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
     const total = totalCandlesRef.current;
     if (total > 0 && loadedEnd >= total) return;
@@ -1908,6 +1921,7 @@ export function MarketMasterPage() {
     let cancelled = false;
 
     const clearChartData = () => {
+      backtestSampleRef.current = null;
       disableAutomaticDrawings();
       fullDataRef.current = [];
       loadedMarketRef.current = { symbol: "", timeframe: "" };
@@ -1959,6 +1973,7 @@ export function MarketMasterPage() {
     const applyLoadedMarketData = applyCandlePage;
 
     const loadMarketData = async () => {
+      backtestSampleRef.current = null;
       dataSessionRef.current += 1;
       const session = dataSessionRef.current;
       setIsPlaying(false);
@@ -2151,6 +2166,7 @@ export function MarketMasterPage() {
       const enterBacktest = async () => {
         const replayDetail = replayDetailRef.current;
         if (replayDetail) {
+          backtestSampleRef.current = null;
           const replayTimeline = resolveReplayTimeline(replayDetail);
           const startUnix = replayTimeline.startUnix;
           const hasStart = findCandleIndexByTime(
@@ -2357,6 +2373,7 @@ export function MarketMasterPage() {
             loadedOffsetRef.current + currentIndexRef.current - 1,
           initial_balance: INITIAL_BACKTEST_BALANCE,
         };
+        backtestSampleRef.current = { start: { ...pendingSessionStartRef.current }, endIndex: totalCandlesRef.current };
       };
 
       void enterBacktest();
@@ -2366,6 +2383,7 @@ export function MarketMasterPage() {
     }
 
     if (wasBacktestModeRef.current) {
+      backtestSampleRef.current = null;
       if (!isReplayModeRef.current) {
         // 无下单则从未 startSession，completeSession 会因无 publicId 直接跳过
         requestBacktestCompletion();
@@ -3720,12 +3738,18 @@ export function MarketMasterPage() {
 
   // ================= 业务逻辑 =================
   const handleNextCandle = useCallback(() => {
+    if (restartingBacktestRef.current) return;
     const currentIndex = currentIndexRef.current;
+    const sampleEnd = backtestSampleRef.current?.endIndex ?? totalCandlesRef.current;
+    if (!isReplayModeRef.current && sampleEnd > 0 && loadedOffsetRef.current + currentIndex >= sampleEnd) {
+      setIsPlaying(false);
+      return;
+    }
     if (isDataLoadingRef.current || !seriesRef.current) return;
     const replayEndCurrent = replayEndCurrentIndexRef.current;
     const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
     const hasMoreFuture =
-      totalCandlesRef.current > 0 && loadedEnd < totalCandlesRef.current;
+      sampleEnd > 0 && loadedEnd < sampleEnd;
     const remaining = fullDataRef.current.length - currentIndex;
     if (!automaticRunRef.current && remaining <= KLINE_FORWARD_PREFETCH_BARS && hasMoreFuture) {
       void loadFutureHistoryRef.current();
@@ -3927,7 +3951,7 @@ export function MarketMasterPage() {
   ]);
 
   const handleRunAutomaticTrading = useCallback(async (limit: number) => {
-    if (!isAutomaticTradingEnabled || !automaticAccessRef.current || automaticRunRef.current || historyLoadingRef.current) return;
+    if (restartingBacktestRef.current || !isAutomaticTradingEnabled || !automaticAccessRef.current || automaticRunRef.current || historyLoadingRef.current) return;
     setIsPlaying(false);
     const book = createAutomaticTradeBook(tradesRef.current);
     const token = { cancelled: false, suppress: true, session: dataSessionRef.current, controller: new AbortController(), book };
@@ -3942,7 +3966,8 @@ export function MarketMasterPage() {
     };
     let peak = startBalance + floating();
     let drawdown = 0;
-    let progress = { processed: 0, target: Math.max(0, Math.min(limit, totalCandlesRef.current - loadedOffsetRef.current - currentIndexRef.current)), phase: "running" as const };
+    const sampleEnd = backtestSampleRef.current?.endIndex ?? totalCandlesRef.current;
+    let progress = { processed: 0, target: Math.max(0, Math.min(limit, sampleEnd - loadedOffsetRef.current - currentIndexRef.current)), phase: "running" as const };
     let status: AutomaticRunView["status"] = "done";
     let message = "本次运行完成，可查看交易结果";
     const cancelled = () => token.cancelled || token.session !== dataSessionRef.current || !automaticAccessRef.current;
@@ -3952,7 +3977,7 @@ export function MarketMasterPage() {
         limit,
         cursor: () => loadedOffsetRef.current + currentIndexRef.current,
         available: () => loadedOffsetRef.current + fullDataRef.current.length,
-        total: () => totalCandlesRef.current,
+        total: () => sampleEnd,
         advance: () => {
           handleNextCandle();
           const equity = balanceRef.current + floating();
@@ -4006,6 +4031,7 @@ export function MarketMasterPage() {
     else handleNextCandle();
   }, [isAutomaticTradingEnabled, handleRunAutomaticTrading, handleNextCandle]);
   const handlePlaybackChange = useCallback((next: boolean | ((playing: boolean) => boolean)) => {
+    if (restartingBacktestRef.current) return;
     if (automaticRunRef.current) { automaticRunRef.current.cancelled = true; automaticRunRef.current.controller.abort(); return; }
     const playing = typeof next === "function" ? next(isPlaying) : next;
     if (isAutomaticTradingEnabled && playing) void handleRunAutomaticTrading(Number.POSITIVE_INFINITY);
@@ -4018,7 +4044,7 @@ export function MarketMasterPage() {
     const handleAutomaticDrawShortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
-        isAutomaticConfigOpen || automaticRun !== null ||
+        restartingBacktestRef.current || isAutomaticConfigOpen || automaticRun !== null ||
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
         target?.tagName === "SELECT"
@@ -4063,7 +4089,7 @@ export function MarketMasterPage() {
     const handleBacktestShortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
-        isAutomaticConfigOpen || automaticRun !== null ||
+        restartingBacktestRef.current || isAutomaticConfigOpen || automaticRun !== null ||
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
         target?.tagName === "SELECT" ||
@@ -4082,7 +4108,7 @@ export function MarketMasterPage() {
         ? replayAwaitingFuture
           ? Number.POSITIVE_INFINITY
           : replayBounds.endCurrent
-        : totalCandles;
+        : backtestSampleRef.current?.endIndex ?? totalCandles;
       const canAdvancePlayback =
         playbackLimit > 0 &&
         (isReplayMode
@@ -4541,6 +4567,63 @@ export function MarketMasterPage() {
     applyReplayWindow(detail, { restarted: true });
   }, [applyReplayWindow]);
 
+  const handleRestartBacktest = useCallback(async () => {
+    const sample = backtestSampleRef.current;
+    if (!sample || !automaticAccessRef.current || !isBacktestModeRef.current || isReplayModeRef.current ||
+      automaticRunRef.current || restartingBacktestRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
+    // The first strategy activation is the comparison baseline, even if the user
+    // inspected/stepped the random sample before enabling automatic entries.
+    const startTime = sample.automatic?.cursorTime ?? sample.start.start_bar_time;
+    const startIndex = exactCandleIndex(fullDataRef.current, startTime);
+    if (startIndex < 0) { toast.error("当前行情已不包含原样本起点，请重新进入回测"); return; }
+    const session = dataSessionRef.current;
+    const pendingStart = pendingSessionStartRef.current;
+    const completionRequested = backtestCompletionRequestedRef.current;
+    const resumeAutomatic = isAutomaticTradingEnabled;
+    restartingBacktestRef.current = true;
+    setIsRestartingBacktest(true);
+    setIsPlaying(false);
+    try {
+      forceCloseAllOpenTrades();
+      requestBacktestCompletion();
+      await persistRef.current.endBatch();
+    } catch (error) {
+      if (session === dataSessionRef.current && backtestSampleRef.current === sample) {
+        backtestCompletionRequestedRef.current = completionRequested;
+        pendingSessionStartRef.current = pendingStart;
+        toast.error(`上一轮记录保存失败，尚未重置：${error instanceof Error ? error.message : "请检查网络"}`);
+      }
+      restartingBacktestRef.current = false;
+      setIsRestartingBacktest(false);
+      return;
+    }
+    try {
+      if (session !== dataSessionRef.current || backtestSampleRef.current !== sample || !isBacktestModeRef.current || isReplayModeRef.current || !seriesRef.current) return;
+      resetBacktestAccount(sample.start.initial_balance);
+      disableAutomaticDrawings();
+      resetSupportResistance();
+      stateRef.current.lastHoveredTime = null;
+      currentIndexRef.current = startIndex + 1;
+      setCurrentIndex(startIndex + 1);
+      setAutomaticRun(null);
+      const clientId = crypto.randomUUID();
+      clientSessionIdRef.current = clientId;
+      backtestCompletionRequestedRef.current = false;
+      pendingSessionStartRef.current = { ...sample.start, client_session_id: clientId,
+        start_bar_time: startTime, cursor_bar_time: startTime,
+        start_bar_index: loadedOffsetRef.current + startIndex, cursor_bar_index: loadedOffsetRef.current + startIndex };
+      syncDisplayedData(fullDataRef.current, startIndex + 1, true, true);
+      if (resumeAutomatic) toggleAutomaticTrading(sample.automatic?.contextTime);
+      toast.success("已回到同一样本起点，可调整策略参数后再次播放");
+    } catch (error) {
+      toast.error(`回测重置失败：${error instanceof Error ? error.message : "请重新加载"}`);
+    } finally {
+      restartingBacktestRef.current = false;
+      setIsRestartingBacktest(false);
+    }
+  }, [isAutomaticTradingEnabled, forceCloseAllOpenTrades, requestBacktestCompletion, resetBacktestAccount, disableAutomaticDrawings,
+    resetSupportResistance, syncDisplayedData, toggleAutomaticTrading]);
+
   const restoreReplayDetail = useCallback((detail) => {
     setIsBacktestHistoryOpen(false);
     setReplayingSessionId(detail.public_id);
@@ -4889,6 +4972,11 @@ export function MarketMasterPage() {
 
   return (
     <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden bg-gray-950 font-sans text-gray-200">
+      {isRestartingBacktest && <div role="dialog" aria-modal="true" aria-label="正在重置回测" tabIndex={-1}
+        ref={(element) => element?.focus()} onKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); }}
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60">
+        <div role="status" className="rounded-xl border border-gray-700 bg-gray-900 px-6 py-5 text-sm text-gray-200">正在保存上一轮结果并重置回测…</div>
+      </div>}
       {isAutomaticConfigOpen && canUseAutomaticTrading && <AutomaticTradingConfigModal config={automaticTradingConfig} enabled={isAutomaticTradingEnabled} balance={balance}
         onApply={applyAutomaticTradingConfig} onClose={() => setIsAutomaticConfigOpen(false)} onDisable={() => { if (isAutomaticTradingEnabled) toggleAutomaticTrading(); setIsAutomaticConfigOpen(false); }} />}
       {automaticRun && <AutomaticTradingRunDialog run={automaticRun} onStop={() => { if (automaticRunRef.current) { automaticRunRef.current.cancelled = true; automaticRunRef.current.controller.abort(); } }} onClose={() => setAutomaticRun(null)} />}
@@ -4960,7 +5048,7 @@ export function MarketMasterPage() {
         setIsBacktestMode={setIsBacktestMode}
         onExitBacktest={handleExitBacktest}
         currentIndex={loadedOffset + currentIndex}
-        totalCandles={totalCandles}
+        totalCandles={isBacktestMode && !isReplayMode ? backtestSampleRef.current?.endIndex ?? totalCandles : totalCandles}
         handleNextCandle={handleStepPlayback}
         automaticStepCandles={automaticTradingConfig.stepCandles}
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
@@ -4994,6 +5082,10 @@ export function MarketMasterPage() {
           replayBounds.endCurrent - replayBounds.startCurrent
         )}
         onRestartReplay={handleRestartReplay}
+        onRestartBacktest={handleRestartBacktest}
+        canRestartBacktest={Boolean(backtestSampleRef.current)}
+        isRestartingBacktest={isRestartingBacktest}
+        isAutomaticRunBusy={automaticRun?.status === "running"}
       />
 
       <MarketWorkspace
