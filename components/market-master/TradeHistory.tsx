@@ -18,7 +18,7 @@ type TradeHistoryProps = {
   toggleTradeVisibility: (tradeId: unknown) => void;
   handleCloseMarket: (tradeId: unknown) => void;
   onManageTrade?: (tradeId: unknown) => void;
-  onLocateTrade?: (tradeId: unknown) => void;
+  onLocateTrade?: (tradeId: unknown, endpoint?: "entry" | "exit") => void;
   focusedTradeId?: string | number | null;
   handleAIReview?: (trade?: unknown) => void;
   isMaximized: boolean;
@@ -55,9 +55,13 @@ export const TradeHistory = ({
   const [filters, setFilters] = useState<TradeHistoryFilters>({ ...DEFAULT_TRADE_HISTORY_FILTERS });
   const filteredTrades = useMemo(() => filterTradeHistory(trades, filters, currentPrice), [trades, filters, currentPrice]);
   const hasFilters = Object.values(filters).some((value) => value !== "all");
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(filteredTrades.length / 50));
+  const activePage = Math.min(page, pageCount - 1);
+  const pageTrades = filteredTrades.slice(activePage * 50, (activePage + 1) * 50);
   const filterSelect = (key: keyof TradeHistoryFilters, label: string, options: [string, string][]) => (
     <select aria-label={label} value={filters[key]}
-      onChange={(event) => setFilters({ ...filters, [key]: event.target.value })}
+      onChange={(event) => { setFilters({ ...filters, [key]: event.target.value }); setPage(0); }}
       title={key === "pnl" ? "持仓按浮动盈亏筛选，已平仓按已结盈亏筛选" : label}
       className={`max-w-full cursor-pointer rounded border px-1.5 py-1 text-xs outline-none focus:border-blue-500 ${filters[key] !== "all" ? "border-blue-500/50 bg-blue-950 text-blue-200" : "border-gray-700 bg-gray-900 text-gray-300"}`}>
       {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
@@ -107,7 +111,7 @@ export const TradeHistory = ({
         <span>交易记录 <span className="ml-1 text-xs text-gray-500">{filteredTrades.length} / {trades.length}</span><span className="ml-3 hidden text-xs text-gray-500 lg:inline">点击订单定位图表</span></span>
 
         <div className="flex items-center gap-4">
-          {hasFilters && <button type="button" onClick={(event) => { event.stopPropagation(); setFilters({ ...DEFAULT_TRADE_HISTORY_FILTERS }); }} className="text-xs text-blue-400 hover:text-blue-300">清除筛选</button>}
+          {hasFilters && <button type="button" onClick={(event) => { event.stopPropagation(); setFilters({ ...DEFAULT_TRADE_HISTORY_FILTERS }); setPage(0); }} className="text-xs text-blue-400 hover:text-blue-300">清除筛选</button>}
           {/* <button
             onClick={(e) => {
               e.stopPropagation();
@@ -135,7 +139,7 @@ export const TradeHistory = ({
                 {trades.length ? "没有符合筛选条件的订单" : "暂无交易数据"}
               </div>
             )}
-            {filteredTrades.map((trade) => {
+            {pageTrades.map((trade) => {
               const isOpen = trade.status === "Open";
               const currentPnl = tradeHistoryPnl(trade, currentPrice);
               return (
@@ -207,6 +211,7 @@ export const TradeHistory = ({
                       </dd>
                     </div>
                   </dl>
+                  {!isOpen && <button type="button" onClick={() => onLocateTrade?.(trade.id, "exit")} className="mt-2 text-xs text-blue-400 hover:text-blue-300">定位平仓 · {trade.closePrice?.toFixed(priceDecimals)}</button>}
                   {isOpen && (
                     <div className="mt-3 flex items-center justify-end gap-3 border-t border-gray-800 pt-3">
                       <button
@@ -264,7 +269,7 @@ export const TradeHistory = ({
                   </td>
                 </tr>
               )}
-              {filteredTrades.map((trade) => {
+              {pageTrades.map((trade) => {
                 const isOpen = trade.status === "Open";
                 const currentPnl = tradeHistoryPnl(trade, currentPrice);
                 return (
@@ -311,7 +316,7 @@ export const TradeHistory = ({
                         : "-"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-gray-400">
-                      {isOpen ? "-" : trade.closePrice?.toFixed(priceDecimals) ?? "-"}
+                      {isOpen ? "-" : <button type="button" onClick={() => onLocateTrade?.(trade.id, "exit")} title="定位平仓位置" className="text-blue-300 underline decoration-dotted underline-offset-4 hover:text-blue-200">{trade.closePrice?.toFixed(priceDecimals) ?? "-"}</button>}
                     </td>
                     <td
                       className={`px-4 py-2 text-right font-mono font-bold ${
@@ -375,6 +380,11 @@ export const TradeHistory = ({
           </table>
         </div>
       )}
+      {isBottomPanelOpen && pageCount > 1 && <div className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-800 px-3 py-1.5 text-xs text-gray-400">
+        <span>每页 50 条 · {activePage + 1} / {pageCount}</span>
+        <button type="button" disabled={activePage === 0} onClick={() => setPage(activePage - 1)} className="rounded border border-gray-700 px-2 py-1 disabled:opacity-30">上一页</button>
+        <button type="button" disabled={activePage + 1 >= pageCount} onClick={() => setPage(activePage + 1)} className="rounded border border-gray-700 px-2 py-1 disabled:opacity-30">下一页</button>
+      </div>}
     </div>
   );
 };

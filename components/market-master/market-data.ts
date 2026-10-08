@@ -261,6 +261,18 @@ export const mergeCandleData = (
   return [...merged.values()].sort((a, b) => a.time - b.time);
 };
 
+/** Forward pages are already sorted. Keep overlap values and append only unseen bars. */
+export function appendCandlePage(existing: NormalizedCandle[], page: readonly NormalizedCandle[]) {
+  const last = existing[existing.length - 1]?.time ?? -Infinity;
+  let added = 0;
+  for (const candle of page) {
+    if (candle.time <= last) continue;
+    existing.push(candle);
+    added++;
+  }
+  return added;
+}
+
 export const windowsOverlapOrTouch = (
   leftOffset: number,
   leftLength: number,

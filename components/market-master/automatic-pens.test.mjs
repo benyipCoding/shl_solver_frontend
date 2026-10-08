@@ -196,7 +196,7 @@ test("confirmed pens remain stable as future candles arrive and inputs stay unch
   assert.deepEqual(data, original);
 });
 
-function hookHarness(initialData, visibleRange) {
+function hookHarness(initialData, visibleRange, source) {
   let data = initialData;
   const drawn = new Set();
   const viewportListeners = new Set();
@@ -204,6 +204,7 @@ function hookHarness(initialData, visibleRange) {
   const stats = { reads: 0, writes: 0, creates: 0, count: 0 };
   const timeScale = {
     getVisibleRange: () => visibleRange,
+    logicalToCoordinate: (index) => index * 10,
     subscribeVisibleTimeRangeChange: (listener) => viewportListeners.add(listener),
     unsubscribeVisibleTimeRangeChange: (listener) => viewportListeners.delete(listener),
   };
@@ -215,8 +216,10 @@ function hookHarness(initialData, visibleRange) {
     react: { useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, (count) => { stats.count = count; }] },
     "lightweight-charts": { LineSeries: {} },
     "@/components/market-master/automatic-pens": pensModule,
+    "@/components/market-master/chart-window": loadModule("./chart-window.ts"),
     "@/components/market-master/automatic-pens-primitive": {
       AutomaticPensPrimitive: class {
+        constructor(project) { stats.project = project; }
         data = [];
         setPens(pens) {
           stats.writes++;
@@ -228,8 +231,9 @@ function hookHarness(initialData, visibleRange) {
       },
     },
   });
-  const hook = runHook({ chartRef: { current: chart }, seriesRef: { current: {
+  const hook = runHook({ source, chartRef: { current: chart }, seriesRef: { current: {
     data: () => { stats.reads++; return data; },
+    dataByIndex: (index) => data[index],
     subscribeDataChanged: (listener) => dataListeners.add(listener),
     unsubscribeDataChanged: (listener) => dataListeners.delete(listener),
     attachPrimitive: (primitive) => { stats.creates++; drawn.add(primitive); },
@@ -252,6 +256,43 @@ test("enabled drawing can start with zero pens and later acquire its first pen",
   harness.setData(candles([100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
+});
+
+test("bounded chart swaps preserve full pen geometry after a suppressed bulk advance", () => {
+  const data = waveCandles(20000);
+  let count = 10;
+  const h = hookHarness(data.slice(0, count), { from: 1, to: 10 }, () => ({ candles: data, count }));
+  h.hook.drawAutomaticPens();
+  const writes = h.stats.writes;
+  for (let i = count; i < data.length; i++) {
+    count = i + 1;
+    h.hook.updateAutomaticPensAfterCandle(data[i], false);
+  }
+  assert.equal(h.stats.writes, writes);
+  h.replaceData(data.slice(-5000));
+  assert.equal(h.stats.project(data[0].time), -150000); // The long-pen endpoint may be outside setData.
+  h.pan({ from: 19000, to: 20000 });
+  const latest = h.legs();
+  assert.ok(latest.length > 0);
+  h.replaceData(data.slice(0, 5000));
+  h.pan({ from: 1, to: 1000 });
+  assert.ok(h.legs().length > 0);
+  assert.ok(h.legs()[0][0].time < 1000);
+  h.replaceData(data.slice(-5000));
+  h.pan({ from: 19000, to: 20000 });
+  assert.deepEqual(h.legs(), latest);
+  assert.equal(h.stats.reads, 1);
+});
+
+test("retaining six strategy pens preserves endpoints and cumulative formation counts", () => {
+  const full = pensModule.createAutomaticPenGenerator();
+  const bounded = pensModule.createAutomaticPenGenerator(undefined, 6);
+  for (const candle of waveCandles(20000)) {
+    full.append(candle); bounded.append(candle);
+    assert.equal(bounded.totalPens, full.pens.length);
+    assert.ok(bounded.pens.length <= 6);
+    assert.deepEqual(plain(bounded.pens), plain(full.pens.slice(-6)));
+  }
 });
 
 test("incremental drawing adds the first shallow pen when its fifth candle arrives", () => {

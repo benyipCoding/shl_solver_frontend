@@ -229,7 +229,16 @@ export const findPointByTime = <T extends { time: Time }>(
   time: Time | null | undefined
 ) => {
   if (!data?.length || time == null) return null;
-  return data.find((point) => point.time === time) ?? null;
+  if (typeof time !== "number") return data.find((point) => point.time === time) ?? null;
+  let from = 0, to = data.length - 1;
+  while (from <= to) {
+    const middle = Math.floor((from + to) / 2);
+    const value = data[middle].time as number;
+    if (value === time) return data[middle];
+    if (value < time) from = middle + 1;
+    else to = middle - 1;
+  }
+  return null;
 };
 
 export const applySyncedCrosshair = (

@@ -3,6 +3,7 @@ import { AUTOMATIC_PENS_COLOR, type AutomaticPen, type AutomaticPenPoint } from 
 
 /** A bounded overlay avoids LineSeries.setData rebuilding the chart time axis. */
 export class AutomaticPensPrimitive implements ISeriesPrimitive<Time> {
+  constructor(private projectTime?: (time: Time) => number | null) {}
   private chart: IChartApi | null = null;
   private series: SeriesAttachedParameter<Time>["series"] | null = null;
   private requestUpdate: (() => void) | null = null;
@@ -13,7 +14,7 @@ export class AutomaticPensPrimitive implements ISeriesPrimitive<Time> {
       draw: (target) => target.useMediaCoordinateSpace(({ context }) => {
         if (!this.chart || !this.series || !this.pens.length) return;
         const coordinate = (point: AutomaticPenPoint) => {
-          const x = this.chart!.timeScale().timeToCoordinate(point.time);
+          const x = this.projectTime?.(point.time) ?? this.chart!.timeScale().timeToCoordinate(point.time);
           const y = this.series!.priceToCoordinate(point.price);
           return x === null || y === null ? null : { x, y };
         };

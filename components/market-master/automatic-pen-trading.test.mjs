@@ -21,6 +21,8 @@ const pens = loadModule("./automatic-pens.ts");
 const trading = loadModule("./automatic-pen-trading.ts", { "./automatic-pens": pens });
 const management = loadModule("./trade-management.ts");
 const marketData = loadModule("./market-data.ts");
+const chartWindow = loadModule("./chart-window.ts");
+const bookModule = loadModule("./automatic-trade-book.ts");
 const replay = loadModule("./backtest-replay.ts", { "./trade-management": management });
 const persistence = loadModule("./backtest-persistence.ts");
 const configModule = loadModule("./automatic-trading-config.ts");
@@ -329,6 +331,8 @@ function pageHarness(data, index, initialTrades = []) {
   const tracker = trading.createAutomaticPenTradeTracker(data.slice(0, index));
   let nextId = 0;
   const context = {
+    ...chartWindow, ...bookModule,
+    chartWindowRef: { current: { from: 0, to: data.length } }, indicatorOffsetRef: { current: 0 }, fullEmaDataRef: { current: {} },
     KLINE_FORWARD_PREFETCH_BARS: 400,
     currentIndexRef: { current: index }, isDataLoadingRef: { current: false },
     fullDataRef: { current: data }, loadedOffsetRef: { current: 5000 }, totalCandlesRef: { current: 0 },
@@ -358,10 +362,11 @@ function pageHarness(data, index, initialTrades = []) {
     toast: { error: (message) => assert.fail(message) },
   };
   context.commitTrades = (next) => { context.tradesRef.current = next; };
-  context.settleClosedTrades = (next) => { events.push("settle"); context.tradesRef.current = next; };
+  context.settleClosedTrades = (next) => { events.push("settle"); context.commitTrades(next); };
   vm.createContext(context);
   vm.runInContext(transpile(`globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
   context.placeOrderRef.current = context.placeOrder;
+  context.commitTrades = context.commitReal;
   context.handleNextCandle = context.step;
   return { context, events };
 }
@@ -527,6 +532,23 @@ test("touching the level or piercing it only with a wick does not trigger the fa
       assert.equal(context.tradesRef.current[0].status, "Open");
     }
   }
+});
+
+test("viewport replacements preserve live signal and ATR state, including activation from a historical window", () => {
+  const index = at("2021-08-01T20:00:00");
+  const viewportSyncRef = { current: false };
+  const h = hookHarness(fixture.slice(0, 20));
+  h.render({ viewportSyncRef, source: () => ({ candles: fixture, count: index }) });
+  h.hook.toggleAutomaticTrading(fixture[0].time);
+  const reference = trading.createAutomaticPenTradeTracker(fixture.slice(0, index));
+  const reads = h.reads;
+  for (let i = index; i < fixture.length; i++) {
+    viewportSyncRef.current = true;
+    h.replace(fixture.slice(5, 10));
+    viewportSyncRef.current = false;
+    assert.deepEqual(plain(h.hook.advanceAutomaticTrading(fixture[i])), plain(reference.advanceEvent(fixture[i])));
+  }
+  assert.equal(h.reads, reads);
 });
 
 test("both sides reduce half only at their seventh pen, persist and replay the fill, then manage the remainder", () => {
@@ -783,4 +805,85 @@ test("actual play-to-end loads every future page and ends at 48085 / 48085", asy
   assert.equal(reports.at(-1).processed, total - offset - start);
   assert.equal(reports.at(-1).processed, reports.at(-1).target);
   assert.equal(context.automaticRunRef.current, null);
+});
+
+test("keeping closed fills outside the execution loop preserves every trade, ordered event and balance", async () => {
+  const data = Array.from({ length: 20000 }, (_, i) => ({ ...fixture[i % fixture.length], time: fixture[i % fixture.length].time + Math.floor(i / fixture.length) * 10000000 }));
+  const manual = pageHarness(data, 1), batch = pageHarness(data, 1);
+  for (const { context } of [manual, batch]) {
+    context.settleClosedTrades = context.settleReal;
+    context.totalCandlesRef.current = 5000 + data.length;
+  }
+  manual.context.automaticRunRef.current = { suppress: true }; // original execution scans the full ledger
+  while (manual.context.currentIndexRef.current < data.length) manual.context.step();
+  let peakActive = 0;
+  const step = batch.context.handleNextCandle;
+  batch.context.handleNextCandle = () => {
+    step();
+    peakActive = Math.max(peakActive, batch.context.tradesRef.current.length);
+    assert.ok(batch.context.tradesRef.current.every((trade) => trade.status === "Open"));
+  };
+  await batch.context.runBulk(10000);
+  await batch.context.runBulk(Infinity); // Reopen the journal with prior fills and funding metadata.
+  assert.deepEqual(plain(batch.context.tradesRef.current), plain(manual.context.tradesRef.current));
+  assert.deepEqual(batch.events, manual.events);
+  assert.equal(batch.context.balanceRef.current, manual.context.balanceRef.current);
+  assert.ok(batch.context.tradesRef.current.length > peakActive * 10);
+});
+
+test("million-bar display keeps every series bounded and historical navigation leaves the strategy cursor alone", () => {
+  const data = Array.from({ length: 1000000 }, (_, i) => ({ time: 1600000000 + i * 300, open: 2000 + i % 100, close: 2001 + i % 100, high: 2002 + i % 100, low: 1999 + i % 100, volume: 10 }));
+  const { context } = pageHarness([], 0);
+  const utils = loadModule("./chart-utils.ts", { "lightweight-charts": {} });
+  let widest = 0, lastRange;
+  const series = () => ({ setData: (rows) => { widest = Math.max(widest, rows.length); assert.ok(rows.length <= chartWindow.CHART_WINDOW_BARS); }, update() {} });
+  const chart = { timeScale: () => ({ getVisibleLogicalRange: () => ({ from: 0, to: 100 }), setVisibleLogicalRange: (range) => { lastRange = range; } }) };
+  Object.assign(context, {
+    ...utils, ...marketData, fullDataRef: { current: data }, currentIndexRef: { current: 900000 },
+    indConfigRef: { current: { emas: [{ id: "ema", period: 20 }], bollinger: { enabled: true, period: 20, standardDeviation: 2 }, macd: { enabled: true, fast: 12, slow: 26, signal: 9, histColors: {} }, volume: {} } },
+    fullBollingerDataRef: { current: [] }, chartViewportSyncRef: { current: false }, chartRef: { current: chart },
+    seriesRef: { current: series() }, volumeSeriesRef: { current: series() }, emaSeriesRefs: { current: { ema: series() } },
+    bollingerSeriesRefs: { current: { middle: series(), upper: series(), lower: series() } },
+    macdHistSeriesRef: { current: series() }, macdLineSeriesRef: { current: series() }, macdSignalSeriesRef: { current: series() },
+    BOLLINGER_LINE_DEFINITIONS: [{ key: "middle" }, { key: "upper" }, { key: "lower" }],
+    toBollingerLineData: (rows, key) => rows.map((row) => ({ time: row.time, value: row[key] })),
+    focusLatestCandles() {}, volumeChartRef: { current: null },
+  });
+  vm.runInContext(transpile(`globalThis.recomputeIndicators = ${pageHandler("recomputeIndicators")}; globalThis.syncDisplayedData = ${pageHandler("syncDisplayedData")};`), context);
+  context.syncDisplayedData(data, 900000, true, true);
+  assert.ok(widest > 0 && widest <= 5000);
+  assert.ok(context.indicatorOffsetRef.current > 890000);
+  assert.ok(context.fullMacdDataRef.current.length < 10000);
+  context.syncDisplayedData(data, 900000, true, false, { focusRange: { from: 90, to: 210 } });
+  assert.equal(context.currentIndexRef.current, 900000);
+  assert.equal(context.chartWindowRef.current.from, 0);
+  assert.deepEqual(plain(lastRange), { from: 90, to: 210 });
+  assert.equal(context.chartViewportSyncRef.current, false);
+});
+
+test("large backtest benchmark", { skip: process.env.BACKTEST_PERF !== "1" }, async () => {
+  for (const count of [100000, 1000000]) {
+    const data = Array.from({ length: count }, (_, i) => ({ ...fixture[i % fixture.length], time: fixture[i % fixture.length].time + Math.floor(i / fixture.length) * 10000000 }));
+    const { context } = pageHarness(data, 1);
+    context.settleClosedTrades = context.settleReal;
+    context.totalCandlesRef.current = 5000 + count;
+    let peakActive = 0, reports = 0;
+    const step = context.handleNextCandle;
+    context.handleNextCandle = () => { step(); peakActive = Math.max(peakActive, context.tradesRef.current.length); };
+    context.setAutomaticRun = () => { reports++; };
+    const started = performance.now();
+    await context.runBulk(Infinity);
+    assert.equal(context.currentIndexRef.current, count);
+    console.log(JSON.stringify({ candles: count, seconds: (performance.now() - started) / 1000, records: context.tradesRef.current.length, peakActive, reports, heapMB: process.memoryUsage().heapUsed / 1024 / 1024 }));
+    if (count === 100000) {
+      const baseline = pageHarness(data, 1);
+      baseline.context.settleClosedTrades = baseline.context.settleReal;
+      baseline.context.automaticRunRef.current = { suppress: true };
+      const before = performance.now();
+      while (baseline.context.currentIndexRef.current < count) baseline.context.step();
+      assert.deepEqual(plain(baseline.context.tradesRef.current), plain(context.tradesRef.current));
+      assert.equal(baseline.context.balanceRef.current, context.balanceRef.current);
+      console.log(JSON.stringify({ fullLedgerScanCandles: count, seconds: (performance.now() - before) / 1000 }));
+    }
+  }
 });

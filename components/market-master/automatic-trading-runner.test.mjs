@@ -120,5 +120,34 @@ test("save failures are reported and do not silently send dependent events after
   client.beginBatch(); client.startSession({});
   for (let i = 0; i < 401; i++) client.recordOpen({ client_trade_id: String(i), bar_time: i, units: 1, price: 1 });
   await assert.rejects(client.endBatch(), /offline/);
+  await assert.rejects(client.waitForCapacity(), /offline/);
   assert.equal(calls, 2);
+});
+
+test("slow persistence bounds pending batches, pauses the runner and resumes without losing events", async () => {
+  const client = persistence.createBacktestPersistClient();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const saved = [];
+  client.configure({ enabled: true, fetchFn: async (url, init) => {
+    if (url.endsWith("/events")) {
+      await gate;
+      saved.push(...JSON.parse(init.body).events);
+    }
+    return new Response(JSON.stringify({ data: { public_id: "session" } }));
+  } });
+  client.startSession({}); client.beginBatch();
+  let cursor = 0;
+  const run = runner.runAutomaticTradingBatch({ limit: 5000, cursor: () => cursor, available: () => 5000, total: () => 5000,
+    advance: () => { client.recordOpen({ client_trade_id: String(cursor), bar_time: cursor++ }); },
+    checkpoint: () => client.waitForCapacity(), loadMore: async () => {}, cancelled: () => false,
+    progress() {}, now: () => 0, yieldToBrowser: async () => {} });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(cursor, 1000); // Four full batches plus one slice at most.
+  assert.equal(saved.length, 0);
+  release();
+  await run;
+  await client.endBatch();
+  assert.equal(cursor, 5000);
+  assert.deepEqual(saved.map((event) => event.bar_time), Array.from({ length: 5000 }, (_, i) => i));
 });

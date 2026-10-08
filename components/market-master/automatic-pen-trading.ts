@@ -44,7 +44,7 @@ export function getAutomaticPenTradeSide(pens: readonly AutomaticPen[]): "Buy" |
 }
 
 export function createAutomaticPenTradeTracker(candles: readonly AutomaticTradingCandle[]) {
-  const generator = createAutomaticPenGenerator();
+  const generator = createAutomaticPenGenerator(undefined, 6);
   let count = 0;
   let trSum = 0;
   let previousClose: number | null = null;
@@ -65,10 +65,10 @@ export function createAutomaticPenTradeTracker(candles: readonly AutomaticTradin
   let lastTime = candles[candles.length - 1]?.time;
   const advanceEvent = (candle: AutomaticTradingCandle): AutomaticPenEvent | null => {
     if (lastTime !== undefined && candle.time <= lastTime) return null;
-    const previousCount = generator.pens.length;
+    const previousCount = generator.totalPens;
     append(candle);
     lastTime = candle.time;
-    if (generator.pens.length === previousCount) return null;
+    if (generator.totalPens === previousCount) return null;
     const index = generator.pens.length - 1;
     return {
       pen: generator.pens[index],

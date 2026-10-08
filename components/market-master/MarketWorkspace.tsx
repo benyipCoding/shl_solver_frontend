@@ -65,7 +65,7 @@ type MarketWorkspaceProps = {
   handleAIReview: (trade?: unknown) => void;
   handleCloseMarket: (tradeId: unknown) => void;
   onManageTrade: (tradeId: unknown) => void;
-  onLocateTrade: (tradeId: unknown) => void;
+  onLocateTrade: (tradeId: unknown, endpoint?: "entry" | "exit") => void;
   focusedTradeId: string | number | null;
   handleCloseAll: () => void;
   openTradeCount: number;

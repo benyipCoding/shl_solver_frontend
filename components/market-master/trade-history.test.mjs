@@ -13,6 +13,7 @@ function load(name) {
   return target.exports;
 }
 const history = load("./trade-history");
+const windowing = load("./chart-window");
 const base = { id: "long", type: "Buy", entry: 100, entryTime: 101, units: 10, sl: 90, tp: 130, status: "Open", pnl: 0 };
 
 test("filters combine status, side and actual displayed P&L without altering the positions", () => {
@@ -48,12 +49,26 @@ test("focus fits a complete trade with context, while open and same-candle trade
 });
 
 const page = ts.createSourceFile("page.tsx", fs.readFileSync(new URL("./MarketMasterPage.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let locate;
+let locate, candleLookup;
 function visit(node) {
   if (ts.isVariableDeclaration(node) && node.name.getText(page) === "handleLocateTrade") locate = node.initializer.arguments[0].getText(page);
+  if (ts.isVariableDeclaration(node) && node.name.getText(page) === "findCandleByTime") candleLookup = node.initializer.getText(page);
   ts.forEachChild(node, visit);
 }
 visit(page);
+
+test("old-order marker lookup on million-bar history uses logarithmic candle reads", () => {
+  let reads = 0;
+  const candles = new Proxy({ length: 1000000 }, { get(target, key) {
+    if (key === "length") return target.length;
+    reads++;
+    return { time: Number(key) + 1, low: 100, high: 110 };
+  } });
+  const context = vm.createContext({ ...windowing });
+  vm.runInContext(transpile(`globalThis.lookup = ${candleLookup}`), context);
+  assert.equal(context.lookup(candles, 1).time, 1);
+  assert.ok(reads <= 22);
+});
 
 test("actual row navigation updates all viewports and highlights the order without advancing or settling trades", () => {
   const calls = [], errors = [], callbacks = [];
@@ -61,7 +76,10 @@ test("actual row navigation updates all viewports and highlights the order witho
     priceScale: () => ({ applyOptions: () => {} }) });
   const position = { ...base, status: "Closed", closeTime: 201, closePrice: 90, pnl: -100 };
   const context = {
-    ...history, chartRef: { current: chart("main") }, subChartRef: { current: chart("macd") }, volumeChartRef: { current: chart("volume") },
+    ...history, ...windowing, chartRef: { current: chart("main") }, subChartRef: { current: chart("macd") }, volumeChartRef: { current: chart("volume") },
+    updateAutomaticSegmentsAfterCandle() {}, syncDisplayedData: (_data, _cursor, _backtest, _fit, { focusRange }) => {
+      for (const name of ["main", "macd", "volume"]) calls.push([name, focusRange]);
+    },
     fullDataRef: { current: Array.from({ length: 1000 }, (_, i) => ({ time: i + 1 })) },
     isDataLoadingRef: { current: false }, automaticRunRef: { current: null }, isBacktestModeRef: { current: true },
     currentIndexRef: { current: 700 }, tradesRef: { current: [position] }, focusedTradeIdRef: { current: null },

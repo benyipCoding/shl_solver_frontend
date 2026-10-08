@@ -55,6 +55,8 @@ import { AUTOMATIC_TRADING_STORAGE_KEY, DEFAULT_AUTOMATIC_TRADING_CONFIG, readAu
 import { AutomaticTradingConfigModal } from "./AutomaticTradingConfigModal";
 import { AutomaticTradingRunDialog, type AutomaticRunView } from "./AutomaticTradingRunDialog";
 import { runAutomaticTradingBatch } from "./automatic-trading-runner";
+import { createAutomaticTradeBook } from "./automatic-trade-book";
+import { CHART_WINDOW_BARS, CHART_WINDOW_EDGE, exactCandleIndex, selectChartWindow, sliceChartWindow, type ChartWindow } from "./chart-window";
 import { AUTOMATIC_PEN_FAILURE_REASON, AUTOMATIC_PEN_SHORT_EXIT_REASON, automaticPenShortExitUnits, planAutomaticPenOrder, resolveAutomaticPenExit, shouldExitAutomaticPenOnFailedBreakout, trailAutomaticPenStops } from "./automatic-pen-risk";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import { usePenMomentum } from "@/hooks/usePenMomentum";
@@ -106,6 +108,7 @@ import {
   estimateUnixAtIndex,
   fetchKlinePage,
   mergeCandleData,
+  appendCandlePage,
   normalizeCandles,
   toVolumePoint,
   buildVolumeData,
@@ -229,10 +232,7 @@ const getTradeMarkerLayout = (barSpacing = 6, sizeMultiplier = CLOSED_TRADE_MARK
 };
 
 const findCandleByTime = (candles: any[] = [], time: unknown) => {
-  for (let index = candles.length - 1; index >= 0; index -= 1) {
-    if (candles[index]?.time === time) return candles[index];
-  }
-  return null;
+  return typeof time === "number" ? candles[exactCandleIndex(candles, time)] ?? null : null;
 };
 
 const findTradeMarkerAtPoint = (
@@ -279,6 +279,7 @@ const findTradeMarkerAtPoint = (
     for (const candidate of candidates) {
       if (!candidate || candidate.time == null) continue;
       const x = timeScale.timeToCoordinate(candidate.time);
+      if (x == null || Math.abs(point.x - x) > hitRadiusX) continue;
       const candle = findCandleByTime(candles, candidate.time);
       const anchorPrice = candidate.belowBar ? candle?.low : candle?.high;
       const yAnchor =
@@ -376,6 +377,7 @@ export function MarketMasterPage() {
     supportResistanceHistory,
     retrySupportResistanceHistory,
   } = useSupportResistanceZones({ seriesRef, loadHistoryBeforeRef: loadSupportResistanceHistoryRef });
+  const getRevealedCandleSource = useCallback(() => ({ candles: fullDataRef.current, count: currentIndexRef.current }), []);
   const {
     automaticPenCount,
     clearAutomaticPens,
@@ -383,7 +385,7 @@ export function MarketMasterPage() {
     resetAutomaticPensState,
     updateAutomaticPensAfterCandle,
     getAutomaticPenStartTime,
-  } = useAutomaticPens({ chartRef, seriesRef });
+  } = useAutomaticPens({ chartRef, seriesRef, source: getRevealedCandleSource });
   const {
     automaticSegmentCount,
     isAutomaticSegmentBusy,
@@ -605,6 +607,10 @@ export function MarketMasterPage() {
   }, [isMounted, indConfig]);
 
   const fullDataRef = useRef<any[]>([]);
+  const chartWindowRef = useRef<ChartWindow>({ from: 0, to: 0 });
+  const indicatorOffsetRef = useRef(0);
+  const chartViewportSyncRef = useRef(false);
+  const shiftChartWindowRef = useRef<(range: { from: number; to: number }) => void>(() => {});
   const fullEmaDataRef = useRef<any>({});
   const fullBollingerDataRef = useRef<any[]>([]);
   const fullMacdDataRef = useRef<any[]>([]);
@@ -648,7 +654,7 @@ export function MarketMasterPage() {
   automaticTradingConfigRef.current = automaticTradingConfig;
   const [isAutomaticConfigOpen, setIsAutomaticConfigOpen] = useState(false);
   const [automaticRun, setAutomaticRun] = useState<AutomaticRunView | null>(null);
-  const automaticRunRef = useRef<{ cancelled: boolean; suppress: boolean; session: number; controller: AbortController } | null>(null);
+  const automaticRunRef = useRef<{ cancelled: boolean; suppress: boolean; session: number; controller: AbortController; book?: ReturnType<typeof createAutomaticTradeBook> } | null>(null);
   const automaticAccessRef = useRef(false);
   const currentPrice = fullDataRef.current[currentIndex - 1]?.close || 0;
   const canUseAutomaticTrading = canUseAutomaticDraw && isBacktestMode && !isReplayMode && !isDataLoading && !dataError;
@@ -660,6 +666,8 @@ export function MarketMasterPage() {
     advanceAutomaticTrading,
   } = useAutomaticPenTrading({
     seriesRef,
+    viewportSyncRef: chartViewportSyncRef,
+    source: getRevealedCandleSource,
     canTrade: canUseAutomaticTrading,
     marketKey: `${symbol}:${timeframe}:${marketDataEpoch}`,
   });
@@ -856,6 +864,7 @@ export function MarketMasterPage() {
   const orderLinesRef = useRef<any>({});
   const seriesMarkersRef = useRef<any>(null);
   const closedTradeMarkersRef = useRef<any[]>([]);
+  const markerTradesRef = useRef<TradePosition[]>([]);
   const updateTradePriceRef = useRef<any>();
   const openTradeManagementRef = useRef<(tradeId: any) => void>(
     () => {}
@@ -871,8 +880,14 @@ export function MarketMasterPage() {
     if (automaticRunRef.current?.suppress) return;
     const markPrice =
       getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close || 0;
+    const window = chartWindowRef.current;
+    const from = fullDataRef.current[window.from]?.time, to = fullDataRef.current[window.to - 1]?.time;
+    const inWindow = (time) => time != null && from != null && to != null && time >= from && time <= to;
+    const relevant = tradeList.filter((trade) => inWindow(trade.entryTime) || inWindow(trade.closeTime));
+    const focused = relevant.find((trade) => trade.id === focusedTradeIdRef.current);
+    markerTradesRef.current = focused ? [focused, ...relevant.filter((trade) => trade !== focused).slice(0, 199)] : relevant.slice(0, 200);
     const nextMarkers = sortSeriesMarkersByTime(
-      tradeList.flatMap((trade) => buildTradeMarkers(trade, markPrice))
+      markerTradesRef.current.flatMap((trade) => buildTradeMarkers(trade, markPrice)).filter((marker) => inWindow(marker.time))
     );
     closedTradeMarkersRef.current = nextMarkers;
     seriesMarkersRef.current?.setMarkers(nextMarkers);
@@ -883,6 +898,7 @@ export function MarketMasterPage() {
     setFocusedTradeId(null);
     tradeConnectionRef.current?.setTrade(null);
     closedTradeMarkersRef.current = [];
+    markerTradesRef.current = [];
     seriesMarkersRef.current?.setMarkers([]);
   }, []);
 
@@ -919,7 +935,7 @@ export function MarketMasterPage() {
   }, []);
 
   const commitTrades = useCallback((nextTrades: any[]) => {
-    tradesRef.current = nextTrades;
+    tradesRef.current = automaticRunRef.current?.book?.commit(nextTrades) ?? nextTrades;
     if (!automaticRunRef.current?.suppress) setTrades(nextTrades);
   }, []);
 
@@ -1171,8 +1187,8 @@ export function MarketMasterPage() {
       const targetTime = getEpochTime(time);
       if (targetTime === null) return null;
 
-      const index = fullDataRef.current.findIndex((d) => d.time === targetTime);
-      if (index === -1) return null;
+      const index = exactCandleIndex(fullDataRef.current, targetTime) - indicatorOffsetRef.current;
+      if (index < 0) return null;
 
       let best: any = null;
       const threshold = 8;
@@ -1242,9 +1258,9 @@ export function MarketMasterPage() {
       const targetTime = getEpochTime(time);
       if (targetTime === null) return null;
 
-      const index = fullDataRef.current.findIndex((d) => d.time === targetTime);
+      const index = exactCandleIndex(fullDataRef.current, targetTime) - indicatorOffsetRef.current;
       const point = fullBollingerDataRef.current[index];
-      if (index === -1 || !point) return null;
+      if (index < 0 || !point) return null;
 
       let best: any = null;
       const threshold = 8;
@@ -1272,27 +1288,26 @@ export function MarketMasterPage() {
     let index = currentIndexRef.current - 1;
     const timeToUse = hoveredTime || stateRef.current.lastHoveredTime;
     if (timeToUse) {
-      const foundIndex = fullDataRef.current.findIndex(
-        (d) => d.time === timeToUse
-      );
+      const foundIndex = exactCandleIndex(fullDataRef.current, timeToUse);
       if (foundIndex !== -1 && foundIndex < currentIndexRef.current)
         index = foundIndex;
     }
     if (index >= 0 && index < fullDataRef.current.length) {
       const d = fullDataRef.current[index];
-      const m = fullMacdDataRef.current[index];
+      const indicatorIndex = index - indicatorOffsetRef.current;
+      const m = fullMacdDataRef.current[indicatorIndex];
       const emasData = activeConfig.emas
         .map((ema) => {
           const eData = fullEmaDataRef.current[ema.id];
           return {
             period: ema.period,
             color: ema.color,
-            value: eData && eData[index] ? eData[index].value : null,
+            value: eData && eData[indicatorIndex] ? eData[indicatorIndex].value : null,
           };
         })
         .filter((ema) => ema.value !== null);
       const bollingerPoint = activeConfig.bollinger.enabled
-        ? fullBollingerDataRef.current[index]
+        ? fullBollingerDataRef.current[indicatorIndex]
         : null;
 
       setLegendData({
@@ -1358,6 +1373,22 @@ export function MarketMasterPage() {
     applyRange();
   }, []);
 
+  const recomputeIndicators = useCallback((data: NormalizedCandle[], windowOverride?: ChartWindow) => {
+    const config = indConfigRef.current;
+    const window = windowOverride ?? selectChartWindow(isBacktestModeRef.current ? currentIndexRef.current : data.length);
+    // Warm up display indicators before the bounded chart window. Strategy ATR
+    // and pens retain their own streaming state and never use this display cache.
+    const period = Math.max(1, ...config.emas.map((ema) => ema.period), config.bollinger.period, config.macd.slow + config.macd.signal);
+    const from = Math.max(0, window.from - Math.min(20000, Math.max(2000, period * 12)));
+    const input = data.slice(from, Math.min(data.length, window.to + 1000));
+    indicatorOffsetRef.current = from;
+    const emas = {};
+    config.emas.forEach((ema) => { emas[ema.id] = input.length ? calculateEMA(input, ema.period) : []; });
+    fullEmaDataRef.current = emas;
+    fullBollingerDataRef.current = config.bollinger.enabled && input.length ? calculateBollingerBands(input, config.bollinger.period, config.bollinger.standardDeviation) : [];
+    fullMacdDataRef.current = config.macd.enabled && input.length ? calculateMACD(input, config.macd.fast, config.macd.slow, config.macd.signal) : [];
+  }, []);
+
   const syncDisplayedData = useCallback(
     (
       dataOverride: any[] = [],
@@ -1367,6 +1398,7 @@ export function MarketMasterPage() {
       options?: {
         prependedCount?: number;
         shouldFocusLatest?: boolean;
+        focusRange?: { from: number; to: number };
       }
     ) => {
       const data = dataOverride.length ? dataOverride : fullDataRef.current;
@@ -1377,122 +1409,109 @@ export function MarketMasterPage() {
         Math.max(nextIndexOverride ?? currentIndexRef.current, 0),
         data.length
       );
-      const candleData = nextBacktestMode ? data.slice(0, nextIndex) : data;
+      const oldWindow = chartWindowRef.current;
+      const visibleRange = chartRef.current?.timeScale().getVisibleLogicalRange();
+      const focusRange = options?.focusRange ?? (prependedCount > 0 && visibleRange ? {
+        from: oldWindow.from + visibleRange.from + prependedCount,
+        to: oldWindow.from + visibleRange.to + prependedCount,
+      } : undefined);
+      const window = selectChartWindow(nextBacktestMode ? nextIndex : data.length, focusRange);
+      chartWindowRef.current = window;
+      recomputeIndicators(data, window);
+      const candleData = sliceChartWindow(data, window);
+      const indicatorSlice = (points) => sliceChartWindow(points, window, indicatorOffsetRef.current);
 
-      const logicalRange =
-        prependedCount > 0 && chartRef.current
-          ? chartRef.current.timeScale().getVisibleLogicalRange()
-          : null;
-      const subLogicalRange =
-        prependedCount > 0 && subChartRef.current
-          ? subChartRef.current.timeScale().getVisibleLogicalRange()
-          : null;
-
-      if (seriesRef.current) {
-        seriesRef.current.setData(candleData);
-      }
-      volumeSeriesRef.current?.setData(
-        buildVolumeData(data, nextBacktestMode ? nextIndex : data.length, activeConfig.volume)
-      );
-
-      activeConfig.emas.forEach((ema: any) => {
-        const emaSeries = emaSeriesRefs.current[ema.id];
-        const emaData = fullEmaDataRef.current[ema.id] || [];
-        if (!emaSeries) return;
-        emaSeries.setData(
-          nextBacktestMode ? emaData.slice(0, nextIndex) : emaData
+      chartViewportSyncRef.current = true;
+      try {
+        seriesRef.current?.setData(candleData);
+        volumeSeriesRef.current?.setData(
+          buildVolumeData(candleData, candleData.length, activeConfig.volume)
         );
-      });
 
-      if (activeConfig.bollinger.enabled) {
-        const bollingerData = nextBacktestMode
-          ? fullBollingerDataRef.current.slice(0, nextIndex)
-          : fullBollingerDataRef.current;
-        BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
-          bollingerSeriesRefs.current[key]?.setData(
-            toBollingerLineData(bollingerData, key)
+        activeConfig.emas.forEach((ema: any) => {
+          const emaSeries = emaSeriesRefs.current[ema.id];
+          const emaData = fullEmaDataRef.current[ema.id] || [];
+          if (!emaSeries) return;
+          emaSeries.setData(
+            indicatorSlice(emaData)
           );
         });
-      }
 
-      if (
-        macdHistSeriesRef.current &&
-        macdLineSeriesRef.current &&
-        macdSignalSeriesRef.current
-      ) {
-        const macdData = nextBacktestMode
-          ? fullMacdDataRef.current.slice(0, nextIndex)
-          : fullMacdDataRef.current;
-
-        macdHistSeriesRef.current.setData(
-          macdData.map((d) => ({
-            time: d.time,
-            value: d.hist,
-            color: activeConfig.macd.histColors[d.colorType],
-          }))
-        );
-        macdLineSeriesRef.current.setData(
-          macdData.map((d) => ({ time: d.time, value: d.macd }))
-        );
-        macdSignalSeriesRef.current.setData(
-          macdData.map((d) => ({ time: d.time, value: d.signal }))
-        );
-      }
-
-      if (nextBacktestMode) {
-        if (shouldFitContent) {
-          // 随机起点可能已揭示上千根历史，聚焦最近一段而非 fitContent 全挤在一起
-          focusLatestCandles(candleData);
-        }
-        return;
-      }
-
-      if (prependedCount > 0 && chartRef.current) {
-        if (logicalRange) {
-          chartRef.current.timeScale().setVisibleLogicalRange({
-            from: logicalRange.from + prependedCount,
-            to: logicalRange.to + prependedCount,
+        if (activeConfig.bollinger.enabled) {
+          const bollingerData = indicatorSlice(fullBollingerDataRef.current);
+          BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+            bollingerSeriesRefs.current[key]?.setData(
+              toBollingerLineData(bollingerData, key)
+            );
           });
-          if (subLogicalRange && subChartRef.current) {
-            subChartRef.current.timeScale().setVisibleLogicalRange({
-              from: subLogicalRange.from + prependedCount,
-              to: subLogicalRange.to + prependedCount,
-            });
+        }
+
+        if (
+          macdHistSeriesRef.current &&
+          macdLineSeriesRef.current &&
+          macdSignalSeriesRef.current
+        ) {
+          const macdData = indicatorSlice(fullMacdDataRef.current);
+
+          macdHistSeriesRef.current.setData(
+            macdData.map((d) => ({
+              time: d.time,
+              value: d.hist,
+              color: activeConfig.macd.histColors[d.colorType],
+            }))
+          );
+          macdLineSeriesRef.current.setData(
+            macdData.map((d) => ({ time: d.time, value: d.macd }))
+          );
+          macdSignalSeriesRef.current.setData(
+            macdData.map((d) => ({ time: d.time, value: d.signal }))
+          );
+        }
+
+        syncTradeMarkers(tradesRef.current);
+        if (focusRange) {
+          const local = { from: focusRange.from - window.from, to: focusRange.to - window.from };
+          chartRef.current?.timeScale().setVisibleLogicalRange(local);
+          subChartRef.current?.timeScale().setVisibleLogicalRange(local);
+          volumeChartRef.current?.timeScale().setVisibleLogicalRange(local);
+          return;
+        }
+        if (nextBacktestMode) {
+          if (shouldFitContent) {
+            // 随机起点可能已揭示上千根历史，聚焦最近一段而非 fitContent 全挤在一起
+            focusLatestCandles(candleData);
           }
           return;
         }
-        if (!nextBacktestMode) {
-          focusLatestCandles(data);
-          return;
-        }
-      }
 
-      if (shouldFocusLatest) {
-        focusLatestCandles(data);
-      }
+        if (shouldFocusLatest || prependedCount > 0) {
+          focusLatestCandles(candleData);
+        }
+      } finally { chartViewportSyncRef.current = false; }
     },
-    [focusLatestCandles]
+    [focusLatestCandles, recomputeIndicators, syncTradeMarkers]
   );
 
-  const recomputeIndicators = useCallback((data: NormalizedCandle[]) => {
-    const activeConfig = indConfigRef.current;
-    const newEmaData: Record<string, ReturnType<typeof calculateEMA>> = {};
-    activeConfig.emas.forEach((ema: { id: string; period: number }) => {
-      newEmaData[ema.id] = calculateEMA(data, ema.period);
+  shiftChartWindowRef.current = (range) => {
+    if (preserveVisibleRangeRef.current || chartViewportSyncRef.current || automaticRunRef.current || isDataLoadingRef.current) return;
+    const window = chartWindowRef.current;
+    const count = isBacktestModeRef.current ? currentIndexRef.current : fullDataRef.current.length;
+    if (!((range.from < CHART_WINDOW_EDGE && window.from > 0) ||
+      (range.to > window.to - window.from - CHART_WINDOW_EDGE && window.to < count))) return;
+    const focusRange = { from: window.from + range.from, to: window.from + range.to };
+    const next = selectChartWindow(count, focusRange);
+    if (next.from === window.from && next.to === window.to) return;
+    const session = dataSessionRef.current;
+    const chart = chartRef.current;
+    preserveVisibleRangeRef.current = true;
+    requestAnimationFrame(() => {
+      try {
+        if (session !== dataSessionRef.current || chart !== chartRef.current || chartWindowRef.current !== window || automaticRunRef.current) return;
+        syncDisplayedData(fullDataRef.current, currentIndexRef.current, isBacktestModeRef.current, false, { focusRange });
+        updateAutomaticSegmentsAfterCandle();
+      } finally { preserveVisibleRangeRef.current = false; }
     });
-    fullEmaDataRef.current = newEmaData;
-    fullBollingerDataRef.current = calculateBollingerBands(
-      data,
-      activeConfig.bollinger.period,
-      activeConfig.bollinger.standardDeviation
-    );
-    fullMacdDataRef.current = calculateMACD(
-      data,
-      activeConfig.macd.fast,
-      activeConfig.macd.slow,
-      activeConfig.macd.signal
-    );
-  }, []);
+  };
 
   const applyCandlePage = useCallback(
     (
@@ -1534,7 +1553,7 @@ export function MarketMasterPage() {
       }
 
       fullDataRef.current = data;
-      if (!automaticRunRef.current?.suppress) recomputeIndicators(data);
+      if (!automaticRunRef.current?.suppress && options?.skipDisplaySync) recomputeIndicators(data, chartWindowRef.current);
 
       const pageOffset = Math.max(0, Number(marketData.offset) || 0);
       const nextOffset =
@@ -1761,9 +1780,8 @@ export function MarketMasterPage() {
         return;
       }
 
-      const merged = mergeCandleData(fullDataRef.current, newerData);
-      if (merged.length <= fullDataRef.current.length) return;
-      applyCandlePage(page, merged, {
+      if (!appendCandlePage(fullDataRef.current, newerData)) return;
+      applyCandlePage(page, fullDataRef.current, {
         skipDisplaySync: isBacktestModeRef.current,
       });
     } catch (error: any) {
@@ -2482,30 +2500,14 @@ export function MarketMasterPage() {
       selectedIndicatorRef.current = { kind: null, id: null };
     }
 
-    const newEmaData = {};
-    nextConfig.emas.forEach((ema) => {
-      newEmaData[ema.id] = calculateEMA(fullDataRef.current, ema.period);
-    });
-    fullEmaDataRef.current = newEmaData;
-    fullBollingerDataRef.current = calculateBollingerBands(
-      fullDataRef.current,
-      nextConfig.bollinger.period,
-      nextConfig.bollinger.standardDeviation
-    );
-    fullMacdDataRef.current = calculateMACD(
-      fullDataRef.current,
-      nextConfig.macd.fast,
-      nextConfig.macd.slow,
-      nextConfig.macd.signal
-    );
-
     indConfigRef.current = nextConfig;
+    recomputeIndicators(fullDataRef.current, chartWindowRef.current);
     setIndConfig(nextConfig);
     setDraftConfig(nextConfig);
     setIsIndicatorModalOpen(false);
 
     volumeSeriesRef.current?.setData(
-      buildVolumeData(fullDataRef.current, currentIndexRef.current, nextConfig.volume)
+      buildVolumeData(sliceChartWindow(fullDataRef.current, chartWindowRef.current), CHART_WINDOW_BARS, nextConfig.volume)
     );
 
     if (chartRef.current) {
@@ -2537,7 +2539,7 @@ export function MarketMasterPage() {
           series.applyOptions({ color: ema.color, lineWidth: ema.lineWidth });
         }
         series.setData(
-          fullEmaDataRef.current[ema.id].slice(0, currentIndexRef.current)
+          sliceChartWindow(fullEmaDataRef.current[ema.id], chartWindowRef.current, indicatorOffsetRef.current)
         );
       });
 
@@ -2567,7 +2569,7 @@ export function MarketMasterPage() {
           }
           series.setData(
             toBollingerLineData(
-              fullBollingerDataRef.current.slice(0, currentIndexRef.current),
+              sliceChartWindow(fullBollingerDataRef.current, chartWindowRef.current, indicatorOffsetRef.current),
               key
             )
           );
@@ -2600,10 +2602,7 @@ export function MarketMasterPage() {
         color: nextConfig.macd.signalColor,
         lineWidth: nextConfig.macd.lineWidth,
       });
-      const currentMacdData = fullMacdDataRef.current.slice(
-        0,
-        currentIndexRef.current
-      );
+      const currentMacdData = sliceChartWindow(fullMacdDataRef.current, chartWindowRef.current, indicatorOffsetRef.current);
       macdHistSeriesRef.current.setData(
         currentMacdData.map((d) => ({
           time: d.time,
@@ -2675,7 +2674,9 @@ export function MarketMasterPage() {
         minMove: 1 / Math.pow(10, priceDecimals),
       },
     });
-    series.setData(fullDataRef.current.slice(0, visibleCount));
+    chartWindowRef.current = selectChartWindow(visibleCount);
+    recomputeIndicators(fullDataRef.current, chartWindowRef.current);
+    series.setData(sliceChartWindow(fullDataRef.current, chartWindowRef.current));
 
     indConfig.emas.forEach((ema) => {
       const emaSeries = chart.addSeries(LineSeries, {
@@ -2692,7 +2693,7 @@ export function MarketMasterPage() {
         },
       });
       emaSeries.setData(
-        fullEmaDataRef.current[ema.id]?.slice(0, visibleCount) || []
+        sliceChartWindow(fullEmaDataRef.current[ema.id] || [], chartWindowRef.current, indicatorOffsetRef.current)
       );
       emaSeriesRefs.current[ema.id] = emaSeries;
     });
@@ -2714,7 +2715,7 @@ export function MarketMasterPage() {
         });
         bollingerSeries.setData(
           toBollingerLineData(
-            fullBollingerDataRef.current.slice(0, visibleCount),
+            sliceChartWindow(fullBollingerDataRef.current, chartWindowRef.current, indicatorOffsetRef.current),
             key
           )
         );
@@ -2752,7 +2753,7 @@ export function MarketMasterPage() {
 
     const crosshairMoveHandler = (param) => {
       const hoveredMarker = !isSyncingCrosshairRef.current && param.point
-        ? resolveTradeMarkerHit(chart, series, fullDataRef.current, tradesRef.current, param)
+        ? resolveTradeMarkerHit(chart, series, fullDataRef.current, markerTradesRef.current, param)
         : null;
       const hoveredTrade = hoveredMarker
         ? tradesRef.current.find((trade) => String(trade.id) === hoveredMarker.tradeId)
@@ -2811,7 +2812,7 @@ export function MarketMasterPage() {
         time || chart.timeScale().coordinateToTime(param.point.x) ||
         (state.activeLine?.type === "zone" ? state.activeLine.p1.time : null);
       if (magnetRef.current && dragTime && price !== null) {
-        const candle = fullDataRef.current.find((d) => d.time === dragTime);
+        const candle = fullDataRef.current[exactCandleIndex(fullDataRef.current, dragTime)];
         if (candle) {
           const yO = series.priceToCoordinate(candle.open);
           const yH = series.priceToCoordinate(candle.high);
@@ -3066,7 +3067,7 @@ export function MarketMasterPage() {
         chart,
         series,
         fullDataRef.current,
-        tradesRef.current,
+        markerTradesRef.current,
         param
       );
       // A risk-line click/drag must not open an adjacent entry's dialog.
@@ -3131,7 +3132,7 @@ export function MarketMasterPage() {
       let candleData = param.seriesData?.get(series);
       if (!candleData || candleData.open == null) {
         candleData = clickedTime
-          ? fullDataRef.current.find((d) => d.time === clickedTime)
+          ? fullDataRef.current[exactCandleIndex(fullDataRef.current, clickedTime)]
           : null;
       }
       if (!candleData || candleData.open == null) return;
@@ -3306,8 +3307,10 @@ export function MarketMasterPage() {
     chart.subscribeClick(clickHandler);
 
     const handleVisibleLogicalRangeChange = (range) => {
-      if (!range || preserveVisibleRangeRef.current) return;
+      if (!range || preserveVisibleRangeRef.current || chartViewportSyncRef.current) return;
       if (isDataLoadingRef.current) return;
+      shiftChartWindowRef.current(range);
+      if (chartWindowRef.current.from > 0 || preserveVisibleRangeRef.current) return;
       if (range.from > KLINE_HISTORY_EDGE_BARS) return;
       const loadedCount = fullDataRef.current.length;
       if (loadedCount > 0 && range.to - range.from >= loadedCount - 2) return;
@@ -3406,9 +3409,6 @@ export function MarketMasterPage() {
   useEffect(() => {
     if (!isMounted || !indConfig.macd.enabled || !subChartContainerRef.current)
       return;
-    const visibleCount =
-      currentIndexRef.current ||
-      Math.min(INITIAL_VISIBLE_COUNT, fullMacdDataRef.current.length);
     const subChart = createChart(subChartContainerRef.current, {
       layout: {
         background: { type: "solid", color: "#111827" },
@@ -3465,7 +3465,7 @@ export function MarketMasterPage() {
       },
     });
 
-    const currentMacdData = fullMacdDataRef.current.slice(0, visibleCount);
+    const currentMacdData = sliceChartWindow(fullMacdDataRef.current, chartWindowRef.current, indicatorOffsetRef.current);
     macdHist.setData(
       currentMacdData.map((d) => ({
         time: d.time,
@@ -3652,7 +3652,7 @@ export function MarketMasterPage() {
       base: 0,
     });
     volumeSeries.setData(
-      buildVolumeData(fullDataRef.current, currentIndexRef.current, indConfigRef.current.volume)
+      buildVolumeData(sliceChartWindow(fullDataRef.current, chartWindowRef.current), CHART_WINDOW_BARS, indConfigRef.current.volume)
     );
     volumeChartRef.current = volumeChart;
     volumeSeriesRef.current = volumeSeries;
@@ -3757,52 +3757,58 @@ export function MarketMasterPage() {
 
     const nextCandle = fullDataRef.current[currentIndex];
     if (!automaticRunRef.current?.suppress) {
-    seriesRef.current.update(nextCandle);
-    volumeSeriesRef.current?.update(toVolumePoint(nextCandle, indConfig.volume));
-    updateAutomaticPensAfterCandle(nextCandle);
-    updateAutomaticSegmentsAfterCandle();
+      const window = chartWindowRef.current;
+      if (currentIndex < window.from || currentIndex > window.to || currentIndex + 1 - window.from > CHART_WINDOW_BARS) {
+        syncDisplayedData(fullDataRef.current, currentIndex + 1, true, true);
+      } else {
+        chartWindowRef.current = { ...window, to: currentIndex + 1 };
+        const cached = fullEmaDataRef.current[indConfig.emas[0]?.id] ?? (indConfig.macd.enabled ? fullMacdDataRef.current : indConfig.bollinger.enabled ? fullBollingerDataRef.current : null);
+        if (cached && currentIndex - indicatorOffsetRef.current >= cached.length) recomputeIndicators(fullDataRef.current, chartWindowRef.current);
+        seriesRef.current.update(nextCandle);
+        volumeSeriesRef.current?.update(toVolumePoint(nextCandle, indConfig.volume));
 
-    indConfig.emas.forEach((ema) => {
-      const nextEma = fullEmaDataRef.current[ema.id][currentIndex];
-      const series = emaSeriesRefs.current[ema.id];
-      if (series && nextEma) series.update(nextEma);
-    });
-
-    if (indConfig.bollinger.enabled) {
-      const nextBollinger = fullBollingerDataRef.current[currentIndex];
-      if (nextBollinger) {
-        BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
-          const series = bollingerSeriesRefs.current[key];
-          if (!series) return;
-          series.update(
-            nextBollinger[key] == null
-              ? { time: nextBollinger.time }
-              : { time: nextBollinger.time, value: nextBollinger[key] }
-          );
+        indConfig.emas.forEach((ema) => {
+          const nextEma = fullEmaDataRef.current[ema.id][currentIndex - indicatorOffsetRef.current];
+          const series = emaSeriesRefs.current[ema.id];
+          if (series && nextEma) series.update(nextEma);
         });
+
+        if (indConfig.bollinger.enabled) {
+          const nextBollinger = fullBollingerDataRef.current[currentIndex - indicatorOffsetRef.current];
+          if (nextBollinger) {
+            BOLLINGER_LINE_DEFINITIONS.forEach(({ key }) => {
+              const series = bollingerSeriesRefs.current[key];
+              if (!series) return;
+              series.update(
+                nextBollinger[key] == null
+                  ? { time: nextBollinger.time }
+                  : { time: nextBollinger.time, value: nextBollinger[key] }
+              );
+            });
+          }
+        }
+
+        const nextMacd = fullMacdDataRef.current[currentIndex - indicatorOffsetRef.current];
+        if (subChartRef.current && indConfig.macd.enabled && nextMacd) {
+          if (macdHistSeriesRef.current)
+            macdHistSeriesRef.current.update({
+              time: nextMacd.time,
+              value: nextMacd.hist,
+              color: indConfig.macd.histColors[nextMacd.colorType],
+            });
+          if (macdLineSeriesRef.current)
+            macdLineSeriesRef.current.update({
+              time: nextMacd.time,
+              value: nextMacd.macd,
+            });
+          if (macdSignalSeriesRef.current)
+            macdSignalSeriesRef.current.update({
+              time: nextMacd.time,
+              value: nextMacd.signal,
+            });
+        }
+
       }
-    }
-
-    const nextMacd = fullMacdDataRef.current[currentIndex];
-    if (subChartRef.current && indConfig.macd.enabled && nextMacd) {
-      if (macdHistSeriesRef.current)
-        macdHistSeriesRef.current.update({
-          time: nextMacd.time,
-          value: nextMacd.hist,
-          color: indConfig.macd.histColors[nextMacd.colorType],
-        });
-      if (macdLineSeriesRef.current)
-        macdLineSeriesRef.current.update({
-          time: nextMacd.time,
-          value: nextMacd.macd,
-        });
-      if (macdSignalSeriesRef.current)
-        macdSignalSeriesRef.current.update({
-          time: nextMacd.time,
-          value: nextMacd.signal,
-        });
-    }
-
     }
     let newlyClosed: any[] = [];
     let balanceChange = 0;
@@ -3863,6 +3869,8 @@ export function MarketMasterPage() {
     // Existing positions settle against this candle before entering at its close;
     // the new position must not hit SL/TP using prices from before its entry.
     currentIndexRef.current = currentIndex + 1;
+    updateAutomaticPensAfterCandle(nextCandle, !automaticRunRef.current?.suppress);
+    if (!automaticRunRef.current?.suppress) updateAutomaticSegmentsAfterCandle();
     if (!isReplayModeRef.current && isBacktestModeRef.current) {
       const event = advanceAutomaticTrading(nextCandle);
       if (event) {
@@ -3909,6 +3917,8 @@ export function MarketMasterPage() {
     advanceAutomaticTrading,
     commitTrades,
     priceDecimals,
+    recomputeIndicators,
+    syncDisplayedData,
     indConfig,
     updateAutomaticPensAfterCandle,
     updateAutomaticSegmentsAfterCandle,
@@ -3917,8 +3927,10 @@ export function MarketMasterPage() {
   const handleRunAutomaticTrading = useCallback(async (limit: number) => {
     if (!isAutomaticTradingEnabled || !automaticAccessRef.current || automaticRunRef.current || historyLoadingRef.current) return;
     setIsPlaying(false);
-    const token = { cancelled: false, suppress: true, session: dataSessionRef.current, controller: new AbortController() };
+    const book = createAutomaticTradeBook(tradesRef.current);
+    const token = { cancelled: false, suppress: true, session: dataSessionRef.current, controller: new AbortController(), book };
     automaticRunRef.current = token;
+    tradesRef.current = book.commit(tradesRef.current);
     const startBalance = balanceRef.current;
     const startTime = fullDataRef.current[currentIndexRef.current - 1]?.time ?? 0;
     const started = performance.now();
@@ -3950,6 +3962,7 @@ export function MarketMasterPage() {
           if (!cancelled()) await loadFutureHistoryRef.current();
         },
         cancelled,
+        checkpoint: () => persistRef.current.waitForCapacity?.(),
         progress: (next) => { progress = next; setAutomaticRun({ ...next, status: "running" }); },
       });
       if (result.cancelled) { status = "cancelled"; message = "已停止，已处理的 K 线和交易结果均已保留"; }
@@ -3957,11 +3970,13 @@ export function MarketMasterPage() {
       status = "error";
       message = error instanceof Error ? error.message : "策略运行中断";
     }
+    // Materialize history once, including partial fills, even on cancellation/error.
+    if (token.session === dataSessionRef.current) tradesRef.current = book.snapshot();
+    token.book = undefined;
     token.suppress = false;
     const sameSession = token.session === dataSessionRef.current;
     try {
       if (sameSession && isBacktestModeRef.current && seriesRef.current) {
-        recomputeIndicators(fullDataRef.current);
         syncDisplayedData(fullDataRef.current, currentIndexRef.current, true, true);
         updateAutomaticSegmentsAfterCandle();
         setCurrentIndex(currentIndexRef.current);
@@ -3981,7 +3996,7 @@ export function MarketMasterPage() {
       realized: balanceRef.current - startBalance, floating: floating(), closed: closed.length,
       wins: closed.filter((trade) => trade.pnl > 0).length, drawdown, seconds: (performance.now() - started) / 1000,
     } });
-  }, [handleNextCandle, isAutomaticTradingEnabled, recomputeIndicators, syncDisplayedData, syncTradeMarkers, updateAutomaticSegmentsAfterCandle]);
+  }, [handleNextCandle, isAutomaticTradingEnabled, syncDisplayedData, syncTradeMarkers, updateAutomaticSegmentsAfterCandle]);
 
   const handleStepPlayback = useCallback(() => {
     if (automaticRunRef.current) return;
@@ -4212,27 +4227,30 @@ export function MarketMasterPage() {
     settleClosedTrades(nextTrades, newlyClosed, balanceChange);
   };
 
-  const handleLocateTrade = useCallback((tradeId: unknown) => {
+  const handleLocateTrade = useCallback((tradeId: unknown, endpoint?: "entry" | "exit") => {
     const chart = chartRef.current;
     if (!chart || isDataLoadingRef.current || automaticRunRef.current) return;
     const trade = tradesRef.current.find((item) => item.id === tradeId);
     if (!trade) return;
-    const range = tradeFocusRange(trade, fullDataRef.current,
+    let range = tradeFocusRange(endpoint ? { ...trade, status: "Open", entryTime: endpoint === "exit" ? trade.closeTime : trade.entryTime } : trade, fullDataRef.current,
       isBacktestModeRef.current ? currentIndexRef.current : fullDataRef.current.length);
     if (!range) { toast.error("当前已显示的行情中找不到该订单的完整交易区间"); return; }
+    if (range.to - range.from >= CHART_WINDOW_BARS) {
+      range = tradeFocusRange({ ...trade, status: "Open" }, fullDataRef.current, currentIndexRef.current);
+      toast("订单跨度较长，已定位开仓位置；点击平仓价可定位出场");
+    }
     setIsPlaying(false);
     focusedTradeIdRef.current = trade.id;
     setFocusedTradeId(trade.id);
     // Moving to the left edge is navigation, not a request to prepend history.
     preserveVisibleRangeRef.current = true;
-    chart.timeScale().setVisibleLogicalRange(range);
-    subChartRef.current?.timeScale().setVisibleLogicalRange(range);
-    volumeChartRef.current?.timeScale().setVisibleLogicalRange(range);
+    syncDisplayedData(fullDataRef.current, currentIndexRef.current, isBacktestModeRef.current, false, { focusRange: range });
+    updateAutomaticSegmentsAfterCandle();
     chart.priceScale("right").applyOptions({ autoScale: true });
     setIsRightPriceAutoScaleEnabled(true);
     tradeConnectionRef.current?.setTrade(trade);
     requestAnimationFrame(() => { preserveVisibleRangeRef.current = false; });
-  }, []);
+  }, [syncDisplayedData, updateAutomaticSegmentsAfterCandle]);
 
   const handleOpenTradeManagement = (tradeId) => {
     if (isReplayModeRef.current || !isBacktestModeRef.current) return;

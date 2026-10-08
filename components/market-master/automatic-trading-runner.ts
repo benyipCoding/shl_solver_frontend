@@ -12,6 +12,7 @@ export async function runAutomaticTradingBatch(options: {
   progress: (progress: AutomaticRunProgress) => void;
   yieldToBrowser?: () => Promise<void>;
   now?: () => number;
+  checkpoint?: () => Promise<void>;
 }) {
   const yieldToBrowser = options.yieldToBrowser ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
   const now = options.now ?? (() => performance.now());
@@ -20,7 +21,14 @@ export async function runAutomaticTradingBatch(options: {
   // invitation to run forever, and preloaded future bars are never warmup.
   const target = Math.max(0, Math.min(options.limit, options.total() - start));
   let processed = 0;
-  const report = (phase: AutomaticRunProgress["phase"]) => options.progress({ processed, target, phase });
+  let lastReport = -Infinity;
+  let lastPhase: AutomaticRunProgress["phase"] | null = null;
+  const report = (phase: AutomaticRunProgress["phase"], force = false) => {
+    const time = now();
+    if (!force && phase === lastPhase && time - lastReport < 50) return;
+    lastPhase = phase; lastReport = time;
+    options.progress({ processed, target, phase });
+  };
   report("running");
   await yieldToBrowser();
   while (processed < target && !options.cancelled()) {
@@ -41,7 +49,9 @@ export async function runAutomaticTradingBatch(options: {
       if (++slice >= 250 || now() - sliceStart >= 8) break;
     }
     report("running");
+    await options.checkpoint?.();
     await yieldToBrowser();
   }
+  report("running", true);
   return { processed, target, cancelled: options.cancelled() };
 }

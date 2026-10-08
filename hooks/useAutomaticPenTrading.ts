@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { CandlestickData, DataChangedScope, ISeriesApi, Time } from "lightweight-charts";
 import { createAutomaticPenTradeTracker, type AutomaticTradingCandle } from "@/components/market-master/automatic-pen-trading";
 
-export function useAutomaticPenTrading({ seriesRef, canTrade, marketKey }: {
+export function useAutomaticPenTrading({ seriesRef, canTrade, marketKey, viewportSyncRef, source }: {
   seriesRef: RefObject<ISeriesApi<"Candlestick", Time> | null>;
   canTrade: boolean;
   marketKey: string;
+  viewportSyncRef?: RefObject<boolean>;
+  source?: () => { candles: readonly AutomaticTradingCandle[]; count: number };
 }) {
   const [enabled, setEnabled] = useState(false);
   const sessionRef = useRef<{
@@ -34,14 +36,18 @@ export function useAutomaticPenTrading({ seriesRef, canTrade, marketKey }: {
     }
     const series = seriesRef.current;
     if (!canTrade || !series) return;
-    const readCandles = () => series.data().filter((bar): bar is CandlestickData<Time> =>
-      "open" in bar && (startTime == null || bar.time >= startTime));
+    const readCandles = () => {
+      const input = source?.();
+      const bars = input ? input.candles.slice(0, input.count) : series.data();
+      return bars.filter((bar): bar is CandlestickData<Time> =>
+        "open" in bar && (startTime == null || bar.time >= startTime));
+    };
     const candles = readCandles();
     if (!candles.length) return;
     const boundary = candles[0].time;
     const onDataChanged = (scope: DataChangedScope) => {
       const session = sessionRef.current;
-      if (scope !== "full" || !session) return;
+      if (scope !== "full" || !session || viewportSyncRef?.current) return;
       // History prepend/reload/rewind only rebuild context, never place orders.
       session.tracker = createAutomaticPenTradeTracker(readCandles().filter((bar) => bar.time >= boundary));
     };
@@ -53,7 +59,7 @@ export function useAutomaticPenTrading({ seriesRef, canTrade, marketKey }: {
     };
     series.subscribeDataChanged(onDataChanged);
     setEnabled(true);
-  }, [canTrade, marketKey, seriesRef]);
+  }, [canTrade, marketKey, seriesRef, viewportSyncRef, source]);
 
   const advance = useCallback((candle: AutomaticTradingCandle) => {
     const session = sessionRef.current;

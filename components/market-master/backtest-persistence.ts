@@ -102,6 +102,7 @@ export const createBacktestPersistClient = () => {
   let batchMode = false;
   let bufferedEvents: Record<string, unknown>[] = [];
   let pendingError: unknown = null;
+  let pendingBatches = 0;
 
   const enqueue = (task: () => Promise<void>, recover = false) => {
     if (!enabled) return;
@@ -115,14 +116,19 @@ export const createBacktestPersistClient = () => {
 
   const requirePublicId = () => publicId;
   const sendEvents = (events: Record<string, unknown>[], batch: boolean) => {
+    if (!enabled) return;
+    pendingBatches++;
     enqueue(async () => {
-      const sessionId = requirePublicId();
-      if (!sessionId) throw new Error("回测场次尚未创建，无法保存交易记录");
-      await parsePayload(await fetchFn(`/api/market_master/backtest/sessions/${sessionId}/events`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(batch ? { events } : events[0]),
-      }));
-    });
+      try {
+        if (pendingError) return;
+        const sessionId = requirePublicId();
+        if (!sessionId) throw new Error("回测场次尚未创建，无法保存交易记录");
+        await parsePayload(await fetchFn(`/api/market_master/backtest/sessions/${sessionId}/events`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(batch ? { events } : events[0]),
+        }));
+      } finally { pendingBatches--; }
+    }, true);
   };
   const flushEvents = () => {
     if (!bufferedEvents.length) return;
@@ -213,6 +219,10 @@ export const createBacktestPersistClient = () => {
       );
     },
     beginBatch() { batchMode = true; },
+    async waitForCapacity() {
+      if (pendingBatches >= 4) await queue;
+      if (pendingError) throw pendingError;
+    },
     async endBatch() {
       batchMode = false;
       flushEvents();

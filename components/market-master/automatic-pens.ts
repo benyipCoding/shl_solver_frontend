@@ -34,7 +34,8 @@ export type AutomaticPenCandle = Pick<
  * The final pen remains developing until a qualifying reversal appears.
  */
 export function createAutomaticPenGenerator(
-  minCandleCount = AUTOMATIC_PENS_MIN_CANDLE_COUNT
+  minCandleCount = AUTOMATIC_PENS_MIN_CANDLE_COUNT,
+  retainedPens = Number.POSITIVE_INFINITY,
 ) {
   const spansEnoughCandles = (start: AutomaticPenPoint, end: AutomaticPenPoint) =>
     end.index - start.index + 1 >= minCandleCount;
@@ -45,6 +46,12 @@ export function createAutomaticPenGenerator(
   let active: AutomaticPen | null = null;
   let reversalExtreme: AutomaticPenPoint | null = null;
   const pens: AutomaticPen[] = [];
+  let totalPens = 0;
+  const addPen = (pen: AutomaticPen) => {
+    pens.push(pen);
+    totalPens++;
+    if (pens.length > retainedPens) pens.splice(0, pens.length - retainedPens);
+  };
 
   const append = (candle: AutomaticPenCandle) => {
     index++;
@@ -62,7 +69,7 @@ export function createAutomaticPenGenerator(
         high = currentHigh;
         if (spansEnoughCandles(low, high)) {
           active = { startPoint: low, endPoint: high, trend: AutomaticPenTrend.Up };
-          pens.push(active);
+          addPen(active);
           return;
         }
       }
@@ -70,7 +77,7 @@ export function createAutomaticPenGenerator(
         low = currentLow;
         if (spansEnoughCandles(high, low)) {
           active = { startPoint: high, endPoint: low, trend: AutomaticPenTrend.Down };
-          pens.push(active);
+          addPen(active);
         }
       }
       return;
@@ -103,14 +110,14 @@ export function createAutomaticPenGenerator(
         endPoint: candidate,
         trend: isUp ? AutomaticPenTrend.Down : AutomaticPenTrend.Up,
       };
-      pens.push(active);
+      addPen(active);
       reversalExtreme = null;
     }
   };
 
   // Keep confirmed geometry for historical panning, without chart objects or
   // rescanning it on append. Previously returned pen objects are never mutated.
-  return { append, get pens(): readonly AutomaticPen[] { return pens; } };
+  return { append, get pens(): readonly AutomaticPen[] { return pens; }, get totalPens() { return totalPens; } };
 }
 
 export function generateAutomaticPens(

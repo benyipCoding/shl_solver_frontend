@@ -24,6 +24,23 @@ const candle = (datetime, overrides = {}) => ({
 });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("forward pages append to million-bar history without reading, sorting or copying existing candles", () => {
+  const original = Array.from({ length: 1000000 }, (_, time) => ({ time }));
+  let reads = 0;
+  const history = new Proxy(original, { get(target, key, receiver) {
+    if (typeof key === "string" && /^\d+$/.test(key)) reads++;
+    return Reflect.get(target, key, receiver);
+  } });
+  const previousLast = original.at(-1);
+  const page = [{ time: 999999 }, { time: 1000000 }, { time: 1000001 }];
+  assert.equal(target.exports.appendCandlePage(history, page), 2);
+  assert.equal(original.length, 1000002);
+  assert.equal(original[999999], previousLast);
+  assert.equal(original.at(-1), page.at(-1));
+  assert.ok(reads < 10);
+  assert.equal(target.exports.appendCandlePage(history, page), 0);
+});
+
 test("removes duplicate backtest bars and sorts without mutating the response", () => {
   // A duplicate third bar produces non-monotonic internal indexes in the
   // production chart library and can throw 'Value is null' during rendering.
