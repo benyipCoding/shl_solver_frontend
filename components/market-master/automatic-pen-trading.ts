@@ -4,6 +4,7 @@ import {
   type AutomaticPen,
   type AutomaticPenCandle,
   type AutomaticPenPoint,
+  type AutomaticPenMode,
 } from "./automatic-pens";
 
 export type AutomaticTradingCandle = AutomaticPenCandle & { high?: number; low?: number };
@@ -43,8 +44,9 @@ export function getAutomaticPenTradeSide(pens: readonly AutomaticPen[]): "Buy" |
   return null;
 }
 
-export function createAutomaticPenTradeTracker(candles: readonly AutomaticTradingCandle[]) {
-  const generator = createAutomaticPenGenerator(undefined, 6);
+export function createAutomaticPenTradeTracker(candles: readonly AutomaticTradingCandle[], mode: AutomaticPenMode = "simple", atrWarmup: readonly AutomaticTradingCandle[] = []) {
+  const generator = createAutomaticPenGenerator(undefined, 6, mode);
+  atrWarmup.forEach(generator.warmup);
   let count = 0;
   let trSum = 0;
   let previousClose: number | null = null;

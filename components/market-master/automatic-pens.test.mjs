@@ -29,6 +29,75 @@ const candles = (prices, wick = 1, startTime = 1) => prices.map((price, index) =
 const xauCandles = JSON.parse(fs.readFileSync(new URL("./fixtures/xau-usd-h4-201701.json", import.meta.url), "utf8")).candles;
 const unix = (date) => Date.parse(date) / 1000;
 
+test("strict pens retain the five-candle minimum and require the frozen ATR amplitude, symmetrically", () => {
+  for (const direction of [1, -1]) {
+    for (const [step, expected] of [[4, 0], [5, 1], [6, 1]]) {
+      const data = candles(Array.from({ length: 5 }, (_, i) => direction * (100 + i * step)), 10);
+      assert.equal(generateAutomaticPens(data.slice(0, 4), undefined, "strict").length, 0);
+      assert.equal(generateAutomaticPens(data, undefined, "strict").length, expected);
+      assert.equal(generateAutomaticPens(data, undefined, "simple").length, 1);
+    }
+  }
+});
+
+test("strict pens waive amplitude only when actual distinct endpoints span fifteen candles", () => {
+  for (const direction of [1, -1]) {
+    const data = candles(Array.from({ length: 15 }, (_, i) => direction * (100 + i * .01)), 10);
+    assert.equal(generateAutomaticPens(data.slice(0, 14), undefined, "strict").length, 0);
+    const [pen] = generateAutomaticPens(data, undefined, "strict");
+    assert.equal(pen.endPoint.index - pen.startPoint.index + 1, 15);
+    assert.equal(pen.trend, direction);
+    assert.equal(generateAutomaticPens(candles(Array(50).fill(100), 10), undefined, "strict").length, 0);
+  }
+});
+
+test("strict reversal threshold stays at its start despite declining ATR; later extremes extend it", () => {
+  for (const direction of [1, -1]) {
+    const data = candles([100, 105, 110, 115, 120].map((p) => direction * p), 10);
+    data.push(...candles(Array.from({ length: 14 }, (_, i) => direction * (119 - i)), 0, 6));
+    assert.equal(generateAutomaticPens(data.slice(0, -1), undefined, "strict").length, 1);
+    const result = generateAutomaticPens(data, undefined, "strict");
+    assert.equal(result.length, 2);
+    assert.equal(result[1].endPoint.index - result[1].startPoint.index + 1, 15);
+    assert.equal(result[1].endPoint.price, direction * 106);
+    assert.deepEqual(result[0].endPoint, result[1].startPoint);
+    data.push(...candles([direction * 105], 0, 20));
+    assert.equal(generateAutomaticPens(data, undefined, "strict")[1].endPoint.index, 19);
+    const plateau = [...data.slice(0, 7), ...candles(Array(20).fill(direction * 118), 0, 8)];
+    assert.equal(generateAutomaticPens(plateau, undefined, "strict").length, 1);
+  }
+});
+
+test("strict warmup uses the larger ATR100 background, wicks and gaps, without making warmup endpoints", () => {
+  const warmup = candles(Array(101).fill(100), 10, -101);
+  warmup.splice(-14, 14, ...candles(Array(14).fill(100), .5, -14));
+  const strict = pensModule.createAutomaticPenGenerator(undefined, undefined, "strict");
+  warmup.forEach(strict.warmup);
+  const data = candles([100, 102.5, 105, 107.5, 110], 0);
+  data.forEach(strict.append);
+  assert.equal(strict.pens.length, 0); // ATR14 alone is small, ATR100 still exceeds 10.
+  const cold = generateAutomaticPens(data, undefined, "strict");
+  assert.equal(cold.length, 1);
+  assert.equal(cold[0].startPoint.index, 0);
+  const gap = pensModule.createAutomaticPenGenerator(undefined, undefined, "strict");
+  candles(Array(101).fill(100), 0, -101).forEach(gap.warmup);
+  candles([200, 201, 202, 203, 204], 0).forEach(gap.append);
+  assert.equal(gap.pens.length, 0); // The gap gives ATR14 > 7 at the starting candle.
+});
+
+test("strict streaming and bounded strategy history match every batch prefix without changing confirmed pens", () => {
+  const data = xauCandles;
+  const generator = pensModule.createAutomaticPenGenerator(undefined, 6, "strict");
+  for (let i = 0; i < data.length; i++) {
+    const before = [...generator.pens], saved = plain(before);
+    generator.append(data[i]);
+    const batch = generateAutomaticPens(data.slice(0, i + 1), undefined, "strict");
+    assert.deepEqual(plain(before), saved);
+    assert.deepEqual(plain(generator.pens), plain(batch.slice(-6)));
+    assert.equal(generator.totalPens, batch.length);
+  }
+});
+
 test("XAU/USD H4 reversal forms after the large Jan 5 candle without retracing its whole body", () => {
   const topTime = unix("2017-01-05T12:00:00Z");
   const firstDownTime = unix("2017-01-06T04:00:00Z");
@@ -256,6 +325,23 @@ test("enabled drawing can start with zero pens and later acquire its first pen",
   harness.setData(candles([100, 101, 102, 103, 104]));
   harness.hook.updateAutomaticPensAfterCandle();
   assert.equal(harness.drawn.size, 1);
+});
+
+test("drawing switches simple/strict at the same start boundary and warms ATR only from earlier candles", () => {
+  const history = candles(Array(101).fill(100), 10, -101);
+  const data = [...history, ...candles([100, 101, 102, 103, 104], 0)];
+  const h = hookHarness(data, { from: 1, to: 5 });
+  h.hook.drawAutomaticPens();
+  const start = h.hook.getAutomaticPenStartTime();
+  assert.equal(h.legs().length, 1);
+  h.hook.setAutomaticPenMode("strict");
+  assert.equal(h.legs().length, 0);
+  assert.equal(h.hook.getAutomaticPenStartTime(), start);
+  h.hook.setAutomaticPenMode("simple");
+  assert.equal(h.legs().length, 1);
+  assert.equal(h.drawn.size, 1);
+  assert.equal(h.viewportListeners.size, 1);
+  assert.equal(h.dataListeners.size, 1);
 });
 
 test("bounded chart swaps preserve full pen geometry after a suppressed bulk advance", () => {

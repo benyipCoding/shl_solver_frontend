@@ -54,6 +54,9 @@ export const TopBar = ({
   setIsIndicatorModalOpen,
   isAutomaticPensEnabled = false,
   onToggleAutomaticPens,
+  penMode = "simple",
+  onPenModeChange,
+  penModeLocked = false,
   automaticPenCount = 0,
   isAutomaticSegmentsEnabled = false,
   onToggleAutomaticSegments,
@@ -107,6 +110,17 @@ export const TopBar = ({
   const canSyncLatest = isSuperuser;
   const canUseAutomaticDraw = isSuperuser;
   const batchTrading = isAutomaticTradingEnabled && !isReplayMode;
+  const penModeLabel = penMode === "strict" ? "严格笔" : "简单笔";
+  const penModeSelect = <label className="flex shrink-0 items-center gap-2 text-xs text-slate-400"
+    title={penModeLocked ? "本轮已有交易，请先从头再跑后切换" : "严格笔：至少5根且达到起点ATR门槛，或两端跨度至少15根；图表和交易策略共用"}>
+    <span className="md:hidden">分笔算法</span>
+    <select aria-label="分笔算法" value={penMode} onChange={(event) => onPenModeChange?.(event.target.value)}
+      disabled={!onPenModeChange || penModeLocked || isDataLoading || isHistoryLoading || isAutomaticRunBusy || isRestartingBacktest || isReplayMode}
+      className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-yellow-300 outline-none disabled:opacity-40">
+      <option value="simple">简单笔</option><option value="strict">严格笔</option>
+    </select>
+    {penModeLocked && <span className="md:hidden">从头再跑后可切换</span>}
+  </label>;
   const showRestartBacktest = isSuperuser && !isReplayMode && Boolean(onRestartBacktest);
   const restartDisabled = !canRestartBacktest || isDataLoading || isHistoryLoading || Boolean(dataError) || isAutomaticRunBusy || isRestartingBacktest;
   const restartTitle = "剩余持仓按当前价格平仓并保存上一轮，保留同一样本和策略配置，重置账户与进度；可改参数后再播放";
@@ -234,8 +248,8 @@ export const TopBar = ({
                   }
                   aria-label={
                     isAutomaticPensEnabled
-                      ? "关闭并删除自动 Pens"
-                      : "开启自动 Pens"
+                      ? `关闭并删除${penModeLabel}`
+                      : `开启${penModeLabel}`
                   }
                   aria-pressed={isAutomaticPensEnabled}
                   className={`relative flex h-11 w-10 items-center justify-center rounded-xl border shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
@@ -245,8 +259,8 @@ export const TopBar = ({
                   }`}
                   title={
                     isAutomaticPensEnabled
-                      ? `关闭并删除自动 Pens（当前 ${automaticPenCount} 笔）`
-                      : "开启自动 Pens"
+                      ? `关闭并删除${penModeLabel}（当前 ${automaticPenCount} 笔）`
+                      : `开启${penModeLabel}`
                   }
                 >
                   <ChartSpline size={19} />
@@ -299,6 +313,7 @@ export const TopBar = ({
             ) : null}
           </div>
 
+          {canUseAutomaticDraw && penModeSelect}
           {!isBacktestMode ? (
             <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-1 rounded-2xl border border-slate-800 bg-slate-950/60 p-1 shadow-inner">
               <button
@@ -629,12 +644,13 @@ export const TopBar = ({
                   }`}
                   title={
                     isAutomaticPensEnabled
-                      ? `关闭并删除自动 Pens（当前 ${automaticPenCount} 笔，快捷键 F）`
-                      : "开启自动 Pens（快捷键 F）"
+                      ? `关闭并删除${penModeLabel}（当前 ${automaticPenCount} 笔，快捷键 F）`
+                      : `开启${penModeLabel}（快捷键 F）`
                   }
                 >
                   <ChartSpline size={20} />
                 </button>
+                {penModeSelect}
                 <button
                   type="button"
                   onClick={onToggleAutomaticSegments}

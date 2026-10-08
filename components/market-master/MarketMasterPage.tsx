@@ -58,6 +58,7 @@ import { runAutomaticTradingBatch } from "./automatic-trading-runner";
 import { createAutomaticTradeBook } from "./automatic-trade-book";
 import { CHART_WINDOW_BARS, CHART_WINDOW_EDGE, exactCandleIndex, selectChartWindow, sliceChartWindow, type ChartWindow } from "./chart-window";
 import { bindChartPanGuard } from "./chart-pan-guard";
+import type { AutomaticPenMode } from "./automatic-pens";
 import { AUTOMATIC_PEN_FAILURE_REASON, AUTOMATIC_PEN_SHORT_EXIT_REASON, automaticPenShortExitUnits, planAutomaticPenOrder, resolveAutomaticPenExit, shouldExitAutomaticPenOnFailedBreakout, trailAutomaticPenStops } from "./automatic-pen-risk";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import { usePenMomentum } from "@/hooks/usePenMomentum";
@@ -336,7 +337,7 @@ export function MarketMasterPage() {
   const backtestSampleRef = useRef<{
     start: BacktestSessionStartPayload;
     endIndex: number;
-    automatic?: { cursorTime: number; contextTime: Time };
+    automatic?: { cursorTime: number; contextTime: Time; atrWarmupStartTime?: Time };
   } | null>(null);
   const restartingBacktestRef = useRef(false);
   const [isRestartingBacktest, setIsRestartingBacktest] = useState(false);
@@ -394,6 +395,7 @@ export function MarketMasterPage() {
     resetAutomaticPensState,
     updateAutomaticPensAfterCandle,
     getAutomaticPenStartTime,
+    setAutomaticPenMode,
   } = useAutomaticPens({ chartRef, seriesRef, source: getRevealedCandleSource });
   const {
     automaticSegmentCount,
@@ -402,6 +404,7 @@ export function MarketMasterPage() {
     drawAutomaticSegments,
     resetAutomaticSegmentsState,
     updateAutomaticSegmentsAfterCandle,
+    setAutomaticSegmentPenMode,
   } = useAutomaticSegments({ chartRef, seriesRef });
   const [isAutomaticPensEnabled, setIsAutomaticPensEnabled] = useState(false);
   const [isAutomaticSegmentsEnabled, setIsAutomaticSegmentsEnabled] =
@@ -686,6 +689,7 @@ export function MarketMasterPage() {
     toggleAutomaticTrading,
     stopAutomaticTrading,
     advanceAutomaticTrading,
+    setAutomaticTradingPenMode,
   } = useAutomaticPenTrading({
     seriesRef,
     viewportSyncRef: chartViewportSyncRef,
@@ -693,6 +697,23 @@ export function MarketMasterPage() {
     canTrade: canUseAutomaticTrading,
     marketKey: `${symbol}:${timeframe}:${marketDataEpoch}`,
   });
+  useEffect(() => {
+    setAutomaticPenMode(automaticTradingConfig.penMode);
+    setAutomaticSegmentPenMode(automaticTradingConfig.penMode, isAutomaticSegmentsEnabled);
+    setAutomaticTradingPenMode(automaticTradingConfig.penMode);
+  }, [automaticTradingConfig.penMode, isAutomaticSegmentsEnabled, setAutomaticPenMode, setAutomaticSegmentPenMode, setAutomaticTradingPenMode]);
+  const handlePenModeChange = (penMode: AutomaticPenMode) => {
+    if (!canUseAutomaticDraw || (penMode !== "simple" && penMode !== "strict") || automaticRunRef.current || restartingBacktestRef.current || isDataLoading || isHistoryLoading) return;
+    if (isBacktestModeRef.current && tradesRef.current.length > 0) {
+      toast.error("本轮已有交易，请先从头再跑后切换分笔算法");
+      return;
+    }
+    setIsPlaying(false);
+    const config = { ...automaticTradingConfigRef.current, penMode };
+    automaticTradingConfigRef.current = config;
+    setAutomaticTradingConfig(config);
+    try { localStorage.setItem(AUTOMATIC_TRADING_STORAGE_KEY, JSON.stringify(config)); } catch { /* Optional preference. */ }
+  };
   const handleToggleAutomaticTrading = useCallback(() => {
     if (!canUseAutomaticTrading || isHistoryLoading || automaticRunRef.current) return;
     setIsPlaying(false);
@@ -700,17 +721,22 @@ export function MarketMasterPage() {
   }, [canUseAutomaticTrading, isHistoryLoading]);
   const applyAutomaticTradingConfig = (config: AutomaticTradingConfig) => {
     if (!canUseAutomaticTrading || automaticRunRef.current) return;
+    if (config.penMode !== automaticTradingConfigRef.current.penMode && tradesRef.current.length > 0) {
+      toast.error("本轮已有交易，请先从头再跑后切换分笔算法");
+      return;
+    }
     setAutomaticTradingConfig(config);
     automaticTradingConfigRef.current = config;
     try { localStorage.setItem(AUTOMATIC_TRADING_STORAGE_KEY, JSON.stringify(config)); } catch { /* Optional browser preference. */ }
+    setAutomaticTradingPenMode(config.penMode);
     if (!isAutomaticTradingEnabled) {
       const startTime = backtestSampleRef.current?.automatic?.contextTime ?? getAutomaticPenStartTime() ?? chartRef.current?.timeScale().getVisibleRange()?.from;
       const sample = backtestSampleRef.current;
       const candle = fullDataRef.current[currentIndexRef.current - 1];
       if (sample && !sample.automatic && candle) {
-        sample.automatic = { cursorTime: candle.time, contextTime: startTime ?? fullDataRef.current[0].time };
+        sample.automatic = { cursorTime: candle.time, contextTime: startTime ?? fullDataRef.current[0].time, atrWarmupStartTime: fullDataRef.current[0].time };
       }
-      toggleAutomaticTrading(startTime);
+      toggleAutomaticTrading(startTime, sample?.automatic?.atrWarmupStartTime);
     }
     setIsAutomaticConfigOpen(false);
   };
@@ -3983,6 +4009,7 @@ export function MarketMasterPage() {
     if (restartingBacktestRef.current || !isAutomaticTradingEnabled || !automaticAccessRef.current || automaticRunRef.current || historyLoadingRef.current) return;
     setIsPlaying(false);
     const book = createAutomaticTradeBook(tradesRef.current);
+    const penMode = automaticTradingConfigRef.current.penMode;
     const token = { cancelled: false, suppress: true, session: dataSessionRef.current, controller: new AbortController(), book };
     automaticRunRef.current = token;
     tradesRef.current = book.commit(tradesRef.current);
@@ -4019,7 +4046,7 @@ export function MarketMasterPage() {
         },
         cancelled,
         checkpoint: () => persistRef.current.waitForCapacity?.(),
-        progress: (next) => { progress = next; setAutomaticRun({ ...next, status: "running" }); },
+        progress: (next) => { progress = next; setAutomaticRun({ ...next, penMode, status: "running" }); },
       });
       if (result.cancelled) { status = "cancelled"; message = "已停止，已处理的 K 线和交易结果均已保留"; }
     } catch (error) {
@@ -4041,14 +4068,14 @@ export function MarketMasterPage() {
         syncTradeMarkers(tradesRef.current);
       }
     } catch (error) { status = "error"; message = `计算已结束，图表刷新失败：${error instanceof Error ? error.message : "请重新加载"}`; }
-    setAutomaticRun({ ...progress, phase: "saving", status: "running", message: "正在保存交易记录…" });
+    setAutomaticRun({ ...progress, penMode, phase: "saving", status: "running", message: "正在保存交易记录…" });
     try { await persistRef.current.endBatch(); } catch (error) {
       status = "error"; message = `计算结果已保留，但交易记录保存失败：${error instanceof Error ? error.message : "请检查网络"}`;
     }
     if (automaticRunRef.current === token) automaticRunRef.current = null;
     if (token.session !== dataSessionRef.current || !isBacktestModeRef.current) { setAutomaticRun(null); return; }
     const closed = tradesRef.current.filter((trade) => trade.status === "Closed" && trade.closeTime > startTime);
-    setAutomaticRun({ ...progress, status, message, result: {
+    setAutomaticRun({ ...progress, penMode, status, message, result: {
       realized: balanceRef.current - startBalance, floating: floating(), closed: closed.length,
       wins: closed.filter((trade) => trade.pnl > 0).length, drawdown, seconds: (performance.now() - started) / 1000,
     } });
@@ -4642,7 +4669,7 @@ export function MarketMasterPage() {
         start_bar_time: startTime, cursor_bar_time: startTime,
         start_bar_index: loadedOffsetRef.current + startIndex, cursor_bar_index: loadedOffsetRef.current + startIndex };
       syncDisplayedData(fullDataRef.current, startIndex + 1, true, true);
-      if (resumeAutomatic) toggleAutomaticTrading(sample.automatic?.contextTime);
+      if (resumeAutomatic) toggleAutomaticTrading(sample.automatic?.contextTime, sample.automatic?.atrWarmupStartTime);
       toast.success("已回到同一样本起点，可调整策略参数后再次播放");
     } catch (error) {
       toast.error(`回测重置失败：${error instanceof Error ? error.message : "请重新加载"}`);
@@ -5006,7 +5033,7 @@ export function MarketMasterPage() {
         className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60">
         <div role="status" className="rounded-xl border border-gray-700 bg-gray-900 px-6 py-5 text-sm text-gray-200">正在保存上一轮结果并重置回测…</div>
       </div>}
-      {isAutomaticConfigOpen && canUseAutomaticTrading && <AutomaticTradingConfigModal config={automaticTradingConfig} enabled={isAutomaticTradingEnabled} balance={balance}
+      {isAutomaticConfigOpen && canUseAutomaticTrading && <AutomaticTradingConfigModal config={automaticTradingConfig} enabled={isAutomaticTradingEnabled} balance={balance} penModeLocked={trades.length > 0}
         onApply={applyAutomaticTradingConfig} onClose={() => setIsAutomaticConfigOpen(false)} onDisable={() => { if (isAutomaticTradingEnabled) toggleAutomaticTrading(); setIsAutomaticConfigOpen(false); }} />}
       {automaticRun && <AutomaticTradingRunDialog run={automaticRun} onStop={() => { if (automaticRunRef.current) { automaticRunRef.current.cancelled = true; automaticRunRef.current.controller.abort(); } }} onClose={() => setAutomaticRun(null)} />}
       <MarketMasterOverlays
@@ -5062,6 +5089,9 @@ export function MarketMasterPage() {
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
         isAutomaticPensEnabled={isAutomaticPensEnabled}
         onToggleAutomaticPens={handleToggleAutomaticPens}
+        penMode={automaticTradingConfig.penMode}
+        onPenModeChange={handlePenModeChange}
+        penModeLocked={isBacktestMode && trades.length > 0}
         automaticPenCount={automaticPenCount}
         isAutomaticSegmentsEnabled={isAutomaticSegmentsEnabled}
         onToggleAutomaticSegments={handleToggleAutomaticSegments}

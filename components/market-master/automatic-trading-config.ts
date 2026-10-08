@@ -1,5 +1,8 @@
+import type { AutomaticPenMode } from "./automatic-pens";
+
 export type AutomaticTradingConfig = {
   strategy: "pens";
+  penMode: AutomaticPenMode;
   firstOrderMode: "units" | "amount" | "balancePercent";
   firstOrderUnits: number;
   firstOrderRiskAmount: number;
@@ -15,7 +18,7 @@ export type AutomaticTradingConfig = {
 };
 
 export const DEFAULT_AUTOMATIC_TRADING_CONFIG: AutomaticTradingConfig = {
-  strategy: "pens", firstOrderMode: "units", firstOrderUnits: 100,
+  strategy: "pens", penMode: "simple", firstOrderMode: "units", firstOrderUnits: 100,
   firstOrderRiskAmount: 200, firstOrderRiskPercent: 2, addRiskPercent: 50,
   shortExitEnabled: true, shortExitPercent: 50,
   initialStopEnabled: true,
@@ -25,6 +28,7 @@ export const AUTOMATIC_TRADING_STORAGE_KEY = "marketMasterAutomaticTradingConfig
 
 export function automaticTradingConfigError(config: AutomaticTradingConfig): string | null {
   if (config.strategy !== "pens" || !["units", "amount", "balancePercent"].includes(config.firstOrderMode)) return "请选择有效的策略和首单仓位模式";
+  if (config.penMode !== "simple" && config.penMode !== "strict") return "请选择简单笔或严格笔";
   const finite = (n: number) => typeof n === "number" && Number.isFinite(n);
   if (!Number.isSafeInteger(config.firstOrderUnits) || config.firstOrderUnits < 1) return "首单数量必须为正整数";
   if (!finite(config.firstOrderRiskAmount) || config.firstOrderRiskAmount <= 0) return "首单止损金额必须大于 0";

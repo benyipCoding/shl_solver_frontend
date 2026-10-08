@@ -309,6 +309,65 @@ test("turning entries off keeps pivot events for protection; re-enabling never b
   assert.equal(h.listeners.size, 0);
 });
 
+test("switching trading pen mode rebuilds the revealed context without backfilling or re-enabling entries", () => {
+  const data = pivotCandles([100, 130, 110, 145, 135, 160, 140, 170]).map((bar) => ({ ...bar, high: bar.close + 100, low: bar.close - 100 }));
+  const h = hookHarness(data.slice(0, 24));
+  h.hook.setAutomaticTradingPenMode("strict");
+  h.hook.toggleAutomaticTrading(); h.render();
+  assert.equal(h.hook.advanceAutomaticTrading(data[24]), null); // Too short for strict pens and well below ATR.
+  h.replace(data.slice(0, 25));
+  h.hook.setAutomaticTradingPenMode("simple");
+  assert.equal(h.hook.advanceAutomaticTrading(data[24]), null); // Newly selected historical signal is not entered.
+  h.hook.toggleAutomaticTrading(); h.render();
+  assert.equal(h.hook.isAutomaticTradingEnabled, false);
+  h.hook.setAutomaticTradingPenMode("strict");
+  h.hook.setAutomaticTradingPenMode("simple"); h.render();
+  assert.equal(h.hook.isAutomaticTradingEnabled, false);
+  const reference = trading.createAutomaticPenTradeTracker(data.slice(0, 25), "simple");
+  for (const bar of data.slice(25)) {
+    const event = reference.advanceEvent(bar);
+    assert.deepEqual(plain(h.hook.advanceAutomaticTrading(bar)), plain(event && { ...event, side: null }));
+  }
+  assert.equal(h.listeners.size, 1);
+});
+
+test("strict strategy and drawing use identical warmup and cannot see prefetched future candles", () => {
+  const past = Array.from({ length: 101 }, (_, i) => ({ time: i + 1, open: 100, close: 100, high: 200, low: 0 }));
+  const sequence = pivotCandles([100, 130, 110, 145, 135, 160, 140, 170]).map((bar) => ({ ...bar, time: bar.time + 101, high: bar.close, low: bar.close }));
+  const all = [...past, ...sequence, { time: 9999, open: 1000000, close: 1000000, high: 2000000, low: 0 }];
+  let count = 106;
+  const h = hookHarness(all.slice(0, count));
+  h.render({ source: () => ({ candles: all, count }) });
+  h.hook.setAutomaticTradingPenMode("strict");
+  h.hook.toggleAutomaticTrading(sequence[0].time);
+  const drawing = pens.createAutomaticPenGenerator(undefined, undefined, "strict");
+  past.forEach(drawing.warmup);
+  sequence.slice(0, 5).forEach(drawing.append);
+  for (const bar of sequence.slice(5)) {
+    count++;
+    const before = drawing.totalPens;
+    drawing.append(bar);
+    const event = h.hook.advanceAutomaticTrading(bar);
+    assert.equal(Boolean(event), drawing.totalPens > before);
+    if (event) assert.deepEqual(plain(event.pen), plain(drawing.pens.at(-1)));
+  }
+});
+
+test("strict warmup boundary survives prepends and is reused when restarting the same sample", () => {
+  const data = pivotCandles([100, 130, 110, 145, 135, 160, 140]);
+  const older = Array.from({ length: 101 }, (_, i) => ({ time: i - 101, open: 100, close: 100, high: 10000, low: -10000 }));
+  const h = hookHarness(data.slice(0, 24));
+  h.hook.setAutomaticTradingPenMode("strict");
+  h.hook.toggleAutomaticTrading(data[0].time);
+  h.replace([...older, ...data.slice(0, 24)]);
+  const expected = trading.createAutomaticPenTradeTracker(data.slice(0, 24), "strict").advanceEvent(data[24]);
+  assert.equal(expected.side, "Buy");
+  assert.deepEqual(plain(h.hook.advanceAutomaticTrading(data[24])), plain(expected));
+  h.hook.stopAutomaticTrading();
+  h.hook.toggleAutomaticTrading(data[0].time, data[0].time);
+  assert.deepEqual(plain(h.hook.advanceAutomaticTrading(data[24])), plain(expected));
+});
+
 // Exercise the actual page handlers with a small chart/account harness. This
 // catches stale entry prices, wrong persistence indexes and same-bar SL/TP hits.
 const pageSource = fs.readFileSync(new URL("./MarketMasterPage.tsx", import.meta.url), "utf8");
@@ -326,9 +385,9 @@ function pageHandler(name) {
   return found.getText(pageAst);
 }
 
-function pageHarness(data, index, initialTrades = []) {
+function pageHarness(data, index, initialTrades = [], penMode = "simple") {
   const events = [];
-  const tracker = trading.createAutomaticPenTradeTracker(data.slice(0, index));
+  const tracker = trading.createAutomaticPenTradeTracker(data.slice(0, index), penMode);
   let nextId = 0;
   const context = {
     ...chartWindow, ...bookModule,
@@ -343,7 +402,7 @@ function pageHarness(data, index, initialTrades = []) {
     fullMacdDataRef: { current: [] }, subChartRef: { current: null },
     advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null },
     ...risk, priceDecimals: 5,
-    automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, firstOrderUnits: 1234 } },
+    automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, penMode, firstOrderUnits: 1234 } },
     restartingBacktestRef: { current: false }, backtestSampleRef: { current: null }, chartPanGuardRef: { current: null },
     balanceRef: { current: 10000 }, setBalance() {},
     performance, AbortController,
@@ -743,9 +802,14 @@ test("auto-trading switch is visible only to superusers in interactive backtest"
   assert.match(html({ isAutomaticTradingEnabled: true }), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="true"/);
   assert.doesNotMatch(html({ isReplayMode: true }), /自动做单/);
   assert.doesNotMatch(html({ isBacktestMode: false }), /自动做单/);
+  const penProps = { penMode: "strict", onPenModeChange() {} };
+  assert.equal((html(penProps).match(/aria-label="分笔算法"/g) || []).length, 2);
+  assert.match(html(penProps), /value="strict" selected=""/);
+  assert.match(html({ ...penProps, penModeLocked: true }), /aria-label="分笔算法" disabled=""/);
   user = { is_superuser: false };
   assert.doesNotMatch(html(), /自动做单/);
   assert.doesNotMatch(html(restartProps), /aria-label="从头再跑"/);
+  assert.doesNotMatch(html(penProps), /aria-label="分笔算法"/);
 });
 
 function installRestartHarness(context, sample) {
@@ -760,7 +824,7 @@ function installRestartHarness(context, sample) {
     stopAutomaticTrading: () => { context.isAutomaticTradingEnabled = false; context.advanceAutomaticTrading = () => null; },
     toggleAutomaticTrading: (startTime) => {
       const warmup = context.fullDataRef.current.slice(0, context.currentIndexRef.current).filter((bar) => startTime == null || bar.time >= startTime);
-      context.advanceAutomaticTrading = trading.createAutomaticPenTradeTracker(warmup).advanceEvent;
+      context.advanceAutomaticTrading = trading.createAutomaticPenTradeTracker(warmup, context.automaticTradingConfigRef.current.penMode).advanceEvent;
       context.isAutomaticTradingEnabled = true;
     },
     toast: { success: (message) => messages.push(message), error: (message) => messages.push(message) },
@@ -820,6 +884,51 @@ test("restart reuses candles and strategy warmup, saves a separate run, survives
   assert.equal(events.find((event) => event.side)?.units, 2468);
   assert.notDeepEqual(clean(context.tradesRef.current), first);
   assert.equal(context.fullDataRef.current, source);
+});
+
+test("both pen modes produce identical manual, bulk and same-sample rerun results", async () => {
+  const data = Array.from({ length: 2000 }, (_, i) => ({ ...fixture[i % fixture.length], time: fixture[i % fixture.length].time + Math.floor(i / fixture.length) * 10000000 }));
+  const clean = (trades) => JSON.parse(JSON.stringify(trades, (key, value) => ["id", "parentTradeId", "fundedBy", "fundedChildId"].includes(key) ? undefined : value));
+  const results = [];
+  for (const penMode of ["simple", "strict"]) {
+    const { context } = pageHarness(data, 1, [], penMode);
+    context.totalCandlesRef.current = 5000 + data.length;
+    installRestartHarness(context, { start: { start_bar_time: data[0].time, initial_balance: 10000 },
+      endIndex: 5000 + data.length, automatic: { cursorTime: data[0].time, contextTime: data[0].time } });
+    while (context.currentIndexRef.current < data.length) context.step();
+    const expected = clean(context.tradesRef.current), balance = context.balanceRef.current;
+    assert.ok(expected.length > 0);
+    results.push(expected);
+    await context.restart();
+    let report;
+    context.setAutomaticRun = (value) => { report = value; };
+    await context.runBulk(Infinity);
+    assert.deepEqual(clean(context.tradesRef.current), expected);
+    assert.equal(context.balanceRef.current, balance);
+    assert.equal(report.penMode, penMode);
+  }
+  assert.notDeepEqual(results[0], results[1]);
+});
+
+test("toolbar and strategy config cannot mix pen modes into a run with trades", () => {
+  const { context } = pageHarness(fixture, 1, [{ status: "Closed", id: "existing" }]);
+  const messages = [], saved = [];
+  Object.assign(context, {
+    canUseAutomaticDraw: true, canUseAutomaticTrading: true, isDataLoading: false, isHistoryLoading: false,
+    toast: { error: (message) => messages.push(message) }, localStorage: { setItem() {} },
+    AUTOMATIC_TRADING_STORAGE_KEY: "test", setAutomaticTradingConfig: (config) => saved.push(config),
+    setAutomaticTradingPenMode() {}, setIsAutomaticConfigOpen() {},
+  });
+  vm.runInContext(transpile(`globalThis.changeMode = ${pageHandler("handlePenModeChange")}; globalThis.applyConfig = ${pageHandler("applyAutomaticTradingConfig")};`), context);
+  context.changeMode("strict");
+  context.applyConfig({ ...context.automaticTradingConfigRef.current, penMode: "strict" });
+  assert.equal(saved.length, 0);
+  assert.equal(messages.length, 2);
+  context.tradesRef.current = [];
+  context.changeMode("strict");
+  assert.equal(saved.at(-1).penMode, "strict");
+  context.applyConfig({ ...context.automaticTradingConfigRef.current, penMode: "simple" });
+  assert.equal(saved.at(-1).penMode, "simple");
 });
 
 test("restart settles open positions at the revealed candle before saving and retains settlement on failure", async () => {

@@ -22,6 +22,10 @@ const defaults = config.DEFAULT_AUTOMATIC_TRADING_CONFIG;
 
 test("configuration has valid defaults, restores settings, and rejects invalid persisted values", () => {
   assert.equal(config.automaticTradingConfigError(defaults), null);
+  assert.equal(defaults.penMode, "simple");
+  assert.equal(config.readAutomaticTradingConfig('{"addRiskPercent":25}').penMode, "simple");
+  assert.equal(config.readAutomaticTradingConfig('{"penMode":"strict"}').penMode, "strict");
+  assert.ok(config.automaticTradingConfigError({ ...defaults, penMode: "unknown" }));
   assert.equal(config.readAutomaticTradingConfig('{"addRiskPercent":25}').addRiskPercent, 25);
   const migrated = config.readAutomaticTradingConfig('{"addRiskPercent":25}');
   assert.equal(migrated.shortExitEnabled, true);

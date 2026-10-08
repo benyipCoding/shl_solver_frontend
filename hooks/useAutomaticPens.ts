@@ -6,6 +6,7 @@ import {
   selectAutomaticPensForViewport,
   type AutomaticPen,
   type AutomaticPenCandle,
+  type AutomaticPenMode,
 } from "@/components/market-master/automatic-pens";
 import { AutomaticPensPrimitive } from "@/components/market-master/automatic-pens-primitive";
 import { exactCandleIndex } from "@/components/market-master/chart-window";
@@ -19,8 +20,10 @@ type UseAutomaticPensArgs = {
 export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPensArgs) {
   const primitiveRef = useRef<AutomaticPensPrimitive | null>(null);
   const generatorRef = useRef<ReturnType<typeof createAutomaticPenGenerator> | null>(null);
+  const modeRef = useRef<AutomaticPenMode>("simple");
   const drawnPensRef = useRef<readonly AutomaticPen[]>([]);
   const startTimeRef = useRef<Time | null>(null);
+  const warmupStartTimeRef = useRef<Time | null>(null);
   const lastTimeRef = useRef<Time | null>(null);
   const caughtUpRef = useRef(false);
   const lastSourceBarRef = useRef<AutomaticPenCandle | null>(null);
@@ -52,6 +55,7 @@ export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPe
     generatorRef.current = null;
     drawnPensRef.current = [];
     startTimeRef.current = null;
+    warmupStartTimeRef.current = null;
     lastTimeRef.current = null;
     caughtUpRef.current = false;
     lastSourceBarRef.current = null;
@@ -69,16 +73,22 @@ export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPe
     if (!series || startTime === null) return;
     const input = source?.();
     if (input && until === undefined && caughtUpRef.current && lastSourceBarRef.current === input.candles[input.count - 1]) return;
-    const generator = createAutomaticPenGenerator();
+    const generator = createAutomaticPenGenerator(undefined, undefined, modeRef.current);
     lastTimeRef.current = null;
     caughtUpRef.current = true;
     // Only setData/rewind/same-bar edits need a replay. Ordinary append never
     // calls series.data(), which copies the entire candle history in the chart.
     const candles = input?.candles ?? series.data();
     const count = input?.count ?? candles.length;
-    for (let i = 0; i < count; i++) {
+    const exactStart = typeof startTime === "number" ? exactCandleIndex(candles, startTime) : -1;
+    const start = exactStart >= 0 ? exactStart : candles.findIndex((candle) => candle.time >= startTime);
+    for (let i = Math.max(0, start - 101); i < count; i++) {
       const candle = candles[i];
-      if (!("open" in candle) || candle.time < startTime) continue;
+      if (!("open" in candle)) continue;
+      if (candle.time < startTime) {
+        if (warmupStartTimeRef.current == null || candle.time >= warmupStartTimeRef.current) generator.warmup(candle);
+        continue;
+      }
       if (until !== undefined && candle.time > until) {
         caughtUpRef.current = false;
         continue;
@@ -89,6 +99,15 @@ export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPe
     }
     generatorRef.current = generator;
   }, [seriesRef, source]);
+
+  const setAutomaticPenMode = useCallback((mode: AutomaticPenMode) => {
+    if (modeRef.current === mode) return;
+    modeRef.current = mode;
+    if (!generatorRef.current) return;
+    caughtUpRef.current = false;
+    rebuildAutomaticPens();
+    renderAutomaticPens();
+  }, [rebuildAutomaticPens, renderAutomaticPens]);
 
   const drawAutomaticPens = useCallback(() => {
     const chart = chartRef.current;
@@ -113,6 +132,7 @@ export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPe
     primitiveRef.current = primitive;
     series.attachPrimitive(primitive);
     startTimeRef.current = first.time;
+    warmupStartTimeRef.current = source?.().candles[0]?.time ?? series.dataByIndex(0)?.time ?? first.time;
     rebuildAutomaticPens(range.to);
     renderAutomaticPens();
     const onDataChanged = (scope: DataChangedScope) => {
@@ -143,5 +163,5 @@ export function useAutomaticPens({ chartRef, seriesRef, source }: UseAutomaticPe
     if (render) renderAutomaticPens();
   }, [chartRef, seriesRef, rebuildAutomaticPens, renderAutomaticPens]);
 
-  return { automaticPenCount, clearAutomaticPens, drawAutomaticPens, resetAutomaticPensState, updateAutomaticPensAfterCandle, getAutomaticPenStartTime };
+  return { automaticPenCount, clearAutomaticPens, drawAutomaticPens, resetAutomaticPensState, updateAutomaticPensAfterCandle, getAutomaticPenStartTime, setAutomaticPenMode };
 }

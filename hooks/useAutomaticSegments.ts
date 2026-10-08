@@ -13,7 +13,7 @@ import {
   type Time,
 } from "lightweight-charts";
 
-import { generateAutomaticPens } from "@/components/market-master/automatic-pens";
+import { generateAutomaticPens, type AutomaticPenMode } from "@/components/market-master/automatic-pens";
 import {
   AUTOMATIC_SEGMENTS_COLOR,
   generateAutomaticSegments,
@@ -58,6 +58,7 @@ export function useAutomaticSegments({
   const segmentSeriesRef = useRef<SegmentSeriesEntry[]>([]);
   const trackedSeriesRef = useRef(new Set<ISeriesApi<"Line", Time>>());
   const enabledRef = useRef(false);
+  const modeRef = useRef<AutomaticPenMode>("simple");
   const taskRef = useRef<SegmentTask | null>(null);
   const taskTokenRef = useRef(0);
   const mountedRef = useRef(true);
@@ -214,7 +215,7 @@ export function useAutomaticSegments({
 
   const calculateSegments = useCallback(() => {
     const candles = seriesRef.current?.data().filter(isCandlestickData) ?? [];
-    return generateAutomaticSegments(generateAutomaticPens(candles));
+    return generateAutomaticSegments(generateAutomaticPens(candles, undefined, modeRef.current));
   }, [seriesRef]);
 
   const drawAutomaticSegments = useCallback(() => {
@@ -313,6 +314,12 @@ export function useAutomaticSegments({
     setAutomaticSegmentCount(0);
   }, [cancelTask]);
 
+  const setAutomaticSegmentPenMode = useCallback((mode: AutomaticPenMode, redraw = enabledRef.current) => {
+    if (modeRef.current === mode) return;
+    modeRef.current = mode;
+    if (redraw) drawAutomaticSegments();
+  }, [drawAutomaticSegments]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -328,5 +335,6 @@ export function useAutomaticSegments({
     drawAutomaticSegments,
     resetAutomaticSegmentsState,
     updateAutomaticSegmentsAfterCandle,
+    setAutomaticSegmentPenMode,
   };
 }

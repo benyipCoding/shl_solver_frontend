@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import type { AutomaticRunProgress } from "./automatic-trading-runner";
+import type { AutomaticPenMode } from "./automatic-pens";
 
 export type AutomaticRunView = AutomaticRunProgress & {
   status: "running" | "done" | "cancelled" | "error";
   message?: string;
+  penMode?: AutomaticPenMode;
   result?: { realized: number; floating: number; closed: number; wins: number; drawdown: number; seconds: number };
 };
 export function AutomaticTradingRunDialog({ run, onStop, onClose }: { run: AutomaticRunView; onStop: () => void; onClose: () => void }) {
@@ -15,6 +17,7 @@ export function AutomaticTradingRunDialog({ run, onStop, onClose }: { run: Autom
   const money = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return <dialog ref={ref} aria-labelledby="strategy-run-title" onCancel={(e) => { e.preventDefault(); if (running) onStop(); else onClose(); }} className="fixed inset-0 m-auto w-[min(480px,calc(100vw-32px))] rounded-2xl border border-slate-700 bg-gray-900 p-6 text-slate-200 shadow-2xl backdrop:bg-black/70">
     <h2 id="strategy-run-title" className="flex items-center gap-2 text-lg font-semibold">{running && <Loader2 size={20} className="animate-spin text-emerald-400" />}分笔做单系统 · {running ? "运行中" : run.status === "done" ? "运行完成" : run.status === "cancelled" ? "已停止" : "运行中断"}</h2>
+    <p className="mt-2 text-xs text-yellow-300">本轮算法：{run.penMode === "strict" ? "严格笔" : "简单笔"}</p>
     <p className="mt-3 text-sm text-slate-400" aria-live="polite">{run.message ?? (run.phase === "loading" ? "正在加载后续 K 线…" : run.phase === "saving" ? "正在保存交易记录…" : "正在逐根计算交易信号与持仓盈亏…")}</p>
     <progress value={run.processed} max={Math.max(1, run.target)} aria-label="策略回测进度" className="mt-5 h-2 w-full accent-emerald-500" />
     <p className="mt-2 text-sm tabular-nums text-slate-400">{run.processed.toLocaleString()} / {run.target.toLocaleString()} 根 · {percent.toFixed(1)}%</p>
