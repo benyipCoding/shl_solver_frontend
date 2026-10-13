@@ -379,6 +379,9 @@ function pageHandler(name) {
     if (ts.isVariableDeclaration(node) && node.name.getText(pageAst) === name) {
       found = ts.isCallExpression(node.initializer) ? node.initializer.arguments[0] : node.initializer;
     }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText(pageAst) === name) {
+      found = node.right;
+    }
     ts.forEachChild(node, visit);
   }
   visit(pageAst);
@@ -413,6 +416,8 @@ function pageHarness(data, index, initialTrades = [], penMode = "simple") {
     runAutomaticTradingBatch: (options) => runner.runAutomaticTradingBatch({ ...options, now: () => performance.now(), yieldToBrowser: async () => {} }),
     setCurrentIndex() {}, setIsPlaying() {}, closeTradeRecord: management.closeTradeRecord, closeTradeUnits: management.closeTradeUnits, withSettlementBalances: management.withSettlementBalances,
     isBacktestMode: true, currentPrice: data[index - 1]?.close,
+    dataMode: "history", dataModeRef: { current: "history" }, realtimeReadyRef: { current: false },
+    realtimeQuoteTimeRef: { current: 100 }, realtimeQuoteSequenceRef: { current: 1 },
     orderUnits: 1234, slEnabled: true, slDistance: 0.0001, tpEnabled: true, tpDistance: 0.0002,
     crypto: { randomUUID: () => `automatic-order-${++nextId}` },
     tradesRef: { current: initialTrades },
@@ -425,12 +430,99 @@ function pageHarness(data, index, initialTrades = [], penMode = "simple") {
   context.commitTrades = (next) => { context.tradesRef.current = next; };
   context.settleClosedTrades = (next) => { events.push("settle"); context.commitTrades(next); };
   vm.createContext(context);
-  vm.runInContext(transpile(`globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
+  vm.runInContext(transpile(`globalThis.canPersistBacktestTrades = ${pageHandler("canPersistBacktestTrades")}; globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
   context.placeOrderRef.current = context.placeOrder;
   context.commitTrades = context.commitReal;
   context.handleNextCandle = context.step;
   return { context, events };
 }
+
+function installManualTradeHarness(context) {
+  Object.assign(context, {
+    getRiskPriceError: management.getRiskPriceError,
+    orderLinesRef: { current: {} },
+    toast: { success() {}, error: (message) => assert.fail(message) },
+  });
+  context.settleClosedTrades = context.settleReal;
+  vm.runInContext(transpile(`
+    globalThis.saveRisk = ${pageHandler("handleSaveTradeRisk")};
+    globalThis.dragRisk = ${pageHandler("updateTradePriceRef.current")};
+    globalThis.closeMarket = ${pageHandler("handleCloseMarket")};
+    globalThis.forceClose = ${pageHandler("forceCloseAllOpenTrades")};
+  `), context);
+}
+
+function installPersistenceHarness(context) {
+  const requests = [], errors = [];
+  const { createBacktestPersistClient } = loadModule("./backtest-persistence.ts", {}, {
+    fetch, console: { error: (...args) => errors.push(args) },
+  });
+  const client = createBacktestPersistClient();
+  client.configure({ enabled: true, fetchFn: async (url, init) => {
+    requests.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ public_id: "history-session" }));
+  } });
+  context.persistRef.current = client;
+  return { client, requests, errors };
+}
+
+test("logged-in realtime trades update the account without creating or writing a backtest session", async () => {
+  const data = [{ time: 1, close: 100 }];
+  const { context } = pageHarness(data, 1);
+  installManualTradeHarness(context);
+  const { client, requests, errors } = installPersistenceHarness(context);
+  Object.assign(context, { isBacktestMode: false, dataMode: "realtime", orderUnits: 10 });
+  context.isBacktestModeRef.current = false;
+  context.dataModeRef.current = "realtime";
+  context.realtimeReadyRef.current = true;
+  context.pendingSessionStartRef.current = null;
+  context.placeOrder("Buy");
+  const tradeId = context.tradesRef.current[0].id;
+  assert.equal(context.saveRisk(tradeId, 90, 120), null);
+  context.dragRisk(tradeId, "sl", 95);
+  assert.equal(context.tradesRef.current[0].sl, 95);
+  data[0].close = 105;
+  context.closeMarket(tradeId, 4);
+  assert.equal(context.tradesRef.current.find(t => t.status === "Open").units, 6);
+  context.forceClose();
+  assert.ok(context.tradesRef.current.every(t => t.status === "Closed"));
+  assert.equal(context.balanceRef.current, 10050);
+  await client.endBatch();
+  assert.deepEqual(requests, []);
+  assert.deepEqual(errors, []);
+});
+
+test("switching to realtime preserves queued historical writes without appending live trades", async () => {
+  const data = [{ time: 1, close: 100 }];
+  const { context } = pageHarness(data, 1);
+  installManualTradeHarness(context);
+  const { client, requests, errors } = installPersistenceHarness(context);
+  context.placeOrder("Buy");
+  const historicalTradeId = context.tradesRef.current[0].id;
+  context.forceClose();
+  client.completeSession({ ending_balance: 10000, mark_price: 100 });
+  // Switch before the queued session creation resolves, leaving the old
+  // backtest ref momentarily true just as it can be before React's effect.
+  context.dataModeRef.current = "realtime";
+  context.dataMode = "realtime";
+  context.isBacktestMode = false;
+  context.realtimeReadyRef.current = true;
+  context.placeOrder("Buy");
+  context.saveRisk(context.tradesRef.current[0].id, 90, 120);
+  context.forceClose();
+  await client.endBatch();
+  assert.deepEqual(requests.map(r => r.url.split("/").at(-1)), ["sessions", "events", "events", "complete"]);
+  assert.ok(requests.filter(r => r.body.event_type).every(r => r.body.client_trade_id === historicalTradeId));
+  assert.deepEqual(errors, []);
+  // The next historical run must still save normally after live trading.
+  context.dataModeRef.current = "history";
+  context.dataMode = "history";
+  context.isBacktestMode = true;
+  context.pendingSessionStartRef.current = { marker: "next-session" };
+  context.placeOrder("Buy");
+  await client.endBatch();
+  assert.deepEqual(requests.slice(-2).map(r => r.url.split("/").at(-1)), ["sessions", "events"]);
+});
 
 test("page settlement snapshots follow execution order even when same-bar fills offset to zero", () => {
   const { context, events } = pageHarness(fixture, 1);

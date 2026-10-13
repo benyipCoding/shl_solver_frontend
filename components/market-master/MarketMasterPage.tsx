@@ -1031,6 +1031,13 @@ export function MarketMasterPage() {
     if (!automaticRunRef.current?.suppress) setTrades(nextTrades);
   }, []);
 
+  // Shared trade handlers also serve local realtime simulation. Gate new
+  // records here; keep the persistence queue alive so historical writes and
+  // session completion can finish after a mode switch.
+  const canPersistBacktestTrades = useCallback(() =>
+    dataModeRef.current === "history" && isBacktestModeRef.current && !isReplayModeRef.current,
+  []);
+
   const settleClosedTrades = useCallback(
     (
       nextTrades: any[],
@@ -1046,7 +1053,7 @@ export function MarketMasterPage() {
         balanceRef.current = nextBalance;
         if (!automaticRunRef.current?.suppress) setBalance(nextBalance);
       }
-      if (isReplayModeRef.current) return;
+      if (!canPersistBacktestTrades()) return;
       const resolvedBarIndex = barIndex ?? currentIndexRef.current - 1;
       newlyClosed.forEach((trade) => {
         if (trade?.closeTime == null || trade?.closePrice == null) return;
@@ -1061,7 +1068,7 @@ export function MarketMasterPage() {
         });
       });
     },
-    [commitTrades, syncTradeMarkers]
+    [canPersistBacktestTrades, commitTrades, syncTradeMarkers]
   );
 
   updateTradePriceRef.current = (tradeId: any, type: any, newPrice: any) => {
@@ -1085,7 +1092,7 @@ export function MarketMasterPage() {
       fullDataRef.current,
       currentIndexRef.current
     );
-    if (activeCandle?.time == null || (type !== "sl" && type !== "tp")) return;
+    if (!canPersistBacktestTrades() || activeCandle?.time == null || (type !== "sl" && type !== "tp")) return;
     persistRef.current.recordModify({
       client_trade_id: String(tradeId),
       kind: type,
@@ -4000,7 +4007,7 @@ export function MarketMasterPage() {
     currentIndexRef.current = currentIndex + 1;
     updateAutomaticPensAfterCandle(nextCandle, !automaticRunRef.current?.suppress);
     if (!automaticRunRef.current?.suppress) updateAutomaticSegmentsAfterCandle();
-    if (!isReplayModeRef.current && isBacktestModeRef.current) {
+    if (canPersistBacktestTrades()) {
       const event = advanceAutomaticTrading(nextCandle);
       if (event) {
         const failedTrades: TradePosition[] = [];
@@ -4042,6 +4049,7 @@ export function MarketMasterPage() {
     if (!automaticRunRef.current?.suppress) setCurrentIndex(currentIndex + 1);
   }, [
     applyReplayEventsUpTo,
+    canPersistBacktestTrades,
     settleClosedTrades,
     advanceAutomaticTrading,
     commitTrades,
@@ -4305,7 +4313,7 @@ export function MarketMasterPage() {
         : trade);
     commitTrades([newTrade, ...previousTrades]);
     syncTradeMarkers(tradesRef.current);
-    if (newTrade.entryTime != null) {
+    if (canPersistBacktestTrades() && newTrade.entryTime != null) {
       const pendingStart = pendingSessionStartRef.current;
       if (pendingStart) {
         pendingSessionStartRef.current = null;
@@ -4408,7 +4416,7 @@ export function MarketMasterPage() {
     if (error) return error;
     commitTrades(tradesRef.current.map((t) => t === trade ? { ...t, sl, tp } : t));
     for (const [kind, price] of [["sl", sl], ["tp", tp]]) {
-      if (trade[kind] === price) continue;
+      if (!canPersistBacktestTrades() || trade[kind] === price) continue;
       persistRef.current.recordModify({ client_trade_id: String(trade.id), kind, price,
         bar_time: candle.time, bar_index: loadedOffsetRef.current + currentIndexRef.current - 1 });
     }
