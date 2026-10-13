@@ -53,6 +53,7 @@ type CandleTooltip = {
 type MarketWorkspaceProps = {
   bottomPanelHeight: number;
   canPlaceOrder: boolean;
+  isRealtimeMode?: boolean;
   isReplayMode?: boolean;
   isAutomaticTradingEnabled?: boolean;
   candleTooltip: CandleTooltip | null;
@@ -111,6 +112,7 @@ type MarketWorkspaceProps = {
 export function MarketWorkspace({
   bottomPanelHeight,
   canPlaceOrder,
+  isRealtimeMode,
   isReplayMode = false,
   isAutomaticTradingEnabled = false,
   candleTooltip,
@@ -391,6 +393,7 @@ export function MarketWorkspace({
         isMaximized={isMaximized}
         panelWidth={rightPanelWidth}
         canPlaceOrder={canPlaceOrder}
+        isRealtimeMode={isRealtimeMode}
         isReplayMode={isReplayMode}
       />
     </div>

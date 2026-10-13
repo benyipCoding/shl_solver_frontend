@@ -1,5 +1,5 @@
 export type PendingMarketChange = {
-  kind: "symbol" | "timeframe";
+  kind: "symbol" | "timeframe" | "dataMode";
   value: string;
   openCount: number;
   wasBacktestMode: boolean;
@@ -19,7 +19,7 @@ export function PendingMarketChangeDialog({
   if (!pendingChange) return null;
 
   const targetLabel =
-    pendingChange.kind === "symbol" ? "交易标的" : "周期";
+    pendingChange.kind === "symbol" ? "交易标的" : pendingChange.kind === "dataMode" ? "行情模式" : "周期";
 
   return (
     <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">

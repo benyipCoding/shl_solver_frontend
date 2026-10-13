@@ -33,6 +33,8 @@ import {
   type PendingTradeClose,
 } from "@/components/market-master/TradeCloseConfirmDialog";
 import { TopBar } from "@/components/market-master/TopBar";
+import { useRealtimeMarket } from "@/hooks/useRealtimeMarket";
+import { applyRealtimeCandles, realtimeExit, type MarketDataMode } from "./realtime-data";
 import {
   getDefaultSymbol,
   INITIAL_FAVORITES,
@@ -549,6 +551,43 @@ export function MarketMasterPage() {
   });
 
   const [symbol, setSymbol] = useState(INITIAL_FAVORITES[0]);
+  const [dataMode, setDataMode] = useState<MarketDataMode>("history");
+  const dataModeRef = useRef(dataMode);
+  dataModeRef.current = dataMode;
+  const [realtimeAvailable, setRealtimeAvailable] = useState(false);
+  const [realtimeChecking, setRealtimeChecking] = useState(true);
+  const [realtimeAvailabilityStatus, setRealtimeAvailabilityStatus] = useState("正在检测本地实时服务…");
+  const [realtimeCapabilityAttempt, setRealtimeCapabilityAttempt] = useState(0);
+  const [realtimeRevision, setRealtimeRevision] = useState(0);
+  const realtimeQuoteTimeRef = useRef<number | undefined>(undefined);
+  const realtimeQuoteSequenceRef = useRef<number | undefined>(undefined);
+  const realtimeReadyRef = useRef(false);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const controller = new AbortController();
+    let cancelled = false;
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    fetch("/api/market_master/realtime/capabilities", { signal: controller.signal, cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Capability check failed");
+        return response.json();
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setRealtimeAvailable(result?.enabled === true);
+        setRealtimeAvailabilityStatus(result?.enabled === true ? "" : "本地实时服务未启用，请启用后重启服务");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRealtimeAvailable(false);
+        setRealtimeAvailabilityStatus("无法连接本地实时服务，请启动服务后重新检测");
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (!cancelled) setRealtimeChecking(false);
+      });
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort(); };
+  }, [realtimeCapabilityAttempt]);
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const timeframeRef = useRef(timeframe);
   const [isBacktestMode, setIsBacktestMode] = useState(false);
@@ -1399,7 +1438,7 @@ export function MarketMasterPage() {
     }
 
     updateLegend(stateRef.current.lastHoveredTime);
-  }, [currentIndex, symbol, timeframe, updateLegend, indConfig, isDataLoading]);
+  }, [currentIndex, symbol, timeframe, updateLegend, indConfig, isDataLoading, realtimeRevision]);
 
   const focusLatestCandles = useCallback((dataOverride: any[] = []) => {
     const data = dataOverride.length ? dataOverride : fullDataRef.current;
@@ -2022,6 +2061,7 @@ export function MarketMasterPage() {
     const applyLoadedMarketData = applyCandlePage;
 
     const loadMarketData = async () => {
+      realtimeQuoteTimeRef.current = undefined;
       backtestSampleRef.current = null;
       dataSessionRef.current += 1;
       const session = dataSessionRef.current;
@@ -2109,10 +2149,11 @@ export function MarketMasterPage() {
     syncDisplayedData,
     disableAutomaticDrawings,
     marketDataEpoch,
+    dataMode,
   ]);
 
   useEffect(() => {
-    if (!isBacktestMode) {
+    if (!isBacktestMode && dataMode !== "realtime") {
       clearClosedTradeMarkers();
       return;
     }
@@ -2123,6 +2164,7 @@ export function MarketMasterPage() {
     isBacktestMode,
     syncTradeMarkers,
     trades,
+    dataMode,
   ]);
 
   const applyReplayWindow = useCallback(
@@ -2209,6 +2251,7 @@ export function MarketMasterPage() {
     if (isDataLoading || !fullDataRef.current.length) return;
 
     if (isBacktestMode) {
+      if (dataMode !== "history") { setIsBacktestMode(false); return; }
       if (wasBacktestModeRef.current) return;
 
       let cancelled = false;
@@ -2480,6 +2523,7 @@ export function MarketMasterPage() {
     resetBacktestAccount,
     requestBacktestCompletion,
     restoreLatestWindow,
+    dataMode,
     symbol,
     syncDisplayedData,
     timeframe,
@@ -2487,7 +2531,9 @@ export function MarketMasterPage() {
 
   useEffect(() => {
     const detail = pendingReplayRef.current;
+    if (dataMode !== "history") return;
     if (!detail) return;
+    if (pendingMarketChange) return;
     if (isBacktestMode) return;
 
     const nextTimeframe =
@@ -2533,6 +2579,8 @@ export function MarketMasterPage() {
     isDataLoading,
     isHistoryLoading,
     pendingReplayToken,
+    dataMode,
+    pendingMarketChange,
     symbol,
     timeframe,
     totalCandles,
@@ -4209,7 +4257,7 @@ export function MarketMasterPage() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type, entryCandle = getActiveCandle(fullDataRef.current, currentIndexRef.current), barIndex = currentIndexRef.current - 1, automaticEvent?: AutomaticPenEvent) => {
-    if (!isBacktestMode || isReplayModeRef.current) return;
+    if ((!isBacktestMode && !realtimeReadyRef.current) || isReplayModeRef.current) return;
     if (!entryCandle || !Number.isFinite(entryCandle.close) || entryCandle.close <= 0) return;
     const entry = entryCandle.close;
     const config = automaticTradingConfigRef.current;
@@ -4245,6 +4293,9 @@ export function MarketMasterPage() {
       pnl: 0,
       visibleOnChart: true,
       entryTime: entryCandle.time,
+      ...(!isBacktestModeRef.current && dataMode === "realtime"
+        ? { realtimeQuoteTime: realtimeQuoteTimeRef.current ?? Date.now() / 1000,
+            realtimeQuoteSequence: realtimeQuoteSequenceRef.current } : {}),
     };
     // Consume funding only after a valid order has actually been created.
     const fundedBy = plan?.automaticPen.fundedBy;
@@ -4276,7 +4327,7 @@ export function MarketMasterPage() {
 
   const handleCloseMarket = (tradeId, unitsOverride?: number) => {
     if (isReplayModeRef.current) return;
-    if (!isBacktestModeRef.current) return;
+    if (!isBacktestModeRef.current && !realtimeReadyRef.current) return;
     const activeCandle = getActiveCandle(
       fullDataRef.current,
       currentIndexRef.current
@@ -4337,7 +4388,7 @@ export function MarketMasterPage() {
   }, [syncDisplayedData, updateAutomaticSegmentsAfterCandle]);
 
   const handleOpenTradeManagement = (tradeId) => {
-    if (isReplayModeRef.current || !isBacktestModeRef.current) return;
+    if (isReplayModeRef.current || (!isBacktestModeRef.current && !realtimeReadyRef.current)) return;
     const trade = tradesRef.current.find(
       (item) => String(item.id) === String(tradeId) && item.status === "Open"
     );
@@ -4348,7 +4399,7 @@ export function MarketMasterPage() {
   openTradeManagementRef.current = handleOpenTradeManagement;
 
   const handleSaveTradeRisk = (tradeId, sl, tp) => {
-    if (isReplayModeRef.current || !isBacktestModeRef.current) return "当前不可修改持仓";
+    if (isReplayModeRef.current || (!isBacktestModeRef.current && !realtimeReadyRef.current)) return "当前不可修改持仓";
     const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
     if (!trade) return "该订单已平仓";
     const candle = getActiveCandle(fullDataRef.current, currentIndexRef.current);
@@ -4391,7 +4442,15 @@ export function MarketMasterPage() {
   }, [settleClosedTrades]);
 
   const applyMarketChange = useCallback(
-    (kind: "symbol" | "timeframe", value: string) => {
+    (kind: "symbol" | "timeframe" | "dataMode", value: string) => {
+      if (kind === "dataMode") {
+        pendingReplayRef.current = null;
+        setReplayingSessionId(null);
+        setIsBacktestHistoryOpen(false);
+        dataModeRef.current = value as MarketDataMode;
+        setDataMode(value as MarketDataMode);
+        return;
+      }
       if (kind === "symbol") {
         setSymbol(value);
         return;
@@ -4402,7 +4461,9 @@ export function MarketMasterPage() {
   );
 
   const requestMarketChange = useCallback(
-    (kind: "symbol" | "timeframe", value: string) => {
+    (kind: "symbol" | "timeframe" | "dataMode", value: string) => {
+      if (kind === "dataMode" && value === "realtime" && !realtimeAvailable) return;
+      if (kind === "dataMode" && value === dataMode) return;
       if (kind === "symbol" && value === symbol) return;
       if (kind === "timeframe" && value === timeframe) return;
 
@@ -4437,6 +4498,8 @@ export function MarketMasterPage() {
       requestBacktestCompletion,
       symbol,
       timeframe,
+      dataMode,
+      realtimeAvailable,
     ]
   );
 
@@ -4681,6 +4744,8 @@ export function MarketMasterPage() {
     resetSupportResistance, syncDisplayedData, toggleAutomaticTrading]);
 
   const restoreReplayDetail = useCallback((detail) => {
+    // A history request can finish after the user has switched to realtime.
+    if (dataModeRef.current !== "history") return;
     setIsBacktestHistoryOpen(false);
     setReplayingSessionId(detail.public_id);
     pendingReplayRef.current = detail;
@@ -4690,7 +4755,7 @@ export function MarketMasterPage() {
 
   const handleReplaySession = useCallback(
     async (publicId: string) => {
-      if (!user) return;
+      if (!user || dataModeRef.current !== "history") return;
       setIsBacktestHistoryOpen(false);
       setReplayingSessionId(publicId);
       try {
@@ -4727,6 +4792,10 @@ export function MarketMasterPage() {
   ]);
 
   const cancelPendingMarketChange = useCallback(() => {
+    if (pendingReplayRef.current) {
+      pendingReplayRef.current = null;
+      setReplayingSessionId(null);
+    }
     setPendingMarketChange(null);
   }, []);
 
@@ -4816,6 +4885,65 @@ export function MarketMasterPage() {
   }, [trades]);
 
   const openTrades = trades.filter((t) => t.status === "Open");
+  const { status: realtimeStatus, ready: realtimeReady } = useRealtimeMarket({
+    enabled: realtimeAvailable && dataMode === "realtime" && !isBacktestMode && !isReplayMode &&
+      !isDataLoading && !isHistoryLoading && !isSyncingLatest && !isRepairingKline && !dataError,
+    symbol,
+    interval: getIntervalByTimeframe(timeframe),
+    onEvent: (event) => {
+      if (dataMode !== "realtime" || isBacktestModeRef.current || isDataLoadingRef.current || historyLoadingRef.current ||
+          loadedMarketRef.current.symbol !== symbol || loadedMarketRef.current.timeframe !== timeframe) return;
+      if (!event.candles?.length) return;
+      const incoming = normalizeCandles(event.candles);
+      const previousLength = fullDataRef.current.length;
+      const added = applyRealtimeCandles(fullDataRef.current, incoming);
+      if (event.quote) {
+        realtimeQuoteTimeRef.current = event.quote.timestamp;
+        realtimeQuoteSequenceRef.current = event.quote.sequence;
+        if (event.type === "snapshot") {
+          // After reconnect we cannot reconstruct executions during the outage.
+          // Resume from this quote rather than replaying old prices into orders.
+          tradesRef.current = tradesRef.current.map((trade) => trade.status === "Open" ? {
+            ...trade, realtimeQuoteTime: event.quote!.timestamp,
+            realtimeQuoteSequence: event.quote!.sequence,
+          } : trade);
+        }
+      }
+      currentIndexRef.current = fullDataRef.current.length;
+      setCurrentIndex(currentIndexRef.current);
+      totalCandlesRef.current += added;
+      setTotalCandles(totalCandlesRef.current);
+      latestUnixRef.current = fullDataRef.current.at(-1)?.time ?? null;
+      if (!chartPanGuardRef.current?.isActive()) {
+        const range = chartRef.current?.timeScale().getVisibleLogicalRange();
+        const window = chartWindowRef.current;
+        const followsLatest = range && window.from + range.to >= previousLength - 2;
+        syncDisplayedData(fullDataRef.current, currentIndexRef.current, false, false, {
+          shouldFocusLatest: false,
+          focusRange: range ? {
+            from: window.from + range.from + (followsLatest ? added : 0),
+            to: window.from + range.to + (followsLatest ? added : 0),
+          } : undefined,
+        });
+        updateAutomaticSegmentsAfterCandle();
+      }
+      updateSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
+      if (event.type === "candles" && event.quotes?.length) {
+        const closed: any[] = [];
+        const nextTrades = tradesRef.current.map((trade) => {
+          if (trade.status !== "Open") return trade;
+          const exit = realtimeExit(trade, event.quotes!);
+          if (!exit) return trade;
+          const result = closeTradeRecord(trade, exit.price, exit.reason, latestUnixRef.current);
+          closed.push(result);
+          return result;
+        });
+        if (closed.length) settleClosedTrades(nextTrades, closed, closed.reduce((sum, trade) => sum + trade.pnl, 0));
+      }
+      setRealtimeRevision((revision) => revision + 1);
+    },
+  });
+  realtimeReadyRef.current = realtimeReady;
   const totalFloatingPnl = openTrades.reduce((acc, t) => {
     const pnl =
       t.type === "Buy"
@@ -4858,7 +4986,7 @@ export function MarketMasterPage() {
     const openCount = tradesRef.current.filter(
       (trade) => trade.status === "Open"
     ).length;
-    if (!isBacktestMode || openCount === 0) return;
+    if ((!isBacktestMode && !realtimeReadyRef.current) || openCount === 0) return;
     setPendingTradeClose({ kind: "all", openCount });
   };
 
@@ -5040,7 +5168,7 @@ export function MarketMasterPage() {
         aiReviewModal={aiReviewModal}
         applyIndicatorConfig={applyIndicatorConfig}
         canCloseAllOpenTrades={
-          isBacktestMode && !isReplayMode && openTrades.length > 0
+          (isBacktestMode || realtimeReady) && !isReplayMode && openTrades.length > 0
         }
         contextMenu={contextMenu}
         draftConfig={draftConfig}
@@ -5067,6 +5195,17 @@ export function MarketMasterPage() {
       />
 
       <TopBar
+        dataMode={dataMode}
+        realtimeAvailable={realtimeAvailable}
+        realtimeChecking={realtimeChecking}
+        realtimeAvailabilityStatus={realtimeAvailabilityStatus}
+        onRetryRealtime={() => {
+          setRealtimeChecking(true);
+          setRealtimeAvailabilityStatus("正在检测本地实时服务…");
+          setRealtimeCapabilityAttempt((attempt) => attempt + 1);
+        }}
+        realtimeStatus={realtimeStatus}
+        onDataModeChange={(nextMode: MarketDataMode) => requestMarketChange("dataMode", nextMode)}
         symbol={symbol}
         setSymbol={(nextSymbol: string) =>
           requestMarketChange("symbol", nextSymbol)
@@ -5104,7 +5243,9 @@ export function MarketMasterPage() {
         supportResistanceError={supportResistanceHistory.error}
         clearLines={clearManualLines}
         isBacktestMode={isBacktestMode}
-        setIsBacktestMode={setIsBacktestMode}
+        setIsBacktestMode={(enabled: boolean) => {
+          if (!enabled || dataModeRef.current === "history") setIsBacktestMode(enabled);
+        }}
         onExitBacktest={handleExitBacktest}
         currentIndex={loadedOffset + currentIndex}
         totalCandles={isBacktestMode && !isReplayMode ? backtestSampleRef.current?.endIndex ?? totalCandles : totalCandles}
@@ -5148,10 +5289,11 @@ export function MarketMasterPage() {
       />
 
       <MarketWorkspace
+        isRealtimeMode={dataMode === "realtime" && !isBacktestMode}
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         bottomPanelHeight={bottomPanelHeight}
         canPlaceOrder={
-          isBacktestMode && !isReplayMode && !isDataLoading && !dataError
+          (isBacktestMode || realtimeReady) && !isReplayMode && !isDataLoading && !dataError
         }
         isReplayMode={isReplayMode}
         candleTooltip={candleTooltip}
@@ -5236,6 +5378,7 @@ export function MarketMasterPage() {
         />
       </MarketWorkspace>
 
+      {dataMode === "history" && <>
       <BacktestHistoryModal
         isOpen={isBacktestHistoryOpen}
         onClose={() => setIsBacktestHistoryOpen(false)}
@@ -5245,6 +5388,7 @@ export function MarketMasterPage() {
       <Suspense fallback={null}>
         <BacktestShareLinkHandler onReplay={restoreReplayDetail} isReplayMode={isReplayMode} />
       </Suspense>
+      </>}
 
       <PendingMarketChangeDialog
         pendingChange={pendingMarketChange}
@@ -5259,7 +5403,7 @@ export function MarketMasterPage() {
         onCancel={cancelPendingTradeClose}
         onConfirm={confirmPendingTradeClose}
       />
-      {isBacktestMode && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
+      {(isBacktestMode || realtimeReady) && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
         <TradeManagementDialog
           key={managedTradeId}
           trade={trades.find((trade) => trade.id === managedTradeId && trade.status === "Open")}

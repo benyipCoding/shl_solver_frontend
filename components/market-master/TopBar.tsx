@@ -36,6 +36,13 @@ import {
 import { useAuth } from "@/context/AuthContext";
 
 export const TopBar = ({
+  dataMode = "history",
+  realtimeAvailable = false,
+  realtimeChecking = false,
+  realtimeAvailabilityStatus,
+  onRetryRealtime,
+  realtimeStatus,
+  onDataModeChange,
   symbol,
   setSymbol,
   timeframe,
@@ -130,7 +137,7 @@ export const TopBar = ({
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
   const canEnterBacktest =
-    !isDataLoading && !dataError && totalCandles >= minBacktestCandles;
+    dataMode === "history" && !isDataLoading && !dataError && totalCandles >= minBacktestCandles;
   const isBacktestToggleDisabled = !canEnterBacktest;
 
   let backtestButtonLabel = "开启逐K回测";
@@ -195,6 +202,7 @@ export const TopBar = ({
   };
 
   const handleOpenBacktestHistory = () => {
+    if (dataMode !== "history") return;
     if (!requireAuthForBacktest()) return;
     onOpenBacktestHistory?.();
   };
@@ -211,6 +219,26 @@ export const TopBar = ({
 
   return (
     <>
+      {process.env.NODE_ENV === "development" && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 lg:px-6">
+          <label className="flex items-center gap-2">
+            行情模式
+            <select aria-label="行情模式" value={dataMode}
+              disabled={isDataLoading || isHistoryLoading || isSyncingLatest || isRepairingKline || isAutomaticRunBusy}
+              onChange={(event) => onDataModeChange(event.target.value)}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 disabled:opacity-40">
+              <option value="history">历史数据</option>
+              <option value="realtime" disabled={!realtimeAvailable}>实时数据（本地）</option>
+            </select>
+          </label>
+          {dataMode === "realtime" && <span role="status">{realtimeStatus} · 模拟交易</span>}
+          {!realtimeAvailable && <>
+            <span role="status">{realtimeAvailabilityStatus}</span>
+            <button type="button" onClick={onRetryRealtime} disabled={realtimeChecking}
+              className="text-blue-300 hover:text-blue-200 disabled:opacity-40">重新检测</button>
+          </>}
+        </div>
+      )}
       <header className="relative z-40 shrink-0 border-b border-slate-800/80 bg-gray-900/95 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.02)] backdrop-blur lg:flex lg:h-16 lg:flex-nowrap lg:items-center lg:gap-6 lg:px-6 lg:py-0">
         <div className="flex flex-col gap-2 lg:hidden">
           <div
@@ -314,7 +342,7 @@ export const TopBar = ({
           </div>
 
           {canUseAutomaticDraw && penModeSelect}
-          {!isBacktestMode ? (
+          {dataMode !== "history" ? null : !isBacktestMode ? (
             <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-1 rounded-2xl border border-slate-800 bg-slate-950/60 p-1 shadow-inner">
               <button
                 type="button"
@@ -749,7 +777,7 @@ export const TopBar = ({
           AI 智能扫描
         </button> */}
 
-          {!isBacktestMode ? (
+          {dataMode !== "history" ? null : !isBacktestMode ? (
             <>
               <button
                 type="button"

@@ -9,11 +9,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React,
 } }).outputText;
-function loadModule(relativePath, dependencies = {}) {
+function loadModule(relativePath, dependencies = {}, globals = {}) {
   const target = { exports: {} };
   vm.runInNewContext(transpile(fs.readFileSync(new URL(relativePath, import.meta.url), "utf8")), {
     module: target, exports: target.exports,
     require: (name) => { assert.ok(name in dependencies, `unexpected dependency ${name}`); return dependencies[name]; },
+    ...globals,
   });
   return target.exports;
 }
@@ -780,8 +781,9 @@ test("the failure exit remains enabled when new entries are off, and SL/TP alway
   }
 });
 
-test("auto-trading switch is visible only to superusers in interactive backtest", () => {
+test("backtest controls stay in historical mode and automatic trading requires a superuser", () => {
   let user = { is_superuser: true };
+  const environment = { env: { NODE_ENV: "development" } };
   const Empty = () => null;
   const { TopBar } = loadModule("./TopBar.tsx", {
     react: { ...React, default: React }, "react-dom": { createPortal: Empty }, "next/link": { default: Empty },
@@ -790,7 +792,7 @@ test("auto-trading switch is visible only to superusers in interactive backtest"
     "@/components/common/UserHeaderActions": { default: Empty },
     "@/components/market-master/SymbolSearchSelect": { SymbolFavoriteButton: Empty, SymbolSearchSelect: Empty },
     "lucide-react": new Proxy({}, { get: () => Empty }),
-  });
+  }, { process: environment });
   const props = { isBacktestMode: true, totalCandles: 10000, currentIndex: 200, timeframeOptions: [], balance: 10000, totalFloatingPnl: 0 };
   const html = (extra = {}) => renderToStaticMarkup(React.createElement(TopBar, { ...props, ...extra }));
   const restartProps = { onRestartBacktest() {}, canRestartBacktest: true };
@@ -802,6 +804,16 @@ test("auto-trading switch is visible only to superusers in interactive backtest"
   assert.match(html({ isAutomaticTradingEnabled: true }), /aria-label="自动做单" aria-haspopup="dialog" aria-pressed="true"/);
   assert.doesNotMatch(html({ isReplayMode: true }), /自动做单/);
   assert.doesNotMatch(html({ isBacktestMode: false }), /自动做单/);
+  const liveProps = { dataMode: "realtime", realtimeAvailable: true, realtimeStatus: "实时更新中" };
+  assert.doesNotMatch(html({ ...liveProps, isBacktestMode: false }), /查看回测记录|开启逐K回测|自动做单|下一根K线/);
+  assert.doesNotMatch(html({ ...liveProps, isBacktestMode: true, ...restartProps }), /aria-label="(?:退出逐K回测|从头再跑|自动播放|下一根K线|自动做单)"/);
+  assert.match(html({ isBacktestMode: false, dataMode: "history" }), /查看回测记录并还原播放/);
+  assert.match(html({ realtimeAvailable: false, realtimeAvailabilityStatus: "本地实时服务未启用" }), /本地实时服务未启用/);
+  assert.match(html({ realtimeAvailable: false }), /value="realtime" disabled=""/);
+  assert.match(html(liveProps), /实时更新中/);
+  environment.env.NODE_ENV = "production";
+  assert.doesNotMatch(html({ realtimeAvailable: true }), /aria-label="行情模式"|实时数据（本地）/);
+  environment.env.NODE_ENV = "development";
   const penProps = { penMode: "strict", onPenModeChange() {} };
   assert.equal((html(penProps).match(/aria-label="分笔算法"/g) || []).length, 2);
   assert.match(html(penProps), /value="strict" selected=""/);

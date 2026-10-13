@@ -27,6 +27,7 @@ type TradeTerminalProps = {
   isMaximized: boolean;
   panelWidth: number;
   canPlaceOrder?: boolean;
+  isRealtimeMode?: boolean;
   isReplayMode?: boolean;
   isAutomaticTradingEnabled?: boolean;
 };
@@ -117,6 +118,7 @@ export const TradeTerminal = ({
   isMaximized,
   panelWidth,
   canPlaceOrder = false,
+  isRealtimeMode = false,
   isReplayMode = false,
   isAutomaticTradingEnabled = false,
 }: TradeTerminalProps) => {
@@ -401,7 +403,7 @@ export const TradeTerminal = ({
                   ? "提示：回放模式下只可观看，不可下单"
                   : canPlaceOrder
                     ? "提示：点击建仓箭头管理订单，也可拖拽止损止盈线"
-                    : "提示：请先开启逐K回测后再下单（做多/做空）"}
+                    : isRealtimeMode ? "等待最新报价，连接恢复后可进行本地模拟交易" : "提示：请先开启逐K回测后再下单（做多/做空）"}
               </div>
             </div>
 
@@ -415,7 +417,7 @@ export const TradeTerminal = ({
                     ? hasValidOrderUnits ? "做空" : "请先输入有效的交易数量"
                     : isReplayMode
                       ? "回放模式下不可下单"
-                      : "仅在逐K回测模式下可下单，请先开启逐K回测"
+                      : isRealtimeMode ? "等待最新实时报价" : "仅在逐K回测模式下可下单，请先开启逐K回测"
                 }
                 className="flex-1 rounded-lg bg-red-600 py-3 text-lg font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600 disabled:active:scale-100"
               >
@@ -429,7 +431,7 @@ export const TradeTerminal = ({
                     ? hasValidOrderUnits ? "做多" : "请先输入有效的交易数量"
                     : isReplayMode
                       ? "回放模式下不可下单"
-                      : "仅在逐K回测模式下可下单，请先开启逐K回测"
+                      : isRealtimeMode ? "等待最新实时报价" : "仅在逐K回测模式下可下单，请先开启逐K回测"
                 }
                 className="flex-1 rounded-lg bg-emerald-600 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
               >
