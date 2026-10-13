@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { TradePosition } from "./trade-management";
+import { brokerMoney } from "./broker-trading";
 import { automaticLockedProfit } from "./automatic-pen-risk";
 import { DEFAULT_TRADE_HISTORY_FILTERS, filterTradeHistory, sortTradeHistory, tradeHistoryBalance, tradeHistoryPnl, type TradeHistoryFilters, type TradeHistorySort } from "./trade-history";
 import {
@@ -38,6 +39,14 @@ function AutomaticTradeBadge({ trade }: { trade: TradePosition }) {
       {label}{trade.automaticPen.fundedChildId ? " · 已资助加仓" : ""}
     </span>
   );
+}
+
+function BrokerFees({trade}: {trade: TradePosition}) {
+  return trade.brokerTradeId ? <div className="mt-1 text-[10px] text-slate-400">
+    福汇净盈亏 · {trade.brokerCurrency || "账户币种"}<br/>
+    佣金 {brokerMoney(trade.brokerCommission, trade.brokerCurrency)}<br/>
+    过夜费 {brokerMoney(trade.brokerRollover, trade.brokerCurrency)}
+  </div> : null;
 }
 
 export const TradeHistory = ({
@@ -179,6 +188,7 @@ export const TradeHistory = ({
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
                       <AutomaticTradeBadge trade={trade} />
+                      <BrokerFees trade={trade} />
                       <span
                         className={`text-sm font-bold ${
                           trade.type === "Buy"
@@ -199,7 +209,7 @@ export const TradeHistory = ({
                       }`}
                     >
                       {currentPnl > 0 ? "+" : ""}
-                      {currentPnl.toFixed(2)}
+                      {trade.brokerTradeId && trade.brokerNetPnl == null ? "—" : currentPnl.toFixed(2)}
                     </span>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -313,6 +323,7 @@ export const TradeHistory = ({
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
                       <AutomaticTradeBadge trade={trade} />
+                      <BrokerFees trade={trade} />
                     </td>
                     <td
                       className={`px-4 py-2 font-bold ${
@@ -352,7 +363,7 @@ export const TradeHistory = ({
                       }`}
                     >
                       {currentPnl > 0 ? "+" : ""}
-                      {currentPnl.toFixed(2)}
+                      {trade.brokerTradeId && trade.brokerNetPnl == null ? "—" : currentPnl.toFixed(2)}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-gray-300" title={isOpen ? "持仓尚未结算" : "本次成交结算后的账户余额"}>{balanceLabel(trade)}</td>
                     <td className="px-4 py-2 text-center">

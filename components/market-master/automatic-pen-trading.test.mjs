@@ -466,7 +466,7 @@ function installPersistenceHarness(context) {
   return { client, requests, errors };
 }
 
-test("logged-in realtime trades update the account without creating or writing a backtest session", async () => {
+test("realtime legacy handlers never simulate fills and chart risk changes go to the broker", async () => {
   const data = [{ time: 1, close: 100 }];
   const { context } = pageHarness(data, 1);
   installManualTradeHarness(context);
@@ -476,17 +476,23 @@ test("logged-in realtime trades update the account without creating or writing a
   context.dataModeRef.current = "realtime";
   context.realtimeReadyRef.current = true;
   context.pendingSessionStartRef.current = null;
+  const initialTrade = { id: "broker-trade", status: "Open", type: "Buy", units: 1000, entry: 100, sl: 90, tp: 120 };
+  context.tradesRef.current = [initialTrade];
+  const submitted = [], managed = [];
+  context.brokerRef = {current: {send: async command => { submitted.push(plain(command)); }} };
+  context.setManagedTradeId = id => managed.push(id);
   context.placeOrder("Buy");
-  const tradeId = context.tradesRef.current[0].id;
-  assert.equal(context.saveRisk(tradeId, 90, 120), null);
+  const tradeId = initialTrade.id;
+  assert.match(context.saveRisk(tradeId, 90, 120), /福汇持仓管理/);
   context.dragRisk(tradeId, "sl", 95);
-  assert.equal(context.tradesRef.current[0].sl, 95);
+  assert.equal(context.tradesRef.current[0].sl, 90);
   data[0].close = 105;
   context.closeMarket(tradeId, 4);
-  assert.equal(context.tradesRef.current.find(t => t.status === "Open").units, 6);
   context.forceClose();
-  assert.ok(context.tradesRef.current.every(t => t.status === "Closed"));
-  assert.equal(context.balanceRef.current, 10050);
+  assert.deepEqual(context.tradesRef.current, [initialTrade]);
+  assert.equal(context.balanceRef.current, 10000);
+  assert.deepEqual(managed, [tradeId]);
+  assert.deepEqual(submitted, [{action: "risk", trade_id: tradeId, kind: "stop", rate: 95}]);
   await client.endBatch();
   assert.deepEqual(requests, []);
   assert.deepEqual(errors, []);
@@ -522,6 +528,24 @@ test("switching to realtime preserves queued historical writes without appending
   context.placeOrder("Buy");
   await client.endBatch();
   assert.deepEqual(requests.slice(-2).map(r => r.url.split("/").at(-1)), ["sessions", "events"]);
+});
+
+test("leaving realtime or changing chart never requests a forced broker close", () => {
+  const { context } = pageHarness([{time: 1, close: 100}], 1, [{id: "broker", status: "Open"}]);
+  const changes = [];
+  Object.assign(context, {dataMode: "realtime", symbol: "EUR/USD", timeframe: "H1", isBacktestMode: false,
+    realtimeAvailable: true, INITIAL_BACKTEST_BALANCE: 10000,
+    applyMarketChange: (kind, value) => changes.push([kind, value]),
+    setPendingMarketChange: () => assert.fail("Broker positions must not use simulated forced-close confirmation"),
+    requestBacktestCompletion: () => assert.fail("Realtime has no backtest to complete"),
+  });
+  context.dataModeRef.current = "realtime";
+  vm.runInContext(transpile(`globalThis.changeMarket = ${pageHandler("requestMarketChange")};`), context);
+  context.changeMarket("symbol", "XAU/USD");
+  context.changeMarket("timeframe", "H4");
+  context.changeMarket("dataMode", "history");
+  assert.equal(changes.length, 3);
+  assert.equal(context.tradesRef.current[0].status, "Open");
 });
 
 test("page settlement snapshots follow execution order even when same-bar fills offset to zero", () => {

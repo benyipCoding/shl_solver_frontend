@@ -8,6 +8,13 @@ export type TradePosition = {
   tp: number | null;
   status: "Open" | "Closed";
   pnl: number;
+  brokerTradeId?: string;
+  brokerNetPnl?: number | null;
+  brokerCommission?: number | null;
+  brokerRollover?: number | null;
+  brokerCurrency?: string | null;
+  chartEntryTime?: number;
+  chartCloseTime?: number;
   /** Account cash balance immediately after this fill; absent while still open. */
   balanceAfter?: number;
   closeTime?: number;

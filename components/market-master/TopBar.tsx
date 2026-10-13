@@ -37,6 +37,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export const TopBar = ({
   dataMode = "history",
+  accountCurrency = "USD",
   realtimeAvailable = false,
   realtimeChecking = false,
   realtimeAvailabilityStatus,
@@ -114,7 +115,7 @@ export const TopBar = ({
   const pathname = usePathname();
   const { user, isLoading: isAuthLoading } = useAuth();
   const isSuperuser = !isAuthLoading && Boolean(user?.is_superuser);
-  const canSyncLatest = isSuperuser;
+  const canSyncLatest = isSuperuser && dataMode === "history";
   const canUseAutomaticDraw = isSuperuser;
   const batchTrading = isAutomaticTradingEnabled && !isReplayMode;
   const penModeLabel = penMode === "strict" ? "严格笔" : "简单笔";
@@ -231,7 +232,7 @@ export const TopBar = ({
               <option value="realtime" disabled={!realtimeAvailable}>实时数据（本地）</option>
             </select>
           </label>
-          {dataMode === "realtime" && <span role="status">{realtimeStatus} · 模拟交易</span>}
+          {dataMode === "realtime" && <span role="status">{realtimeStatus} · 福汇 Demo 交易</span>}
           {!realtimeAvailable && <>
             <span role="status">{realtimeAvailabilityStatus}</span>
             <button type="button" onClick={onRetryRealtime} disabled={realtimeChecking}
@@ -924,7 +925,7 @@ export const TopBar = ({
               账户余额
             </span>
             <span className="font-mono text-sm font-bold text-white sm:text-base">
-              ${balance.toFixed(2)}
+              {accountCurrency === "USD" ? "$" : `${accountCurrency || "账户币种"} `}{balance.toFixed(2)}
             </span>
           </div>
           <div className="flex flex-col items-end leading-tight">

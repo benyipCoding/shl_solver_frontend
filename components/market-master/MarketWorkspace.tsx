@@ -14,6 +14,8 @@ import {
 } from "./market-config";
 import { TradeHistory } from "./TradeHistory";
 import { TradeTerminal } from "./TradeTerminal";
+import { BrokerTradeTerminal } from "./BrokerTradeTerminal";
+import type { BrokerTrading } from "@/hooks/useBrokerTrading";
 import type { TradePosition } from "./trade-management";
 
 type LegendData = {
@@ -51,6 +53,7 @@ type CandleTooltip = {
 };
 
 type MarketWorkspaceProps = {
+  brokerTrading?: BrokerTrading;
   bottomPanelHeight: number;
   canPlaceOrder: boolean;
   isRealtimeMode?: boolean;
@@ -110,6 +113,7 @@ type MarketWorkspaceProps = {
 };
 
 export function MarketWorkspace({
+  brokerTrading,
   bottomPanelHeight,
   canPlaceOrder,
   isRealtimeMode,
@@ -369,7 +373,8 @@ export function MarketWorkspace({
         />
       )}
 
-      <TradeTerminal
+      {brokerTrading ? (!isMaximized && <BrokerTradeTerminal key={brokerTrading.snapshot?.instrument.symbol ?? symbol} broker={brokerTrading}
+        onManage={onManageTrade} onCloseAll={handleCloseAll} width={rightPanelWidth} visible={isRightPanelOpen} onToggle={() => setIsRightPanelOpen(!isRightPanelOpen)} />) : <TradeTerminal
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         isRightPanelOpen={isRightPanelOpen}
         setIsRightPanelOpen={setIsRightPanelOpen}
@@ -395,7 +400,7 @@ export function MarketWorkspace({
         canPlaceOrder={canPlaceOrder}
         isRealtimeMode={isRealtimeMode}
         isReplayMode={isReplayMode}
-      />
+      />}
     </div>
   );
 }

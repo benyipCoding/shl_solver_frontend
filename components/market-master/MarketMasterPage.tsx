@@ -34,7 +34,10 @@ import {
 } from "@/components/market-master/TradeCloseConfirmDialog";
 import { TopBar } from "@/components/market-master/TopBar";
 import { useRealtimeMarket } from "@/hooks/useRealtimeMarket";
-import { applyRealtimeCandles, realtimeExit, type MarketDataMode } from "./realtime-data";
+import { applyRealtimeCandles, type MarketDataMode } from "./realtime-data";
+import { useBrokerTrading } from "@/hooks/useBrokerTrading";
+import { brokerChartTrades } from "./broker-trading";
+import { BrokerTradeManagement, BrokerCloseAllDialog } from "./BrokerTradeTerminal";
 import {
   getDefaultSymbol,
   INITIAL_FAVORITES,
@@ -162,6 +165,7 @@ const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
   data[currentIndex - 1] ?? null;
 
 const getTradeMarkerColor = (trade: any, markPrice = 0) => {
+  if (trade?.brokerTradeId) return (trade.brokerNetPnl ?? 0) >= 0 ? CLOSED_TRADE_PROFIT_COLOR : CLOSED_TRADE_LOSS_COLOR;
   if (trade?.status === "Closed") {
     return Number(trade.pnl) >= 0
       ? CLOSED_TRADE_PROFIT_COLOR
@@ -184,7 +188,7 @@ const buildTradeMarkers = (trade: any, markPrice = 0) => {
   const color = getTradeMarkerColor(trade, markPrice);
   const markers = [
     {
-      time: trade.entryTime,
+      time: trade.chartEntryTime ?? trade.entryTime,
       position: isBuy ? "belowBar" : "aboveBar",
       shape: isBuy ? "arrowUp" : "arrowDown",
       color,
@@ -195,7 +199,7 @@ const buildTradeMarkers = (trade: any, markPrice = 0) => {
 
   if (trade.status === "Closed" && trade.closeTime != null) {
     markers.push({
-      time: trade.closeTime,
+      time: trade.chartCloseTime ?? trade.closeTime,
       position: isBuy ? "aboveBar" : "belowBar",
       shape: isBuy ? "arrowDown" : "arrowUp",
       color,
@@ -267,13 +271,13 @@ const findTradeMarkerAtPoint = (
     const isBuy = trade?.type === "Buy";
     const candidates = [
       {
-        time: trade?.entryTime,
+        time: trade?.chartEntryTime ?? trade?.entryTime,
         kind: "entry" as const,
         belowBar: isBuy,
       },
       trade?.status === "Closed" && trade?.closeTime != null
         ? {
-            time: trade.closeTime,
+            time: trade.chartCloseTime ?? trade.closeTime,
             kind: "exit" as const,
             belowBar: !isBuy,
           }
@@ -975,7 +979,7 @@ export function MarketMasterPage() {
     const window = chartWindowRef.current;
     const from = fullDataRef.current[window.from]?.time, to = fullDataRef.current[window.to - 1]?.time;
     const inWindow = (time) => time != null && from != null && to != null && time >= from && time <= to;
-    const relevant = tradeList.filter((trade) => inWindow(trade.entryTime) || inWindow(trade.closeTime));
+    const relevant = tradeList.filter((trade) => inWindow(trade.chartEntryTime ?? trade.entryTime) || inWindow(trade.chartCloseTime ?? trade.closeTime));
     const focused = relevant.find((trade) => trade.id === focusedTradeIdRef.current);
     markerTradesRef.current = focused ? [focused, ...relevant.filter((trade) => trade !== focused).slice(0, 199)] : relevant.slice(0, 200);
     const nextMarkers = sortSeriesMarkersByTime(
@@ -993,6 +997,24 @@ export function MarketMasterPage() {
     markerTradesRef.current = [];
     seriesMarkersRef.current?.setMarkers([]);
   }, []);
+
+  const broker = useBrokerTrading({
+    enabled: dataMode === "realtime" && realtimeAvailable && canUseAutomaticDraw,
+    symbol,
+    onSnapshot: (snapshot) => {
+      if (dataModeRef.current !== "realtime") return;
+      const visibility = new Map(tradesRef.current.map(trade => [trade.id, trade.visibleOnChart]));
+      const positions = brokerChartTrades(snapshot, fullDataRef.current).map(trade => ({ ...trade, visibleOnChart: visibility.get(trade.id) ?? true }));
+      tradesRef.current = positions;
+      setTrades(positions);
+      balanceRef.current = snapshot.account.balance;
+      setBalance(snapshot.account.balance);
+      syncTradeMarkers(positions);
+    },
+  });
+  const brokerRef = useRef(broker);
+  brokerRef.current = broker;
+  const [brokerCloseAll, setBrokerCloseAll] = useState(null);
 
   const resetBacktestAccount = useCallback((initialBalance = INITIAL_BACKTEST_BALANCE) => {
     if (automaticRunRef.current) automaticRunRef.current.cancelled = true;
@@ -1076,6 +1098,13 @@ export function MarketMasterPage() {
     if (type !== "sl" && type !== "tp") return;
     const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
     if (!trade) return;
+    if (dataModeRef.current === "realtime") {
+      orderLinesRef.current[tradeId]?.[type]?.applyOptions({ price: trade[type] });
+      const rate = Number(newPrice.toFixed(brokerRef.current.snapshot?.instrument.digits ?? priceDecimals));
+      void brokerRef.current.send({action: "risk", trade_id: String(tradeId), kind: type === "sl" ? "stop" : "limit", rate})
+        .then(() => toast.success("福汇已确认修改"), error => toast.error(error.message));
+      return;
+    }
     const markPrice = getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close;
     const error = getRiskPriceError(trade.type, type, newPrice, markPrice);
     if (error) {
@@ -4265,6 +4294,9 @@ export function MarketMasterPage() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type, entryCandle = getActiveCandle(fullDataRef.current, currentIndexRef.current), barIndex = currentIndexRef.current - 1, automaticEvent?: AutomaticPenEvent) => {
+    // Realtime orders are submitted only by the broker terminal with broker
+    // quantity rules and explicit bid/ask. Never fall through to simulation.
+    if (dataModeRef.current === "realtime") return;
     if ((!isBacktestMode && !realtimeReadyRef.current) || isReplayModeRef.current) return;
     if (!entryCandle || !Number.isFinite(entryCandle.close) || entryCandle.close <= 0) return;
     const entry = entryCandle.close;
@@ -4334,6 +4366,7 @@ export function MarketMasterPage() {
   placeOrderRef.current = handlePlaceOrder;
 
   const handleCloseMarket = (tradeId, unitsOverride?: number) => {
+    if (dataModeRef.current === "realtime") { setManagedTradeId(tradeId); return; }
     if (isReplayModeRef.current) return;
     if (!isBacktestModeRef.current && !realtimeReadyRef.current) return;
     const activeCandle = getActiveCandle(
@@ -4396,6 +4429,7 @@ export function MarketMasterPage() {
   }, [syncDisplayedData, updateAutomaticSegmentsAfterCandle]);
 
   const handleOpenTradeManagement = (tradeId) => {
+    if (dataModeRef.current === "realtime") { setManagedTradeId(tradeId); return; }
     if (isReplayModeRef.current || (!isBacktestModeRef.current && !realtimeReadyRef.current)) return;
     const trade = tradesRef.current.find(
       (item) => String(item.id) === String(tradeId) && item.status === "Open"
@@ -4407,6 +4441,7 @@ export function MarketMasterPage() {
   openTradeManagementRef.current = handleOpenTradeManagement;
 
   const handleSaveTradeRisk = (tradeId, sl, tp) => {
+    if (dataModeRef.current === "realtime") return "请通过福汇持仓管理提交修改";
     if (isReplayModeRef.current || (!isBacktestModeRef.current && !realtimeReadyRef.current)) return "当前不可修改持仓";
     const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
     if (!trade) return "该订单已平仓";
@@ -4425,6 +4460,7 @@ export function MarketMasterPage() {
   };
 
   const forceCloseAllOpenTrades = useCallback(() => {
+    if (dataModeRef.current === "realtime") return;
     const activeCandle = getActiveCandle(
       fullDataRef.current,
       currentIndexRef.current
@@ -4452,6 +4488,9 @@ export function MarketMasterPage() {
   const applyMarketChange = useCallback(
     (kind: "symbol" | "timeframe" | "dataMode", value: string) => {
       if (kind === "dataMode") {
+        setManagedTradeId(null);
+        setBrokerCloseAll(null);
+        setPendingTradeClose(null);
         pendingReplayRef.current = null;
         setReplayingSessionId(null);
         setIsBacktestHistoryOpen(false);
@@ -4474,6 +4513,14 @@ export function MarketMasterPage() {
       if (kind === "dataMode" && value === dataMode) return;
       if (kind === "symbol" && value === symbol) return;
       if (kind === "timeframe" && value === timeframe) return;
+
+      // Broker positions survive chart/mode changes. Switching views is never
+      // authorization to close an external position.
+      if (dataModeRef.current === "realtime") {
+        if (kind === "dataMode") { balanceRef.current = INITIAL_BACKTEST_BALANCE; setBalance(INITIAL_BACKTEST_BALANCE); }
+        applyMarketChange(kind, value);
+        return;
+      }
 
       const openCount = tradesRef.current.filter(
         (t) => t.status === "Open"
@@ -4908,14 +4955,6 @@ export function MarketMasterPage() {
       if (event.quote) {
         realtimeQuoteTimeRef.current = event.quote.timestamp;
         realtimeQuoteSequenceRef.current = event.quote.sequence;
-        if (event.type === "snapshot") {
-          // After reconnect we cannot reconstruct executions during the outage.
-          // Resume from this quote rather than replaying old prices into orders.
-          tradesRef.current = tradesRef.current.map((trade) => trade.status === "Open" ? {
-            ...trade, realtimeQuoteTime: event.quote!.timestamp,
-            realtimeQuoteSequence: event.quote!.sequence,
-          } : trade);
-        }
       }
       currentIndexRef.current = fullDataRef.current.length;
       setCurrentIndex(currentIndexRef.current);
@@ -4936,23 +4975,11 @@ export function MarketMasterPage() {
         updateAutomaticSegmentsAfterCandle();
       }
       updateSupportResistance(fullDataRef.current, currentIndexRef.current, loadedOffsetRef.current > 0);
-      if (event.type === "candles" && event.quotes?.length) {
-        const closed: any[] = [];
-        const nextTrades = tradesRef.current.map((trade) => {
-          if (trade.status !== "Open") return trade;
-          const exit = realtimeExit(trade, event.quotes!);
-          if (!exit) return trade;
-          const result = closeTradeRecord(trade, exit.price, exit.reason, latestUnixRef.current);
-          closed.push(result);
-          return result;
-        });
-        if (closed.length) settleClosedTrades(nextTrades, closed, closed.reduce((sum, trade) => sum + trade.pnl, 0));
-      }
       setRealtimeRevision((revision) => revision + 1);
     },
   });
   realtimeReadyRef.current = realtimeReady;
-  const totalFloatingPnl = openTrades.reduce((acc, t) => {
+  const totalFloatingPnl = dataMode === "realtime" ? broker.snapshot?.account.gross_pl ?? 0 : openTrades.reduce((acc, t) => {
     const pnl =
       t.type === "Buy"
         ? (currentPrice - t.entry) * t.units
@@ -4990,6 +5017,12 @@ export function MarketMasterPage() {
 
   const handleMenuCloseAll = () => {
     setContextMenu(null);
+    if (dataModeRef.current === "realtime") {
+      const snapshot = brokerRef.current.snapshot;
+      if (snapshot && brokerRef.current.ready) setBrokerCloseAll({accountId: snapshot.account.id, symbol: snapshot.instrument.symbol,
+        positions: snapshot.positions.filter(p => p.symbol === snapshot.instrument.symbol)});
+      return;
+    }
     if (isReplayModeRef.current) return;
     const openCount = tradesRef.current.filter(
       (trade) => trade.status === "Open"
@@ -5176,7 +5209,7 @@ export function MarketMasterPage() {
         aiReviewModal={aiReviewModal}
         applyIndicatorConfig={applyIndicatorConfig}
         canCloseAllOpenTrades={
-          (isBacktestMode || realtimeReady) && !isReplayMode && openTrades.length > 0
+          (isBacktestMode || (dataMode === "realtime" && broker.ready)) && !isReplayMode && openTrades.length > 0
         }
         contextMenu={contextMenu}
         draftConfig={draftConfig}
@@ -5213,6 +5246,7 @@ export function MarketMasterPage() {
           setRealtimeCapabilityAttempt((attempt) => attempt + 1);
         }}
         realtimeStatus={realtimeStatus}
+        accountCurrency={dataMode === "realtime" ? broker.snapshot?.account.currency : "USD"}
         onDataModeChange={(nextMode: MarketDataMode) => requestMarketChange("dataMode", nextMode)}
         symbol={symbol}
         setSymbol={(nextSymbol: string) =>
@@ -5297,6 +5331,7 @@ export function MarketMasterPage() {
       />
 
       <MarketWorkspace
+        brokerTrading={dataMode === "realtime" ? broker : undefined}
         isRealtimeMode={dataMode === "realtime" && !isBacktestMode}
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         bottomPanelHeight={bottomPanelHeight}
@@ -5411,7 +5446,9 @@ export function MarketMasterPage() {
         onCancel={cancelPendingTradeClose}
         onConfirm={confirmPendingTradeClose}
       />
-      {(isBacktestMode || realtimeReady) && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
+      {dataMode === "realtime" && managedTradeId != null && <BrokerTradeManagement key={managedTradeId} broker={broker} tradeId={String(managedTradeId)} onDismiss={() => setManagedTradeId(null)} />}
+      {dataMode === "realtime" && brokerCloseAll && <BrokerCloseAllDialog broker={broker} selection={brokerCloseAll} onDismiss={() => setBrokerCloseAll(null)} />}
+      {dataMode === "history" && isBacktestMode && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
         <TradeManagementDialog
           key={managedTradeId}
           trade={trades.find((trade) => trade.id === managedTradeId && trade.status === "Open")}

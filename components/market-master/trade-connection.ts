@@ -55,8 +55,8 @@ export class TradeConnectionPrimitive implements ISeriesPrimitive<Time> {
       trade.closePrice == null
     )
       return;
-    const x1 = this.chart.timeScale().timeToCoordinate(trade.entryTime as Time);
-    const x2 = this.chart.timeScale().timeToCoordinate(trade.closeTime as Time);
+    const x1 = this.chart.timeScale().timeToCoordinate((trade.chartEntryTime ?? trade.entryTime) as Time);
+    const x2 = this.chart.timeScale().timeToCoordinate((trade.chartCloseTime ?? trade.closeTime) as Time);
     const y1 = this.series.priceToCoordinate(trade.entry);
     const y2 = this.series.priceToCoordinate(trade.closePrice);
     if (x1 == null || x2 == null || y1 == null || y2 == null) return;

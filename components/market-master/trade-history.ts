@@ -8,7 +8,7 @@ export type TradeHistoryFilters = {
 export const DEFAULT_TRADE_HISTORY_FILTERS: TradeHistoryFilters = { status: "all", side: "all", pnl: "all" };
 
 export const tradeHistoryPnl = (trade: TradePosition, currentPrice: number) =>
-  trade.status === "Open" ? calculateTradePnl(trade, currentPrice) : trade.pnl;
+  trade.brokerTradeId ? trade.brokerNetPnl ?? 0 : trade.status === "Open" ? calculateTradePnl(trade, currentPrice) : trade.pnl;
 
 export const tradeHistoryBalance = (trade: TradePosition) =>
   trade.status === "Closed" && Number.isFinite(trade.balanceAfter) ? trade.balanceAfter! : null;
@@ -33,6 +33,7 @@ export function filterTradeHistory(trades: readonly TradePosition[], filters: Tr
   return trades.filter((trade) => {
     if (filters.status !== "all" && trade.status !== filters.status) return false;
     if (filters.side !== "all" && trade.type !== filters.side) return false;
+    if (trade.brokerTradeId && trade.brokerNetPnl == null && filters.pnl !== "all") return false;
     const pnl = tradeHistoryPnl(trade, currentPrice);
     return filters.pnl === "all" || (filters.pnl === "loss" && pnl < 0) ||
       (filters.pnl === "profit" && pnl > 0) || (filters.pnl === "flat" && pnl === 0);
