@@ -616,13 +616,14 @@ export const TopBar = ({
               type="button"
               onClick={() => setDrawingTool("zone")}
               aria-label="手动支撑/阻力区"
+              aria-keyshortcuts="R"
               aria-pressed={mode === "draw" && drawType === "zone"}
               className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
                 mode === "draw" && drawType === "zone"
                   ? "bg-gray-700 text-purple-300"
                   : "hover:bg-gray-700 text-gray-400"
               }`}
-              title="手动支撑/阻力区：两次点击确定起点和价格范围，自动向右延伸"
+              title="手动支撑/阻力区（快捷键 R）：两次点击确定起点和价格范围，自动向右延伸"
             >
               <PanelTopDashed size={20} />
             </button>
@@ -703,8 +704,8 @@ export const TopBar = ({
                         ? "正在绘制 Segments，点击可取消并删除"
                         : "正在删除 Segments"
                       : isAutomaticSegmentsEnabled
-                        ? `关闭并删除自动 Segments（当前 ${automaticSegmentCount} 段，快捷键 R）`
-                        : "开启自动 Segments（快捷键 R）"
+                        ? `关闭并删除自动 Segments（当前 ${automaticSegmentCount} 段）`
+                        : "开启自动 Segments"
                   }
                 >
                   {isAutomaticSegmentBusy ? (

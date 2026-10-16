@@ -89,6 +89,7 @@ async function proxyMarketMasterRequest(
       method,
       headers: buildForwardHeaders(request),
       cache: "no-store",
+      signal: request.signal,
     });
 
     const bodyText = await response.text();

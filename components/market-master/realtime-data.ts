@@ -9,7 +9,7 @@ export function applyRealtimeCandles(existing: NormalizedCandle[], incoming: Nor
   if (incoming[0].time > existing[existing.length - 1].time) {
     // Incremental updates include the preceding bar. A snapshot with no overlap
     // must not silently join two disconnected stretches of price history.
-    throw new Error("实时快照与历史数据之间有缺口，请先使用「同步最新」补齐历史数据");
+    throw Object.assign(new Error("历史缺口超出实时快照范围，请切回历史模式同步最新数据后重试"), { name: "RealtimeHistoryGap" });
   }
   let added = 0;
   for (const candle of incoming) {

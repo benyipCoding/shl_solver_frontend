@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BrokerCommand, BrokerResult, BrokerSnapshot } from "@/components/market-master/broker-trading";
 
 async function readResponse(response: Response) {
+  if (response.status === 401) throw Object.assign(new Error("登录已失效，请重新登录后连接福汇 Demo"), { status: 401 });
+  if (response.status === 403) throw Object.assign(new Error("当前账号没有福汇交易权限，请使用管理员账号登录"), { status: 403 });
   const body = await response.json();
   if (!response.ok) throw Object.assign(new Error(body.message || body.error || (typeof body.detail === "string" ? body.detail : "交易请求失败")), { status: response.status });
   return body;
@@ -30,11 +32,13 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
   useEffect(() => {
     if (!enabled) return;
     let disposed = false, lastMessage = Date.now(), source: EventSource | null = null;
+    let receivedSnapshot = false, terminalError = false;
     const controller = new AbortController();
     const params = new URLSearchParams({symbol});
     if (accountId) params.set("account_id", accountId);
     const accept = (data: BrokerSnapshot) => {
       if (disposed || latest.current.symbol !== symbol) return;
+      receivedSnapshot = true;
       lastMessage = Date.now();
       setScope(`${symbol}:${accountId}`);
       setSnapshot(data); setConnected(true); setStatus("福汇 Demo 已连接");
@@ -57,14 +61,15 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
             if (data.type === "error") throw new Error(data.message);
             accept(data);
           } catch (error) {
+            terminalError = true;
             setConnected(false); setStatus(error instanceof Error ? error.message : "账户数据异常");
             source?.close();
           }
         };
         source.onerror = () => { if (!disposed) { setConnected(false); setStatus("账户连接中断，正在重新连接；持仓仍由福汇管理"); } };
-      }).catch(error => { if (!disposed) { setConnected(false); setStatus(error.message); } });
+      }).catch(error => { if (!disposed) { terminalError = true; setConnected(false); setStatus(error.message); } });
     const watchdog = setInterval(() => {
-      if (Date.now() - lastMessage > 10000) { setConnected(false); setStatus("账户状态已过期，请重新连接核对持仓"); }
+      if (receivedSnapshot && !terminalError && Date.now() - lastMessage > 10000) { setConnected(false); setStatus("账户状态已过期，请重新连接核对持仓"); }
     }, 2000);
     return () => { disposed = true; controller.abort(); source?.close(); clearInterval(watchdog); };
   }, [enabled, symbol, accountId, attempt]);

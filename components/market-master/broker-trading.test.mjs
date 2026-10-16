@@ -38,8 +38,10 @@ test("broker chart rows preserve actual fills, fees and net P/L while aligning m
   assert.equal(broker.brokerMoney(null, "USD"), "—");
 });
 
-function hookHarness() {
+function hookHarness({getStatus=200}={}) {
   const slots = [], effects = [], sources = [], requests = [], storage = new Map();
+  const timers=[];
+  let now=0;
   let cursor = 0, seq = 0, resolvePost;
   const same = (a,b) => a?.length === b.length && a.every((v,i) => v === b[i]);
   const react = {
@@ -50,18 +52,21 @@ function hookHarness() {
   };
   const snapshot={type:"account",account:{id:"demo"},instrument:{symbol:"EUR/USD"},positions:[],closed_positions:[],unresolved:[]};
   class Source {constructor(){sources.push(this);} close(){this.closed=true;}}
-  const {useBrokerTrading} = load("../../hooks/useBrokerTrading.ts", {react}, {
+  const {useBrokerTrading: runHook} = load("../../hooks/useBrokerTrading.ts", {react}, {
     fetch: async (url,options) => {
       requests.push({url,options});
       if (options?.method === "POST") return new Promise(resolve => {resolvePost=resolve;});
-      return Response.json(snapshot);
-    }, EventSource:Source, URLSearchParams, AbortController, AbortSignal, setInterval:()=>0, clearInterval(){},
+      return Response.json(getStatus===200 ? snapshot : {detail:"Unauthorized"},{status:getStatus});
+    }, EventSource:Source, URLSearchParams, AbortController, AbortSignal,
+    Date:class extends Date { static now(){return now;} },
+    setInterval:fn=>{timers.push(fn);return timers.length-1;}, clearInterval(id){timers[id]=null;},
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
     crypto:{randomUUID:()=>`command-${++seq}`},
   });
   let params={enabled:true,symbol:"EUR/USD",onSnapshot(){}};
   return {requests,sources,storage,
-    render(changes={}) {params={...params,...changes};cursor=0;const value=useBrokerTrading(params);effects.splice(0).forEach(fn=>fn());return value;},
+    advance(ms){now+=ms;timers.forEach(fn=>fn?.());},
+    render(changes={}) {params={...params,...changes};cursor=0;const value=runHook(params);effects.splice(0).forEach(fn=>fn());return value;},
     resolve(data) {resolvePost(Response.json(data));},
   };
 }
@@ -79,4 +84,30 @@ test("broker submissions cannot double-send, persist uncertain IDs, and stop on 
   await assert.rejects(switched.send({action:"close",trade_id:"old",amount:1000}), /账户未就绪/);
   assert.ok(h.sources[0].closed);
   const off=h.render({enabled:false});await assert.rejects(off.send({action:"open",amount:1000}),/账户未就绪/);
+});
+
+test("expired login during a mode switch stays disconnected and preserves the login prompt",async()=>{
+  const h=hookHarness({getStatus:401});
+  h.render({enabled:false});
+  assert.equal(h.requests.length,0);
+  h.render({enabled:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.render().ready,false);
+  assert.match(h.render().status,/登录已失效.*重新登录/);
+  assert.equal(h.sources.length,0);
+  h.advance(20000);
+  assert.match(h.render().status,/登录已失效.*重新登录/);
+  assert.equal(h.requests.length,1);
+  await assert.rejects(h.render().send({action:"open",side:"Buy",amount:1000}),/账户未就绪/);
+  assert.equal(h.requests.length,1);
+});
+
+test("missing trading permissions remain visible instead of becoming a stale account warning",async()=>{
+  const h=hookHarness({getStatus:403});
+  h.render();
+  await new Promise(resolve=>setImmediate(resolve));
+  h.advance(20000);
+  assert.match(h.render().status,/没有福汇交易权限/);
+  assert.equal(h.sources.length,0);
+  assert.equal(h.requests.length,1);
 });

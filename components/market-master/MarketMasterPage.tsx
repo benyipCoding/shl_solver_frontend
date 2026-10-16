@@ -2043,6 +2043,7 @@ export function MarketMasterPage() {
     if (!isMounted) return;
 
     let cancelled = false;
+    const loadController = new AbortController();
 
     const clearChartData = () => {
       backtestSampleRef.current = null;
@@ -2133,7 +2134,7 @@ export function MarketMasterPage() {
       setTpDistance(tp);
 
       try {
-        const firstPage = await fetchKlinePage(customFetch, {
+        const firstPage = await fetchKlinePage((input, init) => customFetch(input, { ...init, signal: loadController.signal }), {
           symbol,
           interval: getIntervalByTimeframe(timeframe),
           outputsize: KLINE_PAGE_SIZE,
@@ -2172,6 +2173,7 @@ export function MarketMasterPage() {
 
     return () => {
       cancelled = true;
+      loadController.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -4203,16 +4205,6 @@ export function MarketMasterPage() {
         handleToggleAutomaticPens();
         return;
       }
-      if (
-        event.key.toLowerCase() === "r" &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !event.repeat
-      ) {
-        event.preventDefault();
-        handleToggleAutomaticSegments();
-      }
     };
 
     window.addEventListener("keydown", handleAutomaticDrawShortcut);
@@ -4221,7 +4213,6 @@ export function MarketMasterPage() {
   }, [
     canUseAutomaticDraw,
     handleToggleAutomaticPens,
-    handleToggleAutomaticSegments,
     isAutomaticConfigOpen,
     automaticRun,
   ]);
@@ -4941,8 +4932,9 @@ export function MarketMasterPage() {
 
   const openTrades = trades.filter((t) => t.status === "Open");
   const { status: realtimeStatus, ready: realtimeReady } = useRealtimeMarket({
-    enabled: realtimeAvailable && dataMode === "realtime" && !isBacktestMode && !isReplayMode &&
-      !isDataLoading && !isHistoryLoading && !isSyncingLatest && !isRepairingKline && !dataError,
+    enabled: isMounted && realtimeAvailable && dataMode === "realtime" && !isBacktestMode && !isReplayMode && !dataError,
+    paused: isDataLoading || isHistoryLoading || isSyncingLatest || isRepairingKline ||
+      loadedMarketRef.current.symbol !== symbol || loadedMarketRef.current.timeframe !== timeframe,
     symbol,
     interval: getIntervalByTimeframe(timeframe),
     onEvent: (event) => {
@@ -4987,7 +4979,7 @@ export function MarketMasterPage() {
     return acc + pnl;
   }, 0);
 
-  const setDrawingTool = (type) => {
+  const setDrawingTool = useCallback((type) => {
     hideCandleTooltip();
     cancelPendingDrawing();
     clearAllSelections();
@@ -4997,7 +4989,27 @@ export function MarketMasterPage() {
     setDrawType(type);
     stateRef.current.mode = "draw";
     stateRef.current.drawType = type;
-  };
+  }, [hideCandleTooltip, cancelPendingDrawing, clearAllSelections]);
+
+  useEffect(() => {
+    const handleManualZoneShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.key.toLowerCase() !== "r" ||
+        event.ctrlKey || event.metaKey || event.altKey || event.repeat ||
+        event.isComposing || event.defaultPrevented ||
+        restartingBacktestRef.current || isAutomaticConfigOpen || automaticRun !== null ||
+        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" || target?.isContentEditable
+      ) return;
+
+      event.preventDefault();
+      setDrawingTool("zone");
+    };
+
+    window.addEventListener("keydown", handleManualZoneShortcut);
+    return () => window.removeEventListener("keydown", handleManualZoneShortcut);
+  }, [setDrawingTool, isAutomaticConfigOpen, automaticRun]);
 
   const handleMenuDelete = () => {
     if (!contextMenu?.shapeId || !seriesRef.current) return;
