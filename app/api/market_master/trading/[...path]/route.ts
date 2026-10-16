@@ -30,7 +30,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   }
   const { path } = await context.params;
   const action = path.join("/");
-  if (!/^(state|stream|commands(?:\/[\da-f-]{36})?)$/.test(action)) return new Response(null, { status: 404 });
+  if (!/^(state|stream|history|commands(?:\/[\da-f-]{36})?)$/.test(action)) return new Response(null, { status: 404 });
   const base = process.env.API_BASE_URL?.trim() || process.env.NEXT_PUBLIC_BASE_URL?.trim();
   if (!base) return NextResponse.json({ error: "缺少本地后端配置" }, { status: 503 });
   const cookies = readCookies(request.headers.get("cookie") || "");

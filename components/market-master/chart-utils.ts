@@ -34,6 +34,71 @@ export const hexToRgba = (hex: any, alpha: any) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+/**
+ * Build a price/volume histogram for the candles between two points.  FXCM
+ * supplies tick volume, so each candle's volume is spread uniformly across
+ * its traded range.  This keeps the profile useful even when no trade-level
+ * volume is available and avoids pretending that all volume happened at the
+ * close.
+ */
+export const calculateVolumeProfile = (
+  candles: any[] = [],
+  startTime: number,
+  endTime: number,
+  binCount = 24
+) => {
+  const from = Math.min(Number(startTime), Number(endTime));
+  const to = Math.max(Number(startTime), Number(endTime));
+  const selected = candles.filter((candle) =>
+    candle && Number(candle.time) >= from && Number(candle.time) <= to
+  );
+  const priced = selected.filter((candle) =>
+    Number.isFinite(Number(candle.low)) &&
+    Number.isFinite(Number(candle.high)) &&
+    Number(candle.high) >= Number(candle.low) &&
+    Number.isFinite(Number(candle.volume)) &&
+    Number(candle.volume) > 0
+  );
+  if (!priced.length) return { bins: [], coveredCount: selected.length, totalVolume: 0, pocIndex: -1 };
+
+  const low = Math.min(...priced.map((candle) => Number(candle.low)));
+  const high = Math.max(...priced.map((candle) => Number(candle.high)));
+  const span = Math.max(high - low, Number.EPSILON);
+  const count = Math.max(8, Math.min(48, Math.floor(Number(binCount) || 24)));
+  const step = span / count;
+  const bins = Array.from({ length: count }, (_, index) => ({
+    low: low + index * step,
+    high: index === count - 1 ? high : low + (index + 1) * step,
+    volume: 0,
+  }));
+
+  for (const candle of priced) {
+    const candleLow = Number(candle.low);
+    const candleHigh = Number(candle.high);
+    const volume = Number(candle.volume);
+    if (candleHigh - candleLow < Number.EPSILON) {
+      const index = Math.max(0, Math.min(count - 1, Math.floor((candleLow - low) / step)));
+      bins[index].volume += volume;
+      continue;
+    }
+    const candleSpan = candleHigh - candleLow;
+    bins.forEach((bin) => {
+      const overlap = Math.max(0, Math.min(candleHigh, bin.high) - Math.max(candleLow, bin.low));
+      if (overlap > 0) bin.volume += volume * (overlap / candleSpan);
+    });
+  }
+
+  const totalVolume = bins.reduce((sum, bin) => sum + bin.volume, 0);
+  const maxVolume = Math.max(...bins.map((bin) => bin.volume), 0);
+  const pocIndex = bins.findIndex((bin) => bin.volume === maxVolume);
+  return {
+    bins: bins.map((bin) => ({ ...bin, ratio: maxVolume ? bin.volume / maxVolume : 0 })),
+    coveredCount: selected.length,
+    totalVolume,
+    pocIndex,
+  };
+};
+
 export class ShapeRenderer {
   p1: any;
   p2: any;
@@ -42,6 +107,7 @@ export class ShapeRenderer {
   config: any;
   fibY: any;
   fibLevels: any;
+  series: any;
   constructor(
     p1: any,
     p2: any,
@@ -69,6 +135,41 @@ export class ShapeRenderer {
       const color = this.config.color || "#2962FF";
       const selectedBoost = this.config.isSelected ? 1 : 0;
       const lineWidth = (this.config.lineWidth || 2) + selectedBoost;
+
+      if (this.type === "volumeProfile" && this.config.profile?.bins?.length) {
+        const profile = this.config.profile;
+        const panelRight = Math.max(this.p1.x, this.p2.x);
+        const maxWidth = Math.max(86, Math.min(180, Math.abs(this.p2.x - this.p1.x) * 0.42));
+        const panelLeft = Math.max(0, panelRight - maxWidth);
+        const profileCoordinates = profile.bins
+          .map((bin: any) => [this.series?.priceToCoordinate?.(bin.low), this.series?.priceToCoordinate?.(bin.high)])
+          .flat()
+          .filter((value: any) => value != null);
+        const profileTop = profileCoordinates.length ? Math.max(0, Math.min(...profileCoordinates) - 8) : 0;
+        const profileBottom = profileCoordinates.length ? Math.min(scope.mediaSize.height, Math.max(...profileCoordinates) + 8) : scope.mediaSize.height;
+        ctx.fillStyle = "rgba(15, 23, 42, 0.38)";
+        ctx.fillRect(panelLeft, profileTop, panelRight - panelLeft, profileBottom - profileTop);
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(panelLeft, profileTop, panelRight - panelLeft, profileBottom - profileTop);
+
+        const maxVolume = Math.max(...profile.bins.map((bin: any) => bin.volume), 0);
+        profile.bins.forEach((bin: any, index: number) => {
+          if (!maxVolume) return;
+          const yHigh = this.series?.priceToCoordinate?.(bin.high);
+          const yLow = this.series?.priceToCoordinate?.(bin.low);
+          if (yHigh == null || yLow == null) return;
+          const height = Math.max(1, Math.abs(yLow - yHigh) - 1);
+          const width = Math.max(1, (bin.volume / maxVolume) * (panelRight - panelLeft - 4));
+          ctx.fillStyle = index === profile.pocIndex ? "rgba(251, 191, 36, 0.82)" : "rgba(56, 189, 248, 0.52)";
+          ctx.fillRect(panelRight - width - 2, Math.min(yHigh, yLow), width, height);
+        });
+        ctx.fillStyle = "rgba(226, 232, 240, 0.82)";
+        ctx.font = "10px Arial";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.fillText(`VP · ${profile.coveredCount}`, panelLeft + 5, profileTop + 4);
+      }
 
       if (this.type === "line") {
         ctx.lineWidth = lineWidth;
@@ -120,6 +221,15 @@ export class ShapeRenderer {
           // @ts-ignore
           ctx.fillText(this.fibLevels[i].toString(), startX + 5, y - 8);
         });
+      } else if (this.type === "volumeProfile") {
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = color;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(this.p1.x, this.p1.y);
+        ctx.lineTo(this.p2.x, this.p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
 
       const drawHandle = (point: any, isHovered: boolean) => {
@@ -173,7 +283,7 @@ export class ShapePaneView {
       });
     }
 
-    return new ShapeRenderer(
+    const renderer = new ShapeRenderer(
       { x: x1, y: y1 },
       { x: x2, y: y2 },
       this.source.hoveredPoint,
@@ -182,6 +292,8 @@ export class ShapePaneView {
       fibY,
       fibLevels
     );
+    renderer.series = this.source.series;
+    return renderer;
   }
 }
 
@@ -196,15 +308,17 @@ export class ShapePrimitive {
   chart: any;
   series: any;
   requestUpdate: any;
+  profileCandles: any[];
 
   constructor(p1: any, p2: any, type: string = "line") {
     this.id = "shape_" + Date.now() + Math.random().toString(36).substr(2, 9);
     this.p1 = p1;
     this.p2 = type === "zone" ? { ...p2, time: p1.time } : p2;
     this.type = type;
+    this.profileCandles = [];
     this.hoveredPoint = null;
     this.config = {
-      color: type === "zone" ? "#c084fc" : "#2962ff",
+      color: type === "zone" ? "#c084fc" : type === "volumeProfile" ? "#f59e0b" : "#2962ff",
       lineWidth: type === "zone" ? 1 : 2,
       isSelected: false,
       fillBaseColor: type === "zone" ? "#c084fc" : "#2962ff",
@@ -260,6 +374,7 @@ export class ShapePrimitive {
         this.p2 = { ...this.p2, price: newPoint.price };
       } else if (index === 4) this.p1 = { ...this.p1, price: newPoint.price };
       this.p2 = { ...this.p2, time: this.p1.time };
+      this.refreshVolumeProfile();
       this.requestUpdate?.();
       return;
     }
@@ -272,7 +387,19 @@ export class ShapePrimitive {
       this.p2 = { ...this.p2, time: newPoint.time };
       this.p1 = { ...this.p1, price: newPoint.price };
     }
+    this.refreshVolumeProfile();
     if (this.requestUpdate) this.requestUpdate();
+  }
+  setProfileCandles(candles: any[] = []) {
+    this.profileCandles = candles;
+    this.refreshVolumeProfile();
+  }
+  refreshVolumeProfile() {
+    if (this.type !== "volumeProfile" || !this.p1 || !this.p2 || !this.profileCandles.length) return;
+    this.config = {
+      ...this.config,
+      profile: calculateVolumeProfile(this.profileCandles, this.p1.time, this.p2.time),
+    };
   }
   setHoveredPoint(pointIndex: any) {
     if (this.hoveredPoint !== pointIndex) {

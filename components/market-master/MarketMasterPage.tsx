@@ -36,8 +36,9 @@ import { TopBar } from "@/components/market-master/TopBar";
 import { useRealtimeMarket } from "@/hooks/useRealtimeMarket";
 import { applyRealtimeCandles, type MarketDataMode } from "./realtime-data";
 import { useBrokerTrading } from "@/hooks/useBrokerTrading";
-import { brokerChartTrades } from "./broker-trading";
+import { brokerHistoryTrades } from "./broker-trading";
 import { BrokerTradeManagement, BrokerCloseAllDialog } from "./BrokerTradeTerminal";
+import { BrokerTradeHistoryModal } from "./BrokerTradeHistoryModal";
 import {
   getDefaultSymbol,
   INITIAL_FAVORITES,
@@ -327,6 +328,79 @@ const sortSeriesMarkersByTime = (markers: any[] = []) =>
     return String(left.id || "").localeCompare(String(right.id || ""));
   });
 
+const buildSwingPointMarkers = (candles: any[] = [], decimals = 5) => {
+  const visible = candles.filter((candle) => candle?.time != null);
+  if (visible.length < 2) return [];
+
+  const markers: any[] = [];
+  const addMarker = (index: number, kind: "high" | "low", tier: "primary" | "secondary") => {
+    const candle = visible[index];
+    if (!candle) return;
+    const id = `swing-${kind}-${tier}-${candle.time}`;
+    markers.push({
+      time: candle.time,
+      position: kind === "high" ? "atPriceTop" : "atPriceBottom",
+      price: Number(kind === "high" ? candle.high : candle.low),
+      // A zero-sized marker keeps the built-in text renderer while removing
+      // the default circle/square glyph.
+      shape: "circle",
+      color: tier === "primary"
+        ? kind === "high" ? "#cbd5e1" : "#94a3b8"
+        : kind === "high" ? "#64748b" : "#475569",
+      size: 0,
+      text: Number(kind === "high" ? candle.high : candle.low)
+        .toFixed(Math.max(0, Math.min(8, decimals)))
+        .replace(/\.?(0+)$/, ""),
+      id,
+    });
+  };
+
+  let highIndex = 0;
+  let lowIndex = 0;
+  for (let index = 1; index < visible.length; index += 1) {
+    if (visible[index].high > visible[highIndex].high) highIndex = index;
+    if (visible[index].low < visible[lowIndex].low) lowIndex = index;
+  }
+
+  const findLowestAfter = (start: number) => {
+    let index = -1;
+    for (let cursor = start + 1; cursor < visible.length; cursor += 1) {
+      if (index === -1 || visible[cursor].low < visible[index].low) index = cursor;
+    }
+    return index;
+  };
+  const findHighestAfter = (start: number) => {
+    let index = -1;
+    for (let cursor = start + 1; cursor < visible.length; cursor += 1) {
+      if (index === -1 || visible[cursor].high > visible[index].high) index = cursor;
+    }
+    return index;
+  };
+
+  // Start with whichever primary extreme appears first, then alternate to
+  // the opposite extreme and one secondary extreme in each direction.
+  if (lowIndex <= highIndex) {
+    addMarker(lowIndex, "low", "primary");
+    addMarker(highIndex, "high", "primary");
+    const secondaryLow = findLowestAfter(highIndex);
+    if (secondaryLow !== -1) {
+      addMarker(secondaryLow, "low", "secondary");
+      const secondaryHigh = findHighestAfter(secondaryLow);
+      if (secondaryHigh !== -1) addMarker(secondaryHigh, "high", "secondary");
+    }
+  } else {
+    addMarker(highIndex, "high", "primary");
+    addMarker(lowIndex, "low", "primary");
+    const secondaryHigh = findHighestAfter(lowIndex);
+    if (secondaryHigh !== -1) {
+      addMarker(secondaryHigh, "high", "secondary");
+      const secondaryLow = findLowestAfter(secondaryHigh);
+      if (secondaryLow !== -1) addMarker(secondaryLow, "low", "secondary");
+    }
+  }
+  return markers;
+};
+
 export function MarketMasterPage() {
   const { customFetch } = useFetch();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -531,6 +605,11 @@ export function MarketMasterPage() {
   const [isMagnetEnabled, setIsMagnetEnabled] = useState(true);
   const [isRightPriceAutoScaleEnabled, setIsRightPriceAutoScaleEnabled] =
     useState(true);
+  const [isSwingPointsEnabled, setIsSwingPointsEnabled] = useState(true);
+  const swingPointsEnabledRef = useRef(true);
+  useEffect(() => {
+    swingPointsEnabledRef.current = isSwingPointsEnabled;
+  }, [isSwingPointsEnabled]);
   const magnetRef = useRef(isMagnetEnabled);
   useEffect(() => {
     magnetRef.current = isMagnetEnabled;
@@ -796,6 +875,10 @@ export function MarketMasterPage() {
         : null,
   });
   const priceDecimals = activeInstrumentProfile.priceDecimals;
+  const priceDecimalsRef = useRef(priceDecimals);
+  useEffect(() => {
+    priceDecimalsRef.current = priceDecimals;
+  }, [priceDecimals]);
 
   useEffect(() => {
     resetSupportResistance();
@@ -982,8 +1065,27 @@ export function MarketMasterPage() {
     const relevant = tradeList.filter((trade) => inWindow(trade.chartEntryTime ?? trade.entryTime) || inWindow(trade.chartCloseTime ?? trade.closeTime));
     const focused = relevant.find((trade) => trade.id === focusedTradeIdRef.current);
     markerTradesRef.current = focused ? [focused, ...relevant.filter((trade) => trade !== focused).slice(0, 199)] : relevant.slice(0, 200);
+    const visibleRange = chartRef.current?.timeScale?.().getVisibleLogicalRange?.();
+    const visibleStart = visibleRange
+      ? Math.max(0, window.from + Math.floor(visibleRange.from))
+      : window.from;
+    const visibleEnd = visibleRange
+      ? Math.min(
+          isBacktestModeRef.current ? currentIndexRef.current : fullDataRef.current.length,
+          window.from + Math.ceil(visibleRange.to) + 1
+        )
+      : window.to;
+    const swingData = isBacktestModeRef.current
+      ? fullDataRef.current.slice(0, currentIndexRef.current)
+      : fullDataRef.current;
+    const swingMarkers = swingPointsEnabledRef.current
+      ? buildSwingPointMarkers(swingData.slice(visibleStart, visibleEnd), priceDecimalsRef.current)
+      : [];
     const nextMarkers = sortSeriesMarkersByTime(
-      markerTradesRef.current.flatMap((trade) => buildTradeMarkers(trade, markPrice)).filter((marker) => inWindow(marker.time))
+      [
+        ...markerTradesRef.current.flatMap((trade) => buildTradeMarkers(trade, markPrice)),
+        ...swingMarkers,
+      ].filter((marker) => inWindow(marker.time))
     );
     closedTradeMarkersRef.current = nextMarkers;
     seriesMarkersRef.current?.setMarkers(nextMarkers);
@@ -1001,10 +1103,10 @@ export function MarketMasterPage() {
   const broker = useBrokerTrading({
     enabled: dataMode === "realtime" && realtimeAvailable && canUseAutomaticDraw,
     symbol,
-    onSnapshot: (snapshot) => {
+    onSnapshot: (snapshot, history) => {
       if (dataModeRef.current !== "realtime") return;
       const visibility = new Map(tradesRef.current.map(trade => [trade.id, trade.visibleOnChart]));
-      const positions = brokerChartTrades(snapshot, fullDataRef.current).map(trade => ({ ...trade, visibleOnChart: visibility.get(trade.id) ?? true }));
+      const positions = brokerHistoryTrades(snapshot, history ?? null, fullDataRef.current).map(trade => ({ ...trade, visibleOnChart: visibility.get(trade.id) ?? true }));
       tradesRef.current = positions;
       setTrades(positions);
       balanceRef.current = snapshot.account.balance;
@@ -1015,6 +1117,10 @@ export function MarketMasterPage() {
   const brokerRef = useRef(broker);
   brokerRef.current = broker;
   const [brokerCloseAll, setBrokerCloseAll] = useState(null);
+  const [isBrokerHistoryOpen, setIsBrokerHistoryOpen] = useState(false);
+  useEffect(() => {
+    if (dataMode !== "realtime") setIsBrokerHistoryOpen(false);
+  }, [dataMode]);
 
   const resetBacktestAccount = useCallback((initialBalance = INITIAL_BACKTEST_BALANCE) => {
     if (automaticRunRef.current) automaticRunRef.current.cancelled = true;
@@ -1603,6 +1709,7 @@ export function MarketMasterPage() {
           chartRef.current?.timeScale().setVisibleLogicalRange(local);
           subChartRef.current?.timeScale().setVisibleLogicalRange(local);
           volumeChartRef.current?.timeScale().setVisibleLogicalRange(local);
+          syncTradeMarkers(tradesRef.current);
           return;
         }
         if (nextBacktestMode) {
@@ -2191,15 +2298,11 @@ export function MarketMasterPage() {
   ]);
 
   useEffect(() => {
-    if (!isBacktestMode && dataMode !== "realtime") {
-      clearClosedTradeMarkers();
-      return;
-    }
     syncTradeMarkers(trades);
   }, [
-    clearClosedTradeMarkers,
     currentPrice,
     isBacktestMode,
+    isSwingPointsEnabled,
     syncTradeMarkers,
     trades,
     dataMode,
@@ -3127,6 +3230,26 @@ export function MarketMasterPage() {
               }
             }
 
+            // The volume profile is a composite shape.  Treat its histogram
+            // panel as the body too, so it can be selected and removed just
+            // like the line itself.
+            if (line.type === "volumeProfile" && line.config?.profile?.bins?.length) {
+              const profileY = line.config.profile.bins
+                .flatMap((bin) => [series.priceToCoordinate(bin.low), series.priceToCoordinate(bin.high)])
+                .filter((value) => value != null);
+              const profileTop = profileY.length ? Math.min(...profileY) - 8 : 0;
+              const profileBottom = profileY.length ? Math.max(...profileY) + 8 : chartContainerRef.current?.clientHeight ?? 0;
+              const profileRight = Math.max(x1, x2);
+              const profileWidth = Math.max(86, Math.min(180, Math.abs(x2 - x1) * 0.42));
+              const profileLeft = Math.max(0, profileRight - profileWidth);
+              if (px >= profileLeft && px <= profileRight && py >= profileTop && py <= profileBottom) {
+                line.setHoveredPoint("body");
+                foundTrendlineHover = true;
+                hoverType = "body";
+                break;
+              }
+            }
+
             if (line.type === "rectangle" || line.type === "zone") {
               const minX = Math.min(x1, x2),
                 maxX = Math.max(x1, x2);
@@ -3204,6 +3327,11 @@ export function MarketMasterPage() {
             state.currentLogical,
             state.drawType
           );
+          if (state.drawType === "volumeProfile") {
+            // Keep a snapshot so the profile remains stable while panning or
+            // while later history pages are loaded.
+            newLine.setProfileCandles?.([...fullDataRef.current]);
+          }
           series.attachPrimitive(newLine);
           state.activeLine = newLine;
           state.isDrawing = true;
@@ -3380,6 +3508,17 @@ export function MarketMasterPage() {
     const contextMenuHandler = (e) => {
       e.preventDefault();
       e.stopPropagation();
+
+      // A right click is an explicit cancel gesture while drawing. Do not
+      // open the chart context menu until the chart is back in pointer mode.
+      if (stateRef.current.mode === "draw") {
+        cancelPendingDrawing();
+        setMode("idle");
+        stateRef.current.mode = "idle";
+        setContextMenu(null);
+        return;
+      }
+
       hideCandleTooltip();
       ignoreContextMenuCloseRef.current = true;
       window.setTimeout(() => {
@@ -3466,6 +3605,7 @@ export function MarketMasterPage() {
     const handleVisibleLogicalRangeChange = (range) => {
       if (!range || chartPanGuardRef.current?.isActive() || preserveVisibleRangeRef.current || chartViewportSyncRef.current) return;
       if (isDataLoadingRef.current) return;
+      syncTradeMarkers(tradesRef.current);
       shiftChartWindowRef.current(range);
       if (chartWindowRef.current.from > 0 || preserveVisibleRangeRef.current) return;
       if (range.from > KLINE_HISTORY_EDGE_BARS) return;
@@ -4980,6 +5120,14 @@ export function MarketMasterPage() {
   }, 0);
 
   const setDrawingTool = useCallback((type) => {
+    if (stateRef.current.mode === "draw" && stateRef.current.drawType === type) {
+      cancelPendingDrawing();
+      setMode("idle");
+      stateRef.current.mode = "idle";
+      setContextMenu(null);
+      return;
+    }
+
     hideCandleTooltip();
     cancelPendingDrawing();
     clearAllSelections();
@@ -4992,10 +5140,10 @@ export function MarketMasterPage() {
   }, [hideCandleTooltip, cancelPendingDrawing, clearAllSelections]);
 
   useEffect(() => {
-    const handleManualZoneShortcut = (event: KeyboardEvent) => {
+    const handleDrawingShortcuts = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
-        event.key.toLowerCase() !== "r" ||
+        !["r", "e"].includes(event.key.toLowerCase()) ||
         event.ctrlKey || event.metaKey || event.altKey || event.repeat ||
         event.isComposing || event.defaultPrevented ||
         restartingBacktestRef.current || isAutomaticConfigOpen || automaticRun !== null ||
@@ -5004,11 +5152,11 @@ export function MarketMasterPage() {
       ) return;
 
       event.preventDefault();
-      setDrawingTool("zone");
+      setDrawingTool(event.key.toLowerCase() === "e" ? "volumeProfile" : "zone");
     };
 
-    window.addEventListener("keydown", handleManualZoneShortcut);
-    return () => window.removeEventListener("keydown", handleManualZoneShortcut);
+    window.addEventListener("keydown", handleDrawingShortcuts);
+    return () => window.removeEventListener("keydown", handleDrawingShortcuts);
   }, [setDrawingTool, isAutomaticConfigOpen, automaticRun]);
 
   const handleMenuDelete = () => {
@@ -5277,6 +5425,8 @@ export function MarketMasterPage() {
         setIsMagnetEnabled={setIsMagnetEnabled}
         isRightPriceAutoScaleEnabled={isRightPriceAutoScaleEnabled}
         setIsRightPriceAutoScaleEnabled={setIsRightPriceAutoScaleEnabled}
+        isSwingPointsEnabled={isSwingPointsEnabled}
+        setIsSwingPointsEnabled={setIsSwingPointsEnabled}
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}
@@ -5345,6 +5495,8 @@ export function MarketMasterPage() {
       <MarketWorkspace
         brokerTrading={dataMode === "realtime" ? broker : undefined}
         isRealtimeMode={dataMode === "realtime" && !isBacktestMode}
+        onOpenBrokerHistory={() => setIsBrokerHistoryOpen(true)}
+        brokerHistoryLoading={broker.historyLoading}
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         bottomPanelHeight={bottomPanelHeight}
         canPlaceOrder={
@@ -5460,6 +5612,7 @@ export function MarketMasterPage() {
       />
       {dataMode === "realtime" && managedTradeId != null && <BrokerTradeManagement key={managedTradeId} broker={broker} tradeId={String(managedTradeId)} onDismiss={() => setManagedTradeId(null)} />}
       {dataMode === "realtime" && brokerCloseAll && <BrokerCloseAllDialog broker={broker} selection={brokerCloseAll} onDismiss={() => setBrokerCloseAll(null)} />}
+      {dataMode === "realtime" && isBrokerHistoryOpen && <BrokerTradeHistoryModal broker={broker} onClose={() => setIsBrokerHistoryOpen(false)} />}
       {dataMode === "history" && isBacktestMode && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (
         <TradeManagementDialog
           key={managedTradeId}

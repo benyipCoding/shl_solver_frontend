@@ -57,6 +57,8 @@ type MarketWorkspaceProps = {
   bottomPanelHeight: number;
   canPlaceOrder: boolean;
   isRealtimeMode?: boolean;
+  onOpenBrokerHistory?: () => void;
+  brokerHistoryLoading?: boolean;
   isReplayMode?: boolean;
   isAutomaticTradingEnabled?: boolean;
   candleTooltip: CandleTooltip | null;
@@ -117,6 +119,8 @@ export function MarketWorkspace({
   bottomPanelHeight,
   canPlaceOrder,
   isRealtimeMode,
+  onOpenBrokerHistory,
+  brokerHistoryLoading = false,
   isReplayMode = false,
   isAutomaticTradingEnabled = false,
   candleTooltip,
@@ -253,7 +257,9 @@ export function MarketWorkspace({
             <div className="pointer-events-none absolute left-4 top-12 z-10 rounded-full border border-blue-500 bg-blue-600/20 px-3 py-1.5 text-xs text-blue-400">
               {drawType === "zone"
                 ? "手动支撑/阻力区：点击起点，再点击另一价格边界；自动向右延伸，Esc 取消"
-                : `画线模式 (${drawType === "line" ? "直线" : drawType === "rectangle" ? "矩形" : "斐波那契"})`}
+                : drawType === "volumeProfile"
+                  ? "成交量剖面（E）：点击斜线起点和终点，统计覆盖 K 线的成交量分布"
+                  : `画线模式 (${drawType === "line" ? "直线" : drawType === "rectangle" ? "矩形" : "斐波那契"})`}
             </div>
           )}
           <div ref={chartContainerRef} className="absolute inset-0" />
@@ -362,6 +368,9 @@ export function MarketWorkspace({
           isMaximized={isMaximized}
           panelHeight={bottomPanelHeight}
           isReplayMode={isReplayMode}
+          isRealtimeMode={isRealtimeMode}
+          onOpenBrokerHistory={onOpenBrokerHistory}
+          brokerHistoryLoading={brokerHistoryLoading}
         />
       </div>
 

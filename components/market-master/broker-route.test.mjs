@@ -71,6 +71,13 @@ test("valid login and bearer authentication go straight to the backend",async()=
   }
 });
 
+test("account history is an allowed read-only broker route",async()=>{
+  const h=harness(env);
+  const response=await h.exports.GET(h.request("GET",null,"access_token=test","history?account_id=demo&from_ts=1&to_ts=2"),context("history"));
+  assert.equal(response.status,200);
+  assert.ok(h.calls[0].url.endsWith("/trading/history?account_id=demo&from_ts=1&to_ts=2"));
+});
+
 test("a rejected credential is refreshed once and the original command body and ID survive retry",async()=>{
   const h=harness(env,(url,_options,index)=>url.endsWith("/auth/refresh") ? refreshResponse() :
     index===1 ? Response.json({detail:"Unauthorized"},{status:401}) : Response.json({status:"confirmed"}));

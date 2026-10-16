@@ -26,6 +26,15 @@ export type BrokerSnapshot = {
   unresolved: BrokerResult[];
 };
 
+export type BrokerHistoryResponse = {
+  type: "history";
+  account: { id: string; currency: string | null };
+  server_time: number | null;
+  from: number | null;
+  to: number | null;
+  items: BrokerPosition[];
+};
+
 export function brokerChartTrades(snapshot: BrokerSnapshot, candles: readonly {time: number}[] = []): TradePosition[] {
   const candleTime = (time: number | null) => {
     if (time == null) return undefined;
@@ -47,6 +56,23 @@ export function brokerChartTrades(snapshot: BrokerSnapshot, candles: readonly {t
   });
   return [...snapshot.positions.filter(p => p.symbol === snapshot.instrument.symbol).map(p => map(p, false)),
     ...snapshot.closed_positions.filter(p => p.symbol === snapshot.instrument.symbol).map(p => map(p, true))];
+}
+
+/** Convert broker history rows to the existing chart/record row shape. */
+export function brokerHistoryTrades(
+  snapshot: BrokerSnapshot,
+  history: BrokerHistoryResponse | null,
+  candles: readonly {time: number}[] = [],
+): TradePosition[] {
+  if (!history || history.account.id !== snapshot.account.id) {
+    // While the account-day query is in flight, keep current open positions
+    // visible without briefly showing an unfiltered/stale closed-trade table.
+    return brokerChartTrades({ ...snapshot, closed_positions: [] }, candles);
+  }
+  return brokerChartTrades(
+    { ...snapshot, closed_positions: history.items },
+    candles,
+  );
 }
 
 export const brokerMoney = (value: number | null | undefined, currency?: string | null) =>

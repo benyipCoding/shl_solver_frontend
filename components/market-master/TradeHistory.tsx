@@ -11,6 +11,8 @@ import {
   ChevronUp,
   Eye,
   EyeOff,
+  History,
+  Loader2,
 } from "lucide-react";
 
 type TradeHistoryProps = {
@@ -28,6 +30,9 @@ type TradeHistoryProps = {
   isMaximized: boolean;
   panelHeight: number;
   isReplayMode?: boolean;
+  isRealtimeMode?: boolean;
+  onOpenBrokerHistory?: () => void;
+  brokerHistoryLoading?: boolean;
 };
 
 function AutomaticTradeBadge({ trade }: { trade: TradePosition }) {
@@ -63,6 +68,9 @@ export const TradeHistory = ({
   isMaximized,
   panelHeight,
   isReplayMode = false,
+  isRealtimeMode = false,
+  onOpenBrokerHistory,
+  brokerHistoryLoading = false,
 }: TradeHistoryProps) => {
   const [filters, setFilters] = useState<TradeHistoryFilters>({ ...DEFAULT_TRADE_HISTORY_FILTERS });
   const [sort, setSort] = useState<TradeHistorySort>(null);
@@ -137,6 +145,17 @@ export const TradeHistory = ({
 
         <div className="flex items-center gap-4">
           {hasFilters && <button type="button" onClick={(event) => { event.stopPropagation(); setFilters({ ...DEFAULT_TRADE_HISTORY_FILTERS }); setPage(0); }} className="text-xs text-blue-400 hover:text-blue-300">清除筛选</button>}
+          {isRealtimeMode && onOpenBrokerHistory && (
+            <button
+              type="button"
+              onClick={(event) => { event.stopPropagation(); onOpenBrokerHistory(); }}
+              className="inline-flex items-center gap-1 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 transition-colors hover:border-blue-500/60 hover:bg-gray-800 hover:text-blue-300"
+              title="查询福汇账户的历史已平仓交易"
+            >
+              {brokerHistoryLoading ? <Loader2 size={13} className="animate-spin" /> : <History size={13} />}
+              历史记录
+            </button>
+          )}
           {/* <button
             onClick={(e) => {
               e.stopPropagation();

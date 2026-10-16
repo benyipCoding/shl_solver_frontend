@@ -37,6 +37,20 @@ test("broker chart rows preserve actual fills, fees and net P/L while aligning m
   assert.equal(rows[0].brokerRollover, -3);
   assert.equal(broker.brokerMoney(null, "USD"), "—");
 });
+test("broker history rows replace the cached closed-trade table for the live record view", () => {
+  const position = {trade_id: "today", symbol: "EUR/USD", side: "Buy", amount: 1000,
+    open_rate: 1.1, open_time: 65, close_rate: 1.2, close_time: 125,
+    stop: null, limit: null, commission: 0, rollover: 0, gross_pl: 10, net_pl: 10,
+    close_order_id: "close-today"};
+  const stale = {...position, trade_id: "stale", close_order_id: "close-stale"};
+  const snapshot = {account: {id: "demo", currency: "USD"}, instrument: {symbol: "EUR/USD"},
+    positions: [], closed_positions: [stale], unresolved: []};
+  const rows = broker.brokerHistoryTrades(snapshot,
+    {type: "history", account: {id: "demo", currency: "USD"}, server_time: 200,
+      from: 0, to: 200, items: [position]}, [{time: 60}, {time: 120}]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].brokerTradeId, "today");
+});
 
 function hookHarness({getStatus=200}={}) {
   const slots = [], effects = [], sources = [], requests = [], storage = new Map();

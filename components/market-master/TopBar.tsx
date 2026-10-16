@@ -16,9 +16,11 @@ import {
   AlignJustify,
   Magnet,
   ArrowUpDown,
+  Waypoints,
   Sparkles,
   Loader2,
   BarChart2,
+  ChartNoAxesColumnIncreasing,
   Trash2,
   StepForward,
   Pause,
@@ -57,6 +59,8 @@ export const TopBar = ({
   setIsMagnetEnabled,
   isRightPriceAutoScaleEnabled,
   setIsRightPriceAutoScaleEnabled,
+  isSwingPointsEnabled = true,
+  setIsSwingPointsEnabled,
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
@@ -640,6 +644,20 @@ export const TopBar = ({
             </button>
             <button
               type="button"
+              onClick={() => setDrawingTool("volumeProfile")}
+              aria-label="成交量剖面"
+              aria-pressed={mode === "draw" && drawType === "volumeProfile"}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                mode === "draw" && drawType === "volumeProfile"
+                  ? "bg-amber-500/15 text-amber-300"
+                  : "hover:bg-gray-700 text-gray-400 hover:text-amber-300"
+              }`}
+              title="成交量剖面（快捷键 E）：画一条斜线，统计覆盖 K 线的成交量分布"
+            >
+              <ChartNoAxesColumnIncreasing size={20} />
+            </button>
+            <button
+              type="button"
               onClick={onToggleSupportResistance}
               disabled={!isSupportResistanceEnabled && (isDataLoading || isHistoryLoading || Boolean(dataError) || totalCandles === 0)}
               aria-label="支撑/阻力区"
@@ -754,6 +772,20 @@ export const TopBar = ({
               }
             >
               <ArrowUpDown size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSwingPointsEnabled?.(!isSwingPointsEnabled)}
+              aria-label="摆荡高低点"
+              aria-pressed={isSwingPointsEnabled}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 ${
+                isSwingPointsEnabled
+                  ? "bg-slate-700 text-slate-200"
+                  : "text-gray-400 hover:bg-gray-700 hover:text-slate-200"
+              }`}
+              title={isSwingPointsEnabled ? "隐藏视图内摆荡高低点" : "显示视图内摆荡高低点"}
+            >
+              <Waypoints size={20} />
             </button>
             <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
             <button

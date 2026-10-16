@@ -6,7 +6,7 @@ import React, {
   useCallback,
   ReactNode,
   useRef,
-  use,
+  useEffect,
 } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -23,9 +23,33 @@ interface FetchContextType {
 const FetchContext = createContext<FetchContextType | undefined>(undefined);
 
 export const FetchProvider = ({ children }: { children: ReactNode }) => {
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const userRef = useRef(user);
+  const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const refreshSession = useCallback(async () => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+
+    const refreshPromise = fetch("/api/auth/refresh", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromiseRef.current = null;
+      });
+
+    refreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, []);
 
   const customFetch = useCallback(
     async (
@@ -35,11 +59,31 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
     ): Promise<Response> => {
       try {
         const response = await fetch(input, init);
+        const requestUrl =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+        const isRefreshRequest = requestUrl.includes("/api/auth/refresh");
+        const hasCachedSession =
+          Boolean(userRef.current) ||
+          (typeof window !== "undefined" &&
+            Boolean(localStorage.getItem("user_info")));
+        let finalResponse = response;
 
-        if (response.status === 401) {
-          // 401 错误，尝试刷新 Token
-          setUser(null); // 清除用户信息，触发前端重新获取用户状态
-          // 注意：这里不直接调用刷新接口，而是依赖前端的用户状态变化来触发重新获取用户信息
+        // Access tokens are short-lived. Renew them once before treating a
+        // 401 as a real logout. The single-flight promise avoids rotating the
+        // refresh token multiple times for concurrent failed requests.
+        if (response.status === 401 && hasCachedSession && !isRefreshRequest) {
+          const refreshed = await refreshSession();
+          if (refreshed) finalResponse = await fetch(input, init);
+        }
+
+        if (finalResponse.status === 401) {
+          // Refresh failed (or the retried request is still unauthorized),
+          // so the cached identity is no longer trustworthy.
+          setUser(null);
           localStorage.removeItem("user_info");
 
           if (needNavigate) {
@@ -51,7 +95,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
           }
         }
 
-        return response;
+        return finalResponse;
       } catch (error) {
         // Effect cleanup cancels stale requests; callers still receive the
         // rejection, but an intentional cancellation is not a network failure.
@@ -61,7 +105,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         throw error;
       }
     },
-    [pathname, router, setUser]
+    [pathname, refreshSession, router, setUser]
   );
 
   return (

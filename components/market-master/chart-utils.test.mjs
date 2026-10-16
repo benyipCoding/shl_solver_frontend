@@ -24,7 +24,31 @@ function loadChartUtils() {
   return target.exports;
 }
 
-const { calculateBollingerBands, ShapePrimitive } = loadChartUtils();
+const { calculateBollingerBands, calculateVolumeProfile, ShapePrimitive } = loadChartUtils();
+
+test("volume profile selects covered candles and preserves total tick volume", () => {
+  const result = calculateVolumeProfile([
+    { time: 1, low: 100, high: 110, volume: 10 },
+    { time: 2, low: 105, high: 115, volume: 20 },
+    { time: 3, low: 110, high: 120, volume: 30 },
+  ], 1, 2, 8);
+  assert.equal(result.coveredCount, 2);
+  assert.equal(result.bins.length, 8);
+  assert.equal(Math.round(result.totalVolume), 30);
+  assert.ok(result.pocIndex >= 0);
+});
+
+test("volume profile primitive refreshes when a line endpoint moves", () => {
+  const profile = new ShapePrimitive({ time: 1, price: 100 }, { time: 2, price: 110 }, "volumeProfile");
+  profile.setProfileCandles([
+    { time: 1, low: 100, high: 110, volume: 10 },
+    { time: 2, low: 105, high: 115, volume: 20 },
+    { time: 3, low: 110, high: 120, volume: 30 },
+  ]);
+  assert.equal(profile.config.profile.coveredCount, 2);
+  profile.updatePoint(2, { time: 3, price: 120 });
+  assert.equal(profile.config.profile.coveredCount, 3);
+});
 
 function attachShape(shape) {
   const viewport = { width: 800, offset: 0, spacing: 10 };
