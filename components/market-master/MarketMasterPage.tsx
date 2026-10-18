@@ -177,6 +177,7 @@ type PreservedChartViewport = {
 type PreservedBacktestTimeframeChange = {
   sourceSymbol: string;
   cursorTime: number | null;
+  sourceCurrentIndex: number;
   replayStartTime: number | null;
   replayEndTime: number | null;
 };
@@ -2346,16 +2347,28 @@ export function MarketMasterPage() {
       }
 
       try {
-        const aroundTime = preservedViewport?.center;
-        const beforeCount = preservedViewport
+        // When a backtest is kept across a timeframe switch, the active
+        // candle is the continuity anchor.  Using only the visible range
+        // center is unsafe: the chart can report a stale/expanded range while
+        // its series is being replaced, which may request a completely
+        // unrelated historical page.  That leaves the cursor outside the
+        // page and the old fallback then reveals just one candle.
+        const viewportAnchor = preservedBacktest?.cursorTime ?? preservedViewport?.center;
+        const targetBarSeconds = timeframeSeconds(timeframe);
+        const minimumBacktestBeforeCount = preservedBacktest
+          ? Math.min(INITIAL_VISIBLE_COUNT - 1, KLINE_PAGE_SIZE - 1)
+          : 0;
+        const beforeCount = viewportAnchor != null
           ? Math.max(
-              0,
+              minimumBacktestBeforeCount,
               Math.min(
-                Math.floor((KLINE_PAGE_SIZE - 1) / 2),
-                Math.round(
-                  (preservedViewport.center - preservedViewport.from) /
-                    timeframeSeconds(timeframe)
-                )
+                KLINE_PAGE_SIZE - 1,
+                preservedViewport
+                  ? Math.round(
+                      (viewportAnchor - preservedViewport.from) /
+                        targetBarSeconds
+                    )
+                  : Math.floor((KLINE_PAGE_SIZE - 1) / 2)
               )
             )
           : undefined;
@@ -2363,31 +2376,62 @@ export function MarketMasterPage() {
           symbol,
           interval: getIntervalByTimeframe(timeframe),
           outputsize: KLINE_PAGE_SIZE,
-          ...(aroundTime != null ? { aroundTime, beforeCount } : {}),
+          ...(viewportAnchor != null ? { aroundTime: viewportAnchor, beforeCount } : {}),
         });
 
-        const newData = normalizeCandles(firstPage.rawCandles);
+        let loadedPage = firstPage;
+        let newData = normalizeCandles(firstPage.rawCandles);
         if (!newData.length) {
           throw new Error(
             `当前标的 ${symbol} 暂无可用 K 线数据，请切换周期或标的`
           );
         }
 
+        // A provider/database window can still miss the anchor when the
+        // requested time is outside its available history or falls in a gap.
+        // Retry explicitly around the backtest cursor before applying the
+        // page; never silently map a missing cursor to index 1.
+        if (
+          preservedBacktest?.cursorTime != null &&
+          findCandleIndexByTime(newData, preservedBacktest.cursorTime) < 0
+        ) {
+          const cursorPage = await fetchKlinePage((input, init) => customFetch(input, { ...init, signal: loadController.signal }), {
+            symbol,
+            interval: getIntervalByTimeframe(timeframe),
+            outputsize: KLINE_PAGE_SIZE,
+            aroundTime: preservedBacktest.cursorTime,
+            beforeCount: Math.min(
+              KLINE_PAGE_SIZE - 1,
+              Math.max(0, beforeCount ?? Math.floor((KLINE_PAGE_SIZE - 1) / 2))
+            ),
+          });
+          const cursorData = normalizeCandles(cursorPage.rawCandles);
+          if (findCandleIndexByTime(cursorData, preservedBacktest.cursorTime) >= 0) {
+            loadedPage = cursorPage;
+            newData = cursorData;
+          }
+        }
+
         if (cancelled || session !== dataSessionRef.current) return;
 
-        applyLoadedMarketData(firstPage, newData, {
-          isInitialPage: true,
-          currentIndex: preservedBacktest
-            ? Math.max(
-                1,
-                Math.min(
-                  newData.length,
-                  (preservedBacktest.cursorTime == null
-                    ? currentIndexRef.current
-                    : findCandleIndexByTime(newData, preservedBacktest.cursorTime) + 1)
+        const preservedCursorIndex = preservedBacktest?.cursorTime == null
+          ? -1
+          : findCandleIndexByTime(newData, preservedBacktest.cursorTime);
+        const preservedCurrentIndex = preservedBacktest
+          ? preservedCursorIndex >= 0
+            ? preservedCursorIndex + 1
+            : Math.min(
+                newData.length,
+                Math.max(
+                  minimumBacktestBeforeCount + 1,
+                  preservedBacktest.sourceCurrentIndex || 0
                 )
               )
-            : undefined,
+          : undefined;
+
+        applyLoadedMarketData(loadedPage, newData, {
+          isInitialPage: true,
+          currentIndex: preservedCurrentIndex,
           preserveRiskSettings: Boolean(preservedBacktest),
           visibleTimeRange: preservedViewport
             ? { from: preservedViewport.from, to: preservedViewport.to }
@@ -4840,14 +4884,19 @@ export function MarketMasterPage() {
     const range = chart.timeScale?.().getVisibleRange?.();
     let from = toTimestamp(range?.from);
     let to = toTimestamp(range?.to);
-    if (from == null || to == null || from >= to) {
-      const logical = chart.timeScale?.().getVisibleLogicalRange?.();
-      const window = chartWindowRef.current;
-      if (logical && Number.isFinite(logical.from) && Number.isFinite(logical.to)) {
-        const firstIndex = Math.max(0, Math.min(data.length - 1, Math.floor(window.from + logical.from)));
-        const lastIndex = Math.max(0, Math.min(data.length - 1, Math.ceil(window.from + logical.to)));
-        from = data[firstIndex]?.time ?? null;
-        to = data[lastIndex]?.time ?? null;
+    const logical = chart.timeScale?.().getVisibleLogicalRange?.();
+    const window = chartWindowRef.current;
+    if (logical && Number.isFinite(logical.from) && Number.isFinite(logical.to)) {
+      const firstIndex = Math.max(0, Math.min(data.length - 1, Math.floor(window.from + logical.from)));
+      const lastIndex = Math.max(0, Math.min(data.length - 1, Math.ceil(window.from + logical.to)));
+      const logicalFrom = data[firstIndex]?.time ?? null;
+      const logicalTo = data[lastIndex]?.time ?? null;
+      // In backtest mode the timestamp range can briefly describe the old
+      // series while setData is replacing it. Logical indexes belong to the
+      // currently rendered series and are therefore the reliable handoff.
+      if (isBacktestModeRef.current || from == null || to == null || from >= to) {
+        from = logicalFrom;
+        to = logicalTo;
       }
     }
     if (from == null || to == null || from >= to) return null;
@@ -4885,6 +4934,7 @@ export function MarketMasterPage() {
         ? {
             sourceSymbol: symbol,
             cursorTime: getActiveCandle(fullDataRef.current, currentIndexRef.current)?.time ?? null,
+            sourceCurrentIndex: currentIndexRef.current,
             replayStartTime: isReplayModeRef.current
               ? fullDataRef.current[replayStartCurrentIndexRef.current - 1]?.time ?? null
               : null,
