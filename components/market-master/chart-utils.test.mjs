@@ -36,6 +36,19 @@ test("volume profile selects covered candles and preserves total tick volume", (
   assert.equal(result.bins.length, 8);
   assert.equal(Math.round(result.totalVolume), 30);
   assert.ok(result.pocIndex >= 0);
+  assert.ok(result.valueAreaLowIndex >= 0);
+  assert.ok(result.valueAreaHighIndex >= result.valueAreaLowIndex);
+});
+
+test("volume profile supports custom bin count and value-area percentage", () => {
+  const result = calculateVolumeProfile([
+    { time: 1, low: 100, high: 101, volume: 10 },
+    { time: 2, low: 101, high: 102, volume: 20 },
+    { time: 3, low: 102, high: 103, volume: 30 },
+  ], 1, 3, 16, 100);
+  assert.equal(result.bins.length, 16);
+  assert.equal(result.valueAreaLowIndex, 0);
+  assert.equal(result.valueAreaHighIndex, 15);
 });
 
 test("volume profile primitive refreshes when a line endpoint moves", () => {
@@ -46,6 +59,23 @@ test("volume profile primitive refreshes when a line endpoint moves", () => {
     { time: 3, low: 110, high: 120, volume: 30 },
   ]);
   assert.equal(profile.config.profile.coveredCount, 2);
+  assert.equal(profile.config.profileSettings.binCount, 24);
+  assert.equal(profile.config.profileSettings.showLevels, true);
+  profile.updateConfig({
+    profileSettings: {
+      ...profile.config.profileSettings,
+      binCount: 12,
+      valueAreaPercent: 90,
+      maxWidth: 220,
+      showValueArea: false,
+      showPoc: false,
+      showLevels: false,
+    },
+  });
+  profile.refreshVolumeProfile();
+  assert.equal(profile.config.profile.bins.length, 12);
+  assert.equal(profile.config.profileSettings.maxWidth, 220);
+  assert.equal(profile.config.profileSettings.showLevels, false);
   profile.updatePoint(2, { time: 3, price: 120 });
   assert.equal(profile.config.profile.coveredCount, 3);
 });

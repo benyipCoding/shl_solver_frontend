@@ -34,6 +34,45 @@ export const hexToRgba = (hex: any, alpha: any) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+export const DEFAULT_VOLUME_PROFILE_SETTINGS = {
+  binCount: 24,
+  valueAreaPercent: 70,
+  maxWidth: 180,
+  showValueArea: true,
+  showPoc: true,
+  showLevels: true,
+};
+
+export const normalizeVolumeProfileSettings = (settings: any = {}) => {
+  const source = settings || {};
+  return {
+    binCount: Math.max(
+      8,
+      Math.min(48, Math.floor(Number(source.binCount) || DEFAULT_VOLUME_PROFILE_SETTINGS.binCount))
+    ),
+    valueAreaPercent: Math.max(
+      50,
+      Math.min(100, Number(source.valueAreaPercent) || DEFAULT_VOLUME_PROFILE_SETTINGS.valueAreaPercent)
+    ),
+    maxWidth: Math.max(
+      80,
+      Math.min(240, Number(source.maxWidth) || DEFAULT_VOLUME_PROFILE_SETTINGS.maxWidth)
+    ),
+    showValueArea: source.showValueArea !== false,
+    showPoc: source.showPoc !== false,
+    showLevels: source.showLevels !== false,
+  };
+};
+
+const formatVolumeProfilePrice = (price: number) => {
+  if (!Number.isFinite(price)) return "-";
+  const absolute = Math.abs(price);
+  const decimals = absolute >= 1000 ? 2 : absolute >= 100 ? 3 : absolute >= 1 ? 5 : 6;
+  return price
+    .toFixed(decimals)
+    .replace(/\.?(0+)$/, "");
+};
+
 /**
  * Build a price/volume histogram for the candles between two points.  FXCM
  * supplies tick volume, so each candle's volume is spread uniformly across
@@ -45,7 +84,8 @@ export const calculateVolumeProfile = (
   candles: any[] = [],
   startTime: number,
   endTime: number,
-  binCount = 24
+  binCount = 24,
+  valueAreaPercent = 70
 ) => {
   const from = Math.min(Number(startTime), Number(endTime));
   const to = Math.max(Number(startTime), Number(endTime));
@@ -59,7 +99,16 @@ export const calculateVolumeProfile = (
     Number.isFinite(Number(candle.volume)) &&
     Number(candle.volume) > 0
   );
-  if (!priced.length) return { bins: [], coveredCount: selected.length, totalVolume: 0, pocIndex: -1 };
+  if (!priced.length) {
+    return {
+      bins: [],
+      coveredCount: selected.length,
+      totalVolume: 0,
+      pocIndex: -1,
+      valueAreaLowIndex: -1,
+      valueAreaHighIndex: -1,
+    };
+  }
 
   const low = Math.min(...priced.map((candle) => Number(candle.low)));
   const high = Math.max(...priced.map((candle) => Number(candle.high)));
@@ -91,11 +140,38 @@ export const calculateVolumeProfile = (
   const totalVolume = bins.reduce((sum, bin) => sum + bin.volume, 0);
   const maxVolume = Math.max(...bins.map((bin) => bin.volume), 0);
   const pocIndex = bins.findIndex((bin) => bin.volume === maxVolume);
+  const normalizedValueAreaPercent = Math.max(50, Math.min(100, Number(valueAreaPercent) || 70));
+  const valueAreaTarget = totalVolume * (normalizedValueAreaPercent / 100);
+  let valueAreaLowIndex = pocIndex;
+  let valueAreaHighIndex = pocIndex;
+  let valueAreaVolume = pocIndex >= 0 ? bins[pocIndex].volume : 0;
+  while (
+    pocIndex >= 0 &&
+    valueAreaVolume < valueAreaTarget &&
+    (valueAreaLowIndex > 0 || valueAreaHighIndex < bins.length - 1)
+  ) {
+    const leftIndex = valueAreaLowIndex - 1;
+    const rightIndex = valueAreaHighIndex + 1;
+    const leftVolume = leftIndex >= 0 ? bins[leftIndex].volume : -1;
+    const rightVolume = rightIndex < bins.length ? bins[rightIndex].volume : -1;
+    if (rightVolume > leftVolume) {
+      valueAreaHighIndex = rightIndex;
+      valueAreaVolume += rightVolume;
+    } else if (leftIndex >= 0) {
+      valueAreaLowIndex = leftIndex;
+      valueAreaVolume += leftVolume;
+    } else {
+      valueAreaHighIndex = rightIndex;
+      valueAreaVolume += rightVolume;
+    }
+  }
   return {
     bins: bins.map((bin) => ({ ...bin, ratio: maxVolume ? bin.volume / maxVolume : 0 })),
     coveredCount: selected.length,
     totalVolume,
     pocIndex,
+    valueAreaLowIndex,
+    valueAreaHighIndex,
   };
 };
 
@@ -138,8 +214,9 @@ export class ShapeRenderer {
 
       if (this.type === "volumeProfile" && this.config.profile?.bins?.length) {
         const profile = this.config.profile;
+        const profileSettings = normalizeVolumeProfileSettings(this.config.profileSettings);
         const panelRight = Math.max(this.p1.x, this.p2.x);
-        const maxWidth = Math.max(86, Math.min(180, Math.abs(this.p2.x - this.p1.x) * 0.42));
+        const maxWidth = profileSettings.maxWidth;
         const panelLeft = Math.max(0, panelRight - maxWidth);
         const profileCoordinates = profile.bins
           .map((bin: any) => [this.series?.priceToCoordinate?.(bin.low), this.series?.priceToCoordinate?.(bin.high)])
@@ -161,9 +238,67 @@ export class ShapeRenderer {
           if (yHigh == null || yLow == null) return;
           const height = Math.max(1, Math.abs(yLow - yHigh) - 1);
           const width = Math.max(1, (bin.volume / maxVolume) * (panelRight - panelLeft - 4));
-          ctx.fillStyle = index === profile.pocIndex ? "rgba(251, 191, 36, 0.82)" : "rgba(56, 189, 248, 0.52)";
+          const inValueArea =
+            profileSettings.showValueArea &&
+            index >= profile.valueAreaLowIndex &&
+            index <= profile.valueAreaHighIndex;
+          ctx.fillStyle =
+            profileSettings.showPoc && index === profile.pocIndex
+              ? "rgba(251, 191, 36, 0.82)"
+              : inValueArea
+                ? "rgba(96, 165, 250, 0.72)"
+                : "rgba(56, 189, 248, 0.52)";
           ctx.fillRect(panelRight - width - 2, Math.min(yHigh, yLow), width, height);
         });
+
+        if (profileSettings.showLevels) {
+          const profileLevels = [
+            profile.pocIndex >= 0 && profile.bins[profile.pocIndex]
+              ? {
+                  name: "POC",
+                  price:
+                    (profile.bins[profile.pocIndex].low +
+                      profile.bins[profile.pocIndex].high) /
+                    2,
+                  color: "#fbbf24",
+                }
+              : null,
+            profile.valueAreaHighIndex >= 0 && profile.bins[profile.valueAreaHighIndex]
+              ? {
+                  name: "VAH",
+                  price: profile.bins[profile.valueAreaHighIndex].high,
+                  color: "#a78bfa",
+                }
+              : null,
+            profile.valueAreaLowIndex >= 0 && profile.bins[profile.valueAreaLowIndex]
+              ? {
+                  name: "VAL",
+                  price: profile.bins[profile.valueAreaLowIndex].low,
+                  color: "#a78bfa",
+                }
+              : null,
+          ].filter(Boolean) as any[];
+          const labelX = Math.max(4, Math.min(panelRight + 6, scope.mediaSize.width - 76));
+          profileLevels.forEach((level) => {
+            const y = this.series?.priceToCoordinate?.(level.price);
+            if (y == null) return;
+            ctx.save?.();
+            ctx.strokeStyle = level.color;
+            ctx.fillStyle = level.color;
+            ctx.lineWidth = 1;
+            ctx.setLineDash?.([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(panelRight, y);
+            ctx.lineTo(scope.mediaSize.width, y);
+            ctx.stroke();
+            ctx.setLineDash?.([]);
+            ctx.font = "10px Arial";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${level.name} ${formatVolumeProfilePrice(level.price)}`, labelX, y);
+            ctx.restore?.();
+          });
+        }
         ctx.fillStyle = "rgba(226, 232, 240, 0.82)";
         ctx.font = "10px Arial";
         ctx.textAlign = "left";
@@ -322,6 +457,7 @@ export class ShapePrimitive {
       lineWidth: type === "zone" ? 1 : 2,
       isSelected: false,
       fillBaseColor: type === "zone" ? "#c084fc" : "#2962ff",
+      profileSettings: { ...DEFAULT_VOLUME_PROFILE_SETTINGS },
       fibColors: [
         "#787b86",
         "#f23645",
@@ -396,9 +532,17 @@ export class ShapePrimitive {
   }
   refreshVolumeProfile() {
     if (this.type !== "volumeProfile" || !this.p1 || !this.p2 || !this.profileCandles.length) return;
+    const profileSettings = normalizeVolumeProfileSettings(this.config.profileSettings);
     this.config = {
       ...this.config,
-      profile: calculateVolumeProfile(this.profileCandles, this.p1.time, this.p2.time),
+      profileSettings,
+      profile: calculateVolumeProfile(
+        this.profileCandles,
+        this.p1.time,
+        this.p2.time,
+        profileSettings.binCount,
+        profileSettings.valueAreaPercent
+      ),
     };
   }
   setHoveredPoint(pointIndex: any) {

@@ -3240,7 +3240,10 @@ export function MarketMasterPage() {
               const profileTop = profileY.length ? Math.min(...profileY) - 8 : 0;
               const profileBottom = profileY.length ? Math.max(...profileY) + 8 : chartContainerRef.current?.clientHeight ?? 0;
               const profileRight = Math.max(x1, x2);
-              const profileWidth = Math.max(86, Math.min(180, Math.abs(x2 - x1) * 0.42));
+              const profileWidth = Math.max(
+                80,
+                Math.min(240, Number(line.config?.profileSettings?.maxWidth) || 180)
+              );
               const profileLeft = Math.max(0, profileRight - profileWidth);
               if (px >= profileLeft && px <= profileRight && py >= profileTop && py <= profileBottom) {
                 line.setHoveredPoint("body");
@@ -5216,10 +5219,17 @@ export function MarketMasterPage() {
     );
     if (shapeIndex !== -1) {
       const shape = stateRef.current.lines[shapeIndex];
-      shape.updateConfig({ [field]: value });
+      if (shape.type === "volumeProfile" && field === "profileSettings") {
+        shape.updateConfig({ profileSettings: value });
+        shape.refreshVolumeProfile?.();
+      } else {
+        shape.updateConfig({ [field]: value });
+      }
       if (field === "color" && (shape.type === "rectangle" || shape.type === "zone")) {
         shape.updateConfig({ fillBaseColor: value });
       }
+      shape.requestUpdate?.();
+      setLines([...stateRef.current.lines]);
     }
   };
 
