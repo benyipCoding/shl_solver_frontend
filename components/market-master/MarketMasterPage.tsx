@@ -143,6 +143,7 @@ import { TradeManagementDialog } from "./TradeManagementDialog";
 import { TradeConnectionPrimitive } from "./trade-connection";
 import { LiquidityZonesPrimitive } from "./liquidity-zones-primitive";
 import { calculateLiquidityZones } from "./liquidity-zones";
+import { SessionBreaksPrimitive } from "./session-breaks-primitive";
 import { tradeFocusRange } from "./trade-history";
 import { closeTradeRecord, closeTradeUnits, getRiskPriceError, withSettlementBalances, type TradePosition } from "./trade-management";
 
@@ -589,6 +590,7 @@ export function MarketMasterPage() {
   const emaSeriesRefs = useRef<any>({});
   const bollingerSeriesRefs = useRef<any>({});
   const liquidityPrimitiveRef = useRef<LiquidityZonesPrimitive | null>(null);
+  const sessionBreaksPrimitiveRef = useRef<SessionBreaksPrimitive | null>(null);
 
   const subChartContainerRef = useRef<any>(null);
   const subChartRef = useRef<any>(null);
@@ -637,6 +639,15 @@ export function MarketMasterPage() {
   useEffect(() => {
     swingPointsEnabledRef.current = isSwingPointsEnabled;
   }, [isSwingPointsEnabled]);
+  const [isSessionBreaksEnabled, setIsSessionBreaksEnabled] = useState(false);
+  const sessionBreaksEnabledRef = useRef(false);
+  useEffect(() => {
+    sessionBreaksEnabledRef.current = isSessionBreaksEnabled;
+    sessionBreaksPrimitiveRef.current?.setCandles(
+      sliceChartWindow(fullDataRef.current, chartWindowRef.current),
+      isSessionBreaksEnabled && timeframeSeconds(timeframeRef.current) < 86400
+    );
+  }, [isSessionBreaksEnabled]);
   const magnetRef = useRef(isMagnetEnabled);
   useEffect(() => {
     magnetRef.current = isMagnetEnabled;
@@ -727,6 +738,18 @@ export function MarketMasterPage() {
   useEffect(() => {
     timeframeRef.current = timeframe;
   }, [timeframe]);
+
+  const handleToggleSessionBreaks = useCallback(() => {
+    if (
+      timeframeSeconds(timeframe) >= 86400 ||
+      isDataLoading ||
+      Boolean(dataError) ||
+      !seriesRef.current
+    ) {
+      return;
+    }
+    setIsSessionBreaksEnabled((enabled) => !enabled);
+  }, [dataError, isDataLoading, timeframe]);
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
@@ -1709,6 +1732,10 @@ export function MarketMasterPage() {
       updateLiquidityOverlay(data, nextIndex, activeConfig);
       const candleData = sliceChartWindow(data, window);
       const indicatorSlice = (points) => sliceChartWindow(points, window, indicatorOffsetRef.current);
+      sessionBreaksPrimitiveRef.current?.setCandles(
+        candleData,
+        sessionBreaksEnabledRef.current && timeframeSeconds(timeframeRef.current) < 86400
+      );
 
       chartViewportSyncRef.current = true;
       try {
@@ -2275,6 +2302,7 @@ export function MarketMasterPage() {
       if (seriesRef.current) {
         seriesRef.current.setData([]);
       }
+      sessionBreaksPrimitiveRef.current?.setCandles([], false);
 
       Object.values(emaSeriesRefs.current).forEach((emaSeries: any) => {
         emaSeries.setData([]);
@@ -3220,6 +3248,13 @@ export function MarketMasterPage() {
     chartRef.current = chart;
     seriesRef.current = series;
     updateLiquidityOverlay(fullDataRef.current, currentIndexRef.current, indConfigRef.current);
+    const sessionBreaksPrimitive = new SessionBreaksPrimitive();
+    sessionBreaksPrimitiveRef.current = sessionBreaksPrimitive;
+    series.attachPrimitive(sessionBreaksPrimitive);
+    sessionBreaksPrimitive.setCandles(
+      sliceChartWindow(fullDataRef.current, chartWindowRef.current),
+      sessionBreaksEnabledRef.current && timeframeSeconds(timeframeRef.current) < 86400
+    );
     seriesMarkersRef.current = createSeriesMarkers(
       series,
       closedTradeMarkersRef.current,
@@ -3900,6 +3935,8 @@ export function MarketMasterPage() {
       series.detachPrimitive(tradeConnection);
       if (liquidityPrimitiveRef.current) series.detachPrimitive(liquidityPrimitiveRef.current);
       liquidityPrimitiveRef.current = null;
+      if (sessionBreaksPrimitiveRef.current) series.detachPrimitive(sessionBreaksPrimitiveRef.current);
+      sessionBreaksPrimitiveRef.current = null;
       tradeConnectionRef.current = null;
       chart.remove();
       chartRef.current = null;
@@ -4324,6 +4361,10 @@ export function MarketMasterPage() {
         if (cached && currentIndex - indicatorOffsetRef.current >= cached.length) recomputeIndicators(fullDataRef.current, chartWindowRef.current);
         seriesRef.current.update(nextCandle);
         volumeSeriesRef.current?.update(toVolumePoint(nextCandle, indConfig.volume));
+        sessionBreaksPrimitiveRef.current?.setCandles(
+          sliceChartWindow(fullDataRef.current, chartWindowRef.current),
+          sessionBreaksEnabledRef.current && timeframeSeconds(timeframeRef.current) < 86400
+        );
 
         indConfig.emas.forEach((ema) => {
           const nextEma = fullEmaDataRef.current[ema.id][currentIndex - indicatorOffsetRef.current];
@@ -5753,6 +5794,9 @@ export function MarketMasterPage() {
         setIsRightPriceAutoScaleEnabled={setIsRightPriceAutoScaleEnabled}
         isSwingPointsEnabled={isSwingPointsEnabled}
         setIsSwingPointsEnabled={setIsSwingPointsEnabled}
+        isSessionBreaksEnabled={isSessionBreaksEnabled}
+        onToggleSessionBreaks={handleToggleSessionBreaks}
+        sessionBreaksSupported={timeframeSeconds(timeframe) < 86400}
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}
         setIsIndicatorModalOpen={setIsIndicatorModalOpen}

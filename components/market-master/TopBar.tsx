@@ -34,6 +34,7 @@ import {
   History,
   RotateCcw,
   Bot,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -61,6 +62,9 @@ export const TopBar = ({
   setIsRightPriceAutoScaleEnabled,
   isSwingPointsEnabled = true,
   setIsSwingPointsEnabled,
+  isSessionBreaksEnabled = false,
+  onToggleSessionBreaks,
+  sessionBreaksSupported = false,
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
@@ -786,6 +790,23 @@ export const TopBar = ({
               title={isSwingPointsEnabled ? "隐藏视图内摆荡高低点" : "显示视图内摆荡高低点"}
             >
               <Waypoints size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={onToggleSessionBreaks}
+              disabled={!sessionBreaksSupported || isDataLoading || isHistoryLoading || Boolean(dataError) || totalCandles === 0}
+              aria-label="每日间隔"
+              aria-pressed={isSessionBreaksEnabled}
+              className={`flex items-center rounded-md p-2.5 transition-colors sm:p-1.5 disabled:cursor-not-allowed disabled:opacity-40 ${
+                isSessionBreaksEnabled
+                  ? "bg-sky-500/20 text-sky-200"
+                  : "text-gray-400 hover:bg-gray-700 hover:text-sky-200"
+              }`}
+              title={sessionBreaksSupported
+                ? (isSessionBreaksEnabled ? "隐藏每日间隔" : "显示每日间隔（仅小于 D1 周期）")
+                : "每日间隔仅适用于小于 D1 的周期"}
+            >
+              <CalendarDays size={20} />
             </button>
             <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
             <button
