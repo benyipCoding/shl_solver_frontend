@@ -141,6 +141,8 @@ import {
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 import { TradeManagementDialog } from "./TradeManagementDialog";
 import { TradeConnectionPrimitive } from "./trade-connection";
+import { LiquidityZonesPrimitive } from "./liquidity-zones-primitive";
+import { calculateLiquidityZones } from "./liquidity-zones";
 import { tradeFocusRange } from "./trade-history";
 import { closeTradeRecord, closeTradeUnits, getRiskPriceError, withSettlementBalances, type TradePosition } from "./trade-management";
 
@@ -164,6 +166,29 @@ const TRADE_RISK_ENABLED_STORAGE_KEY = "marketMasterTradeRiskEnabled";
 
 const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
   data[currentIndex - 1] ?? null;
+
+type PreservedChartViewport = {
+  sourceSymbol: string;
+  from: number;
+  to: number;
+  center: number;
+};
+
+type PreservedBacktestTimeframeChange = {
+  sourceSymbol: string;
+  cursorTime: number | null;
+  replayStartTime: number | null;
+  replayEndTime: number | null;
+};
+
+const timeframeSeconds = (timeframe: string) => {
+  const interval = getIntervalByTimeframe(timeframe);
+  const match = /^(\d+)(min|h|day|week)$/.exec(interval);
+  if (!match) return 86400;
+  const amount = Number(match[1]);
+  const unitSeconds = { min: 60, h: 3600, day: 86400, week: 604800 }[match[2]];
+  return amount * unitSeconds;
+};
 
 const getTradeMarkerColor = (trade: any, markPrice = 0) => {
   if (trade?.brokerTradeId) return (trade.brokerNetPnl ?? 0) >= 0 ? CLOSED_TRADE_PROFIT_COLOR : CLOSED_TRADE_LOSS_COLOR;
@@ -562,6 +587,7 @@ export function MarketMasterPage() {
   ]);
   const emaSeriesRefs = useRef<any>({});
   const bollingerSeriesRefs = useRef<any>({});
+  const liquidityPrimitiveRef = useRef<LiquidityZonesPrimitive | null>(null);
 
   const subChartContainerRef = useRef<any>(null);
   const subChartRef = useRef<any>(null);
@@ -770,6 +796,10 @@ export function MarketMasterPage() {
   const isDataLoadingRef = useRef(true);
   const historyLoadingRef = useRef(false);
   const dataSessionRef = useRef(0);
+  // A timeframe switch should follow the user's current historical context
+  // instead of falling back to the newest candles.
+  const pendingTimeframeViewportRef = useRef<PreservedChartViewport | null>(null);
+  const pendingBacktestTimeframeChangeRef = useRef<PreservedBacktestTimeframeChange | null>(null);
   const preserveVisibleRangeRef = useRef(false);
   const loadOlderHistoryRef = useRef<() => Promise<void>>(async () => {});
   const loadFutureHistoryRef = useRef<() => Promise<void>>(async () => {});
@@ -1624,6 +1654,26 @@ export function MarketMasterPage() {
     fullMacdDataRef.current = config.macd.enabled && input.length ? calculateMACD(input, config.macd.fast, config.macd.slow, config.macd.signal) : [];
   }, []);
 
+  const updateLiquidityOverlay = useCallback((data: NormalizedCandle[] = fullDataRef.current, revealedCount?: number, configOverride: any = null) => {
+    const config = configOverride || indConfigRef.current;
+    const series = seriesRef.current;
+    if (!series || !config.liquidity?.enabled) {
+      if (liquidityPrimitiveRef.current && series) series.detachPrimitive(liquidityPrimitiveRef.current);
+      liquidityPrimitiveRef.current = null;
+      return;
+    }
+    const count = isBacktestModeRef.current
+      ? Math.min(data.length, revealedCount ?? currentIndexRef.current)
+      : data.length;
+    const zones = calculateLiquidityZones(data.slice(0, count), config.liquidity);
+    if (!liquidityPrimitiveRef.current) {
+      liquidityPrimitiveRef.current = new LiquidityZonesPrimitive(zones);
+      series.attachPrimitive(liquidityPrimitiveRef.current);
+    } else {
+      liquidityPrimitiveRef.current.setZones(zones);
+    }
+  }, []);
+
   const syncDisplayedData = useCallback(
     (
       dataOverride: any[] = [],
@@ -1634,6 +1684,8 @@ export function MarketMasterPage() {
         prependedCount?: number;
         shouldFocusLatest?: boolean;
         focusRange?: { from: number; to: number };
+        visibleTimeRange?: { from: number; to: number };
+        preserveVisibleRange?: boolean;
       }
     ) => {
       const data = dataOverride.length ? dataOverride : fullDataRef.current;
@@ -1646,19 +1698,24 @@ export function MarketMasterPage() {
       );
       const oldWindow = chartWindowRef.current;
       const visibleRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-      const focusRange = options?.focusRange ?? (prependedCount > 0 && visibleRange ? {
+      const focusRange = options?.focusRange ?? ((prependedCount > 0 || options?.preserveVisibleRange) && visibleRange ? {
         from: oldWindow.from + visibleRange.from + prependedCount,
         to: oldWindow.from + visibleRange.to + prependedCount,
       } : undefined);
       const window = selectChartWindow(nextBacktestMode ? nextIndex : data.length, focusRange);
       chartWindowRef.current = window;
       recomputeIndicators(data, window);
+      updateLiquidityOverlay(data, nextIndex, activeConfig);
       const candleData = sliceChartWindow(data, window);
       const indicatorSlice = (points) => sliceChartWindow(points, window, indicatorOffsetRef.current);
 
       chartViewportSyncRef.current = true;
       try {
         seriesRef.current?.setData(candleData);
+        // setData temporarily clears the series while a timeframe is loading.
+        // Keep every user-created primitive attached and invalidate it after
+        // the new candles are installed so its timestamps are projected again.
+        stateRef.current.lines.forEach((line: { requestUpdate?: () => void }) => line.requestUpdate?.());
         volumeSeriesRef.current?.setData(
           buildVolumeData(candleData, candleData.length, activeConfig.volume)
         );
@@ -1712,6 +1769,27 @@ export function MarketMasterPage() {
           syncTradeMarkers(tradesRef.current);
           return;
         }
+        if (options?.visibleTimeRange) {
+          // The target timeframe has a different number of candles, so use
+          // the same timestamps and clamp only when the requested window is
+          // outside the page that was loaded around the old viewport.
+          const firstTime = candleData[0]?.time;
+          const lastTime = candleData[candleData.length - 1]?.time;
+          if (firstTime != null && lastTime != null) {
+            const availableSpan = Math.max(1, lastTime - firstTime);
+            const requestedSpan = Math.max(1, options.visibleTimeRange.to - options.visibleTimeRange.from);
+            const span = Math.min(requestedSpan, availableSpan);
+            const requestedCenter = options.visibleTimeRange.from + requestedSpan / 2;
+            const center = Math.max(firstTime, Math.min(requestedCenter, lastTime));
+            const from = Math.max(firstTime, Math.min(center - span / 2, lastTime - span));
+            const restored = { from, to: from + span };
+            chartRef.current?.timeScale().setVisibleRange(restored);
+            subChartRef.current?.timeScale().setVisibleRange(restored);
+            volumeChartRef.current?.timeScale().setVisibleRange(restored);
+          }
+          syncTradeMarkers(tradesRef.current);
+          return;
+        }
         if (nextBacktestMode) {
           if (shouldFitContent) {
             // 随机起点可能已揭示上千根历史，聚焦最近一段而非 fitContent 全挤在一起
@@ -1725,7 +1803,7 @@ export function MarketMasterPage() {
         }
       } finally { chartViewportSyncRef.current = false; }
     },
-    [focusLatestCandles, recomputeIndicators, syncTradeMarkers]
+    [focusLatestCandles, recomputeIndicators, syncTradeMarkers, updateLiquidityOverlay]
   );
 
   shiftChartWindowRef.current = (range) => {
@@ -1768,6 +1846,9 @@ export function MarketMasterPage() {
         shouldFitContent?: boolean;
         currentIndex?: number;
         skipDisplaySync?: boolean;
+        visibleTimeRange?: { from: number; to: number };
+        preserveRiskSettings?: boolean;
+        preserveVisibleRange?: boolean;
       }
     ) => {
       const {
@@ -1776,6 +1857,8 @@ export function MarketMasterPage() {
         shouldReplace = false,
         shouldFocusLatest = false,
         shouldFitContent = false,
+        visibleTimeRange,
+        preserveRiskSettings = false,
       } = options || {};
       const { assetType, currency, exchange, latestClose } = marketData;
 
@@ -1786,13 +1869,15 @@ export function MarketMasterPage() {
           currency,
           exchange,
         });
-        const nextRiskDistance = getDefaultRiskDistance(
-          symbol,
-          assetType,
-          Number(latestClose) || data[data.length - 1]?.close || null
-        );
-        setSlDistance(nextRiskDistance.sl);
-        setTpDistance(nextRiskDistance.tp);
+        if (!preserveRiskSettings) {
+          const nextRiskDistance = getDefaultRiskDistance(
+            symbol,
+            assetType,
+            Number(latestClose) || data[data.length - 1]?.close || null
+          );
+          setSlDistance(nextRiskDistance.sl);
+          setTpDistance(nextRiskDistance.tp);
+        }
       }
 
       fullDataRef.current = data;
@@ -1891,6 +1976,8 @@ export function MarketMasterPage() {
           {
             prependedCount,
             shouldFocusLatest: isInitialPage || shouldFocusLatest,
+            visibleTimeRange,
+            preserveVisibleRange: options?.preserveVisibleRange,
           }
         );
       }
@@ -2028,6 +2115,7 @@ export function MarketMasterPage() {
       if (!appendCandlePage(fullDataRef.current, newerData)) return;
       applyCandlePage(page, fullDataRef.current, {
         skipDisplaySync: isBacktestModeRef.current,
+        preserveVisibleRange: !isBacktestModeRef.current,
       });
     } catch (error: any) {
       if (session === dataSessionRef.current && !automaticRunRef.current?.cancelled) {
@@ -2151,9 +2239,22 @@ export function MarketMasterPage() {
 
     let cancelled = false;
     const loadController = new AbortController();
+    const pendingViewport = pendingTimeframeViewportRef.current;
+    const preservedViewport = pendingViewport?.sourceSymbol === symbol
+      ? pendingViewport
+      : null;
+    const pendingBacktestTimeframeChange = pendingBacktestTimeframeChangeRef.current;
+    const preservedBacktest = pendingBacktestTimeframeChange?.sourceSymbol === symbol &&
+      isBacktestModeRef.current && dataModeRef.current === "history"
+      ? pendingBacktestTimeframeChange
+      : null;
+    // Consume the one-shot handoff before awaiting the request. A later
+    // timeframe change will capture a fresh range from the current chart.
+    pendingTimeframeViewportRef.current = null;
+    pendingBacktestTimeframeChangeRef.current = null;
 
     const clearChartData = () => {
-      backtestSampleRef.current = null;
+      if (!preservedBacktest) backtestSampleRef.current = null;
       disableAutomaticDrawings();
       fullDataRef.current = [];
       loadedMarketRef.current = { symbol: "", timeframe: "" };
@@ -2206,15 +2307,17 @@ export function MarketMasterPage() {
 
     const loadMarketData = async () => {
       realtimeQuoteTimeRef.current = undefined;
-      backtestSampleRef.current = null;
+      if (!preservedBacktest) backtestSampleRef.current = null;
       dataSessionRef.current += 1;
       const session = dataSessionRef.current;
       setIsPlaying(false);
       clearAllSelections();
-      tradesRef.current = [];
-      setTrades([]);
-      removeOrderLines();
-      clearClosedTradeMarkers();
+      if (!preservedBacktest) {
+        tradesRef.current = [];
+        setTrades([]);
+        removeOrderLines();
+        clearClosedTradeMarkers();
+      }
       setDataError("");
       setIsDataLoading(true);
       isDataLoadingRef.current = true;
@@ -2236,15 +2339,31 @@ export function MarketMasterPage() {
         exchange: null,
       });
 
-      const { sl, tp } = getDefaultRiskDistance(symbol);
-      setSlDistance(sl);
-      setTpDistance(tp);
+      if (!preservedBacktest) {
+        const { sl, tp } = getDefaultRiskDistance(symbol);
+        setSlDistance(sl);
+        setTpDistance(tp);
+      }
 
       try {
+        const aroundTime = preservedViewport?.center;
+        const beforeCount = preservedViewport
+          ? Math.max(
+              0,
+              Math.min(
+                Math.floor((KLINE_PAGE_SIZE - 1) / 2),
+                Math.round(
+                  (preservedViewport.center - preservedViewport.from) /
+                    timeframeSeconds(timeframe)
+                )
+              )
+            )
+          : undefined;
         const firstPage = await fetchKlinePage((input, init) => customFetch(input, { ...init, signal: loadController.signal }), {
           symbol,
           interval: getIntervalByTimeframe(timeframe),
           outputsize: KLINE_PAGE_SIZE,
+          ...(aroundTime != null ? { aroundTime, beforeCount } : {}),
         });
 
         const newData = normalizeCandles(firstPage.rawCandles);
@@ -2256,7 +2375,76 @@ export function MarketMasterPage() {
 
         if (cancelled || session !== dataSessionRef.current) return;
 
-        applyLoadedMarketData(firstPage, newData, { isInitialPage: true });
+        applyLoadedMarketData(firstPage, newData, {
+          isInitialPage: true,
+          currentIndex: preservedBacktest
+            ? Math.max(
+                1,
+                Math.min(
+                  newData.length,
+                  (preservedBacktest.cursorTime == null
+                    ? currentIndexRef.current
+                    : findCandleIndexByTime(newData, preservedBacktest.cursorTime) + 1)
+                )
+              )
+            : undefined,
+          preserveRiskSettings: Boolean(preservedBacktest),
+          visibleTimeRange: preservedViewport
+            ? { from: preservedViewport.from, to: preservedViewport.to }
+            : undefined,
+        });
+        if (preservedBacktest) {
+          if (backtestSampleRef.current) {
+            backtestSampleRef.current = {
+              ...backtestSampleRef.current,
+              endIndex: totalCandlesRef.current,
+              start: {
+                ...backtestSampleRef.current.start,
+                interval: getIntervalByTimeframe(timeframe),
+                timeframe,
+              },
+            };
+          }
+          if (pendingSessionStartRef.current) {
+            const startIndex = findCandleIndexByTime(
+              newData,
+              pendingSessionStartRef.current.start_bar_time
+            );
+            const cursorIndex = Math.max(0, currentIndexRef.current - 1);
+            pendingSessionStartRef.current = {
+              ...pendingSessionStartRef.current,
+              interval: getIntervalByTimeframe(timeframe),
+              timeframe,
+              start_bar_index: startIndex >= 0
+                ? loadedOffsetRef.current + startIndex
+                : pendingSessionStartRef.current.start_bar_index,
+              cursor_bar_time: newData[cursorIndex]?.time ?? pendingSessionStartRef.current.cursor_bar_time,
+              cursor_bar_index: loadedOffsetRef.current + cursorIndex,
+            };
+          }
+          if (isReplayModeRef.current) {
+            const resolveCurrentIndex = (time: number | null, fallback: number) => {
+              if (time == null) return fallback;
+              const index = findCandleIndexByTime(newData, time);
+              return index >= 0 ? index + 1 : fallback;
+            };
+            const startCurrent = resolveCurrentIndex(
+              preservedBacktest.replayStartTime,
+              Math.max(1, currentIndexRef.current)
+            );
+            const endCurrent = resolveCurrentIndex(
+              preservedBacktest.replayEndTime,
+              Math.max(startCurrent, currentIndexRef.current)
+            );
+            replayStartCurrentIndexRef.current = startCurrent;
+            replayEndCurrentIndexRef.current = Math.max(startCurrent, endCurrent);
+            replayCursorUnixRef.current = preservedBacktest.cursorTime;
+            setReplayBounds({
+              startCurrent,
+              endCurrent: replayEndCurrentIndexRef.current,
+            });
+          }
+        }
         loadedMarketRef.current = { symbol, timeframe };
         setIsDataLoading(false);
         isDataLoadingRef.current = false;
@@ -2760,6 +2948,7 @@ export function MarketMasterPage() {
 
     indConfigRef.current = nextConfig;
     recomputeIndicators(fullDataRef.current, chartWindowRef.current);
+    updateLiquidityOverlay(fullDataRef.current, currentIndexRef.current, nextConfig);
     setIndConfig(nextConfig);
     setDraftConfig(nextConfig);
     setIsIndicatorModalOpen(false);
@@ -2986,6 +3175,7 @@ export function MarketMasterPage() {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    updateLiquidityOverlay(fullDataRef.current, currentIndexRef.current, indConfigRef.current);
     seriesMarkersRef.current = createSeriesMarkers(
       series,
       closedTradeMarkersRef.current,
@@ -3610,9 +3800,20 @@ export function MarketMasterPage() {
       if (isDataLoadingRef.current) return;
       syncTradeMarkers(tradesRef.current);
       shiftChartWindowRef.current(range);
+      const loadedCount = fullDataRef.current.length;
+      const loadedEnd = loadedOffsetRef.current + loadedCount;
+      const atLoadedRightEdge = chartWindowRef.current.to >= loadedCount &&
+        range.to > chartWindowRef.current.to - chartWindowRef.current.from - KLINE_HISTORY_EDGE_BARS;
+      if (
+        !isBacktestModeRef.current &&
+        atLoadedRightEdge &&
+        totalCandlesRef.current > 0 &&
+        loadedEnd < totalCandlesRef.current
+      ) {
+        void loadFutureHistoryRef.current();
+      }
       if (chartWindowRef.current.from > 0 || preserveVisibleRangeRef.current) return;
       if (range.from > KLINE_HISTORY_EDGE_BARS) return;
-      const loadedCount = fullDataRef.current.length;
       if (loadedCount > 0 && range.to - range.from >= loadedCount - 2) return;
       void loadOlderHistoryRef.current();
     };
@@ -3653,6 +3854,8 @@ export function MarketMasterPage() {
       resetAutomaticSegmentsState();
       clearSupportResistance();
       series.detachPrimitive(tradeConnection);
+      if (liquidityPrimitiveRef.current) series.detachPrimitive(liquidityPrimitiveRef.current);
+      liquidityPrimitiveRef.current = null;
       tradeConnectionRef.current = null;
       chart.remove();
       chartRef.current = null;
@@ -3676,6 +3879,7 @@ export function MarketMasterPage() {
     stopAutomaticTrading,
     setSelectedIndicator,
     setSelectedShape,
+    updateLiquidityOverlay,
   ]);
 
   useEffect(() => {
@@ -4179,6 +4383,7 @@ export function MarketMasterPage() {
     // Existing positions settle against this candle before entering at its close;
     // the new position must not hit SL/TP using prices from before its entry.
     currentIndexRef.current = currentIndex + 1;
+    updateLiquidityOverlay(fullDataRef.current, currentIndexRef.current);
     updateAutomaticPensAfterCandle(nextCandle, !automaticRunRef.current?.suppress);
     if (!automaticRunRef.current?.suppress) updateAutomaticSegmentsAfterCandle();
     if (canPersistBacktestTrades()) {
@@ -4619,9 +4824,46 @@ export function MarketMasterPage() {
     settleClosedTrades(nextTrades, newlyClosed, balanceChange);
   }, [settleClosedTrades]);
 
+  const captureTimeframeViewport = useCallback(() => {
+    const chart = chartRef.current;
+    const data = fullDataRef.current;
+    if (!chart || !data.length) return null;
+
+    const toTimestamp = (value: unknown) => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (value && typeof (value as { timestamp?: unknown }).timestamp === "number") {
+        return (value as { timestamp: number }).timestamp;
+      }
+      return toUnixSeconds(value);
+    };
+
+    const range = chart.timeScale?.().getVisibleRange?.();
+    let from = toTimestamp(range?.from);
+    let to = toTimestamp(range?.to);
+    if (from == null || to == null || from >= to) {
+      const logical = chart.timeScale?.().getVisibleLogicalRange?.();
+      const window = chartWindowRef.current;
+      if (logical && Number.isFinite(logical.from) && Number.isFinite(logical.to)) {
+        const firstIndex = Math.max(0, Math.min(data.length - 1, Math.floor(window.from + logical.from)));
+        const lastIndex = Math.max(0, Math.min(data.length - 1, Math.ceil(window.from + logical.to)));
+        from = data[firstIndex]?.time ?? null;
+        to = data[lastIndex]?.time ?? null;
+      }
+    }
+    if (from == null || to == null || from >= to) return null;
+    return {
+      sourceSymbol: symbol,
+      from,
+      to,
+      center: from + (to - from) / 2,
+    };
+  }, [symbol]);
+
   const applyMarketChange = useCallback(
     (kind: "symbol" | "timeframe" | "dataMode", value: string) => {
       if (kind === "dataMode") {
+        pendingTimeframeViewportRef.current = null;
+        pendingBacktestTimeframeChangeRef.current = null;
         setManagedTradeId(null);
         setBrokerCloseAll(null);
         setPendingTradeClose(null);
@@ -4633,12 +4875,27 @@ export function MarketMasterPage() {
         return;
       }
       if (kind === "symbol") {
+        pendingTimeframeViewportRef.current = null;
+        pendingBacktestTimeframeChangeRef.current = null;
         setSymbol(value);
         return;
       }
+      pendingTimeframeViewportRef.current = captureTimeframeViewport();
+      pendingBacktestTimeframeChangeRef.current = isBacktestModeRef.current
+        ? {
+            sourceSymbol: symbol,
+            cursorTime: getActiveCandle(fullDataRef.current, currentIndexRef.current)?.time ?? null,
+            replayStartTime: isReplayModeRef.current
+              ? fullDataRef.current[replayStartCurrentIndexRef.current - 1]?.time ?? null
+              : null,
+            replayEndTime: isReplayModeRef.current
+              ? fullDataRef.current[replayEndCurrentIndexRef.current - 1]?.time ?? null
+              : null,
+          }
+        : null;
       setTimeframe(value);
     },
-    []
+    [captureTimeframeViewport]
   );
 
   const requestMarketChange = useCallback(
@@ -4660,6 +4917,15 @@ export function MarketMasterPage() {
         (t) => t.status === "Open"
       ).length;
 
+      // A timeframe switch within the same instrument is part of the same
+      // simulated session. Pause playback while the new candles load, but do
+      // not complete the session or ask the user to close its positions.
+      if (kind === "timeframe" && isBacktestMode) {
+        setIsPlaying(false);
+        applyMarketChange(kind, value);
+        return;
+      }
+
       if (isBacktestMode || openCount > 0) {
         if (openCount > 0) {
           setPendingMarketChange({
@@ -4671,7 +4937,7 @@ export function MarketMasterPage() {
           return;
         }
 
-        // 回测中无未平仓：先退出回测，再切换
+        // 切换品种时无未平仓：先退出回测，再切换。
         setIsPlaying(false);
         requestBacktestCompletion();
         setIsBacktestMode(false);

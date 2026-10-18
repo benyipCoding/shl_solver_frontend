@@ -4,6 +4,7 @@ import type {
   SeriesType,
   Time,
 } from "lightweight-charts";
+import type { LiquidityConfig } from "./liquidity-zones";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import type { PenMomentumConfig } from "./pen-momentum";
 
@@ -117,6 +118,7 @@ export type IndicatorConfig = {
       negFall: string;
     };
   };
+  liquidity: LiquidityConfig;
 };
 
 const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
@@ -287,6 +289,16 @@ export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
       negFall: "#ef5350",
     },
   },
+  liquidity: {
+    enabled: false,
+    lookback: 150,
+    swingStrength: 2,
+    equalToleranceAtr: 0.18,
+    minScore: 45,
+    maxZones: 8,
+    aboveColor: "#f59e0b",
+    belowColor: "#38bdf8",
+  },
 });
 
 export const cloneIndicatorConfig = (
@@ -299,6 +311,10 @@ export const cloneIndicatorConfig = (
   macd: {
     ...config.macd,
     histColors: { ...config.macd.histColors },
+  },
+  liquidity: {
+    ...createDefaultIndicatorConfig().liquidity,
+    ...(config.liquidity ?? {}),
   },
 });
 
@@ -340,6 +356,7 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
   const histRaw = isRecord(macdRaw.histColors) ? macdRaw.histColors : {};
   const bollingerRaw = isRecord(value.bollinger) ? value.bollinger : {};
   const volumeRaw = isRecord(value.volume) ? value.volume : {};
+  const liquidityRaw = isRecord(value.liquidity) ? value.liquidity : {};
   // 分笔动能暂时停用，不再读取旧配置中的启用状态。
   // const momentumRaw = isRecord(value.penMomentum) ? value.penMomentum : {};
 
@@ -419,6 +436,16 @@ const sanitizeIndicatorConfig = (value: unknown): IndicatorConfig => {
           defaults.macd.histColors.negFall
         ),
       },
+    },
+    liquidity: {
+      enabled: Boolean(liquidityRaw.enabled),
+      lookback: Math.min(2000, sanitizePositiveInteger(liquidityRaw.lookback, defaults.liquidity.lookback)),
+      swingStrength: Math.min(10, sanitizePositiveInteger(liquidityRaw.swingStrength, defaults.liquidity.swingStrength)),
+      equalToleranceAtr: Math.min(2, sanitizePositiveNumber(liquidityRaw.equalToleranceAtr, defaults.liquidity.equalToleranceAtr)),
+      minScore: Math.min(100, Math.max(0, Number(liquidityRaw.minScore) || defaults.liquidity.minScore)),
+      maxZones: Math.min(20, sanitizePositiveInteger(liquidityRaw.maxZones, defaults.liquidity.maxZones)),
+      aboveColor: sanitizeColor(liquidityRaw.aboveColor, defaults.liquidity.aboveColor),
+      belowColor: sanitizeColor(liquidityRaw.belowColor, defaults.liquidity.belowColor),
     },
   };
 };

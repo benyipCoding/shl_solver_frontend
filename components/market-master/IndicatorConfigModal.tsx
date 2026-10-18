@@ -91,6 +91,12 @@ export const IndicatorConfigModal = ({
           >
             布林通道
           </button>
+          <button
+            onClick={() => setSelectedIndTab("LIQUIDITY")}
+            className={`w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${selectedIndTab === "LIQUIDITY" ? "bg-gray-800 text-amber-400 shadow-sm" : "text-gray-400 hover:bg-gray-800/50"}`}
+          >
+            止损流动性
+          </button>
           {/* 分笔动能暂时停用。
           <button
             onClick={() => setSelectedIndTab("PEN_MOMENTUM")}
@@ -547,6 +553,53 @@ export const IndicatorConfigModal = ({
                 <div className="py-8 text-center text-sm text-gray-600">
                   布林通道暂未启用
                 </div>
+              )}
+            </div>
+          )}
+
+          {selectedIndTab === "LIQUIDITY" && (
+            <div className="space-y-4">
+              <div className="sticky top-0 z-10 mb-4 flex items-center justify-between border-b border-gray-800 bg-[#111827] pb-2">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">止损流动性区域</h3>
+                  <p className="mt-1 text-xs text-gray-500">标记更容易聚集止损单的前高、前低和等高等低区域。</p>
+                </div>
+                <button
+                  onClick={() => setDraftConfig((prev: any) => ({ ...prev, liquidity: { ...prev.liquidity, enabled: !prev.liquidity.enabled } }))}
+                  className={`flex items-center gap-1 rounded border px-3 py-1 text-xs transition-colors ${draftConfig.liquidity.enabled ? "border-red-500/50 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white" : "border-emerald-500/50 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white"}`}
+                >
+                  {draftConfig.liquidity.enabled ? <Trash2 size={14} /> : <Plus size={14} />}
+                  {draftConfig.liquidity.enabled ? "关闭指标" : "启用指标"}
+                </button>
+              </div>
+              {draftConfig.liquidity.enabled ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[
+                    ["lookback", "回溯K线数量", 30, 2000, 1],
+                    ["swingStrength", "极点确认强度", 1, 10, 1],
+                    ["equalToleranceAtr", "等高等低容差 (ATR)", 0.03, 2, 0.01],
+                    ["minScore", "最低评分", 0, 100, 1],
+                    ["maxZones", "最多显示区域", 1, 20, 1],
+                  ].map(([field, label, min, max, step]) => (
+                    <label key={field as string} className="text-[10px] text-gray-400">
+                      {label}
+                      <input
+                        type="number"
+                        min={min as number}
+                        max={max as number}
+                        step={step as number}
+                        value={draftConfig.liquidity[field as string]}
+                        onChange={(event) => setDraftConfig((prev: any) => ({ ...prev, liquidity: { ...prev.liquidity, [field as string]: Number(event.target.value) } }))}
+                        className="mt-1 w-full rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white outline-none focus:border-amber-500"
+                      />
+                    </label>
+                  ))}
+                  <div className="sm:col-span-2 rounded border border-gray-800 bg-gray-900/50 p-3 text-xs leading-6 text-gray-400">
+                    橙色虚线表示前高上方潜在止损流动性，蓝色虚线表示前低下方潜在止损流动性。评分是基于K线结构的相对估计，不代表真实订单数量。
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-gray-600">止损流动性指标暂未启用</div>
               )}
             </div>
           )}
