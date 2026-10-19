@@ -115,6 +115,7 @@ import {
   KLINE_PAGE_SIZE,
   estimateUnixAtIndex,
   fetchKlinePage,
+  fetchRealtimeKlinePage,
   mergeCandleData,
   appendCandlePage,
   normalizeCandles,
@@ -829,6 +830,7 @@ export function MarketMasterPage() {
   const totalCandlesRef = useRef(0);
   const earliestUnixRef = useRef<number | null>(null);
   const latestUnixRef = useRef<number | null>(null);
+  const realtimeHasMoreHistoryRef = useRef(true);
   const isDataLoadingRef = useRef(true);
   const historyLoadingRef = useRef(false);
   const dataSessionRef = useRef(0);
@@ -2060,9 +2062,11 @@ export function MarketMasterPage() {
   };
 
   const loadOlderHistory = useCallback(async () => {
-    if (dataModeRef.current === "realtime" || chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
+    const realtimeMode = dataModeRef.current === "realtime";
+    if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
+    if (realtimeMode && !realtimeHasMoreHistoryRef.current) return;
     const offset = loadedOffsetRef.current;
-    if (offset <= 0) return;
+    if (!realtimeMode && offset <= 0) return;
     const oldestTime = fullDataRef.current[0]?.time;
     if (oldestTime == null) return;
 
@@ -2071,17 +2075,38 @@ export function MarketMasterPage() {
     setHistoryLoadKind("older");
     const session = dataSessionRef.current;
     try {
-      const page = await fetchSymbolPage({
-        outputsize: KLINE_PAGE_SIZE,
-        endDate: new Date(oldestTime * 1000).toISOString(),
-      });
+      const page = realtimeMode
+        ? await fetchRealtimeKlinePage(
+            (input, init) =>
+              customFetch(input, {
+                ...init,
+                signal: automaticRunRef.current?.controller.signal ?? init?.signal,
+              }),
+            {
+              symbol,
+              interval: getIntervalByTimeframe(timeframe),
+              outputsize: KLINE_PAGE_SIZE,
+              endDate: new Date((oldestTime - 1) * 1000).toISOString(),
+            }
+          )
+        : await fetchSymbolPage({
+            outputsize: KLINE_PAGE_SIZE,
+            endDate: new Date(oldestTime * 1000).toISOString(),
+          });
       await chartPanGuardRef.current?.whenIdle();
       if (session !== dataSessionRef.current) return;
       const olderData = normalizeCandles(page.rawCandles);
       if (!olderData.length) {
-        loadedOffsetRef.current = 0;
-        setLoadedOffset(0);
+        if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
+        else {
+          loadedOffsetRef.current = 0;
+          setLoadedOffset(0);
+        }
         return;
+      }
+
+      if (realtimeMode) {
+        realtimeHasMoreHistoryRef.current = page.hasMoreHistory;
       }
 
       const previousLength = fullDataRef.current.length;
@@ -2100,13 +2125,24 @@ export function MarketMasterPage() {
       const merged = mergeCandleData(fullDataRef.current, olderData);
       const prependedCount = merged.length - previousLength;
       if (prependedCount <= 0) {
+        if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
         loadedOffsetRef.current = Math.min(loadedOffsetRef.current, page.offset);
         setLoadedOffset(loadedOffsetRef.current);
         return;
       }
 
       preserveVisibleRangeRef.current = true;
-      applyCandlePage(page, merged, { prependedCount });
+      const mergedPage = realtimeMode
+        ? {
+            ...page,
+            total: merged.length,
+            offset: 0,
+            earliest: new Date(merged[0].time * 1000).toISOString(),
+            latest: new Date(merged[merged.length - 1].time * 1000).toISOString(),
+            latestClose: merged[merged.length - 1].close,
+          }
+        : page;
+      applyCandlePage(mergedPage, merged, { prependedCount });
       requestAnimationFrame(() => {
         preserveVisibleRangeRef.current = false;
       });
@@ -2121,7 +2157,7 @@ export function MarketMasterPage() {
         setHistoryLoadKind(null);
       }
     }
-  }, [applyCandlePage, fetchSymbolPage]);
+  }, [applyCandlePage, customFetch, fetchSymbolPage, symbol, timeframe]);
 
   const loadFutureHistory = useCallback(async () => {
     if (dataModeRef.current === "realtime" || restartingBacktestRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
@@ -2317,6 +2353,7 @@ export function MarketMasterPage() {
       totalCandlesRef.current = 0;
       earliestUnixRef.current = null;
       latestUnixRef.current = null;
+      realtimeHasMoreHistoryRef.current = true;
       setLegendData(null);
 
       if (seriesRef.current) {
@@ -2379,6 +2416,7 @@ export function MarketMasterPage() {
       totalCandlesRef.current = 0;
       earliestUnixRef.current = null;
       latestUnixRef.current = null;
+      realtimeHasMoreHistoryRef.current = true;
       setLegendData(null);
       loadedMarketRef.current = { symbol: "", timeframe: "" };
       setInstrumentContext({
@@ -5560,6 +5598,9 @@ export function MarketMasterPage() {
       if (isRealtimeBootstrap) {
         const first = incoming[0];
         const last = incoming[incoming.length - 1];
+        // The SSE snapshot is only the current realtime window. Older history
+        // remains available through the direct FXCM history endpoint.
+        realtimeHasMoreHistoryRef.current = incoming.length > 0;
         const preservedViewport = realtimeBootstrapViewportRef.current;
         const resolvedCenter = preservedViewport?.center == null
           ? null

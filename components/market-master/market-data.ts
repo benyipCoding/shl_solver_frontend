@@ -355,3 +355,43 @@ export const fetchKlinePage = async (
 
   return marketData;
 };
+
+/**
+ * Load an older realtime window directly from the FXCM sidecar. This path is
+ * intentionally separate from fetchKlinePage so realtime candles never fall
+ * back to the database-backed market endpoints.
+ */
+export const fetchRealtimeKlinePage = async (
+  customFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit
+  ) => Promise<Response>,
+  {
+    symbol,
+    interval,
+    outputsize,
+    endDate,
+  }: {
+    symbol: string;
+    interval: string;
+    outputsize: number;
+    endDate?: string;
+  }
+): Promise<KlinePageMeta> => {
+  const params = new URLSearchParams({
+    symbol,
+    interval,
+    outputsize: String(outputsize),
+  });
+  if (endDate) params.set("end_date", endDate);
+
+  const response = await customFetch(
+    `/api/market_master/realtime/history?${params.toString()}`
+  );
+  const payload = (await response.json()) as MarketDataPayload;
+  if (!response.ok) {
+    throw new Error(payload.error || payload.message || "获取 FXCM 历史 K 线失败");
+  }
+
+  return buildTimeSeriesMarketData(payload);
+};

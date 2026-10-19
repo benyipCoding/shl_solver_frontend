@@ -701,9 +701,21 @@ export function generateMockData(
   const data: any[] = [];
   const d = new Date();
   d.setUTCHours(0, 0, 0, 0);
-  let intervalStr = 86400;
-  if (timeframe === "H4") intervalStr = 14400;
-  if (timeframe === "m30") intervalStr = 1800;
+  const intervalSeconds: Record<string, number> = {
+    m1: 60,
+    m5: 300,
+    m15: 900,
+    m30: 1800,
+    H1: 3600,
+    H2: 7200,
+    H3: 10800,
+    H4: 14400,
+    H6: 21600,
+    H8: 28800,
+    D1: 86400,
+    W1: 604800,
+  };
+  const intervalStr = intervalSeconds[timeframe] ?? 86400;
   let time = Math.floor(d.getTime() / 1000) - count * intervalStr;
   let close = symbol === "XAU/USD" ? 2000 : symbol === "GBP/USD" ? 1.25 : 1.1;
   let volMultiplier = symbol === "XAU/USD" ? 20 : 0.005;

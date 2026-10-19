@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ action: string }> }) {
   const { action } = await context.params;
-  if (!["capabilities", "stream"].includes(action)) return new Response(null, { status: 404 });
+  if (!["capabilities", "stream", "history"].includes(action)) return new Response(null, { status: 404 });
   if (process.env.NODE_ENV !== "development") {
     return action === "capabilities" ? NextResponse.json({ enabled: false }) : new Response(null, { status: 404 });
   }

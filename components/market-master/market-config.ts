@@ -29,7 +29,10 @@ export const TIMEFRAME_OPTIONS = [
   { value: "m30", label: "M30", interval: "30min" },
   { value: "H1", label: "H1", interval: "1h" },
   { value: "H2", label: "H2", interval: "2h" },
+  { value: "H3", label: "H3", interval: "3h" },
   { value: "H4", label: "H4", interval: "4h" },
+  { value: "H6", label: "H6", interval: "6h" },
+  { value: "H8", label: "H8", interval: "8h" },
   { value: "D1", label: "D1", interval: "1day" },
   { value: "W1", label: "W1", interval: "1week" },
 ] as const;
@@ -121,7 +124,18 @@ export type IndicatorConfig = {
   liquidity: LiquidityConfig;
 };
 
-const INTRADAY_TIMEFRAMES = new Set(["m1", "m5", "m15", "m30", "H1", "H4"]);
+const INTRADAY_TIMEFRAMES = new Set([
+  "m1",
+  "m5",
+  "m15",
+  "m30",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H6",
+  "H8",
+]);
 
 const SYMBOL_PROFILE_OVERRIDES: Record<string, InstrumentProfile> = {
   "BTC/USD": { priceDecimals: 2, inputStep: "1", sl: 1500, tp: 3000 },
