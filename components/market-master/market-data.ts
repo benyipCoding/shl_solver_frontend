@@ -109,7 +109,8 @@ export const normalizeCandles = (
     const volume =
       (typeof rawVolume === "number" ||
         (typeof rawVolume === "string" && rawVolume.trim() !== "")) &&
-      Number.isFinite(Number(rawVolume)) && Number(rawVolume) >= 0
+      Number.isFinite(Number(rawVolume)) &&
+      Number(rawVolume) >= 0
         ? Number(rawVolume)
         : null;
     candlesByTime.set(time, { time, open, high, low, close, volume });
@@ -135,7 +136,10 @@ export const buildVolumeData = (
   candles: NormalizedCandle[],
   visibleCount: number,
   colors: { upColor: string; downColor: string }
-) => candles.slice(0, Math.max(0, visibleCount)).map((candle) => toVolumePoint(candle, colors));
+) =>
+  candles
+    .slice(0, Math.max(0, visibleCount))
+    .map((candle) => toVolumePoint(candle, colors));
 
 const toFiniteNumber = (value: unknown, fallback = 0) => {
   const parsed = Number(value);
@@ -165,23 +169,20 @@ const withWindowMeta = (
     offset,
     hasMoreHistory: Boolean(
       payload.data?.has_more_history ??
-        payload.data?.meta?.has_more_history ??
-        offset > 0
+      payload.data?.meta?.has_more_history ??
+      offset > 0
     ),
     hasMoreFuture: Boolean(
       payload.data?.has_more_future ??
-        payload.data?.meta?.has_more_future ??
-        offset + rawCandles.length < total
+      payload.data?.meta?.has_more_future ??
+      offset + rawCandles.length < total
     ),
-    earliest:
-      payload.data?.earliest ?? payload.data?.meta?.earliest ?? null,
+    earliest: payload.data?.earliest ?? payload.data?.meta?.earliest ?? null,
     latest: payload.data?.latest ?? payload.data?.meta?.latest ?? null,
   };
 };
 
-const buildDefaultsMarketData = (
-  payload: MarketDataPayload
-): KlinePageMeta => {
+const buildDefaultsMarketData = (payload: MarketDataPayload): KlinePageMeta => {
   const rawCandles = payload.data?.candles ?? [];
   return withWindowMeta(payload, rawCandles, {
     assetType: payload.data?.meta?.asset_type ?? null,
@@ -262,7 +263,10 @@ export const mergeCandleData = (
 };
 
 /** Forward pages are already sorted. Keep overlap values and append only unseen bars. */
-export function appendCandlePage(existing: NormalizedCandle[], page: readonly NormalizedCandle[]) {
+export function appendCandlePage(
+  existing: NormalizedCandle[],
+  page: readonly NormalizedCandle[]
+) {
   const last = existing[existing.length - 1]?.time ?? -Infinity;
   let added = 0;
   for (const candle of page) {

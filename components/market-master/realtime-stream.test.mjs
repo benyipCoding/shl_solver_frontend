@@ -98,7 +98,7 @@ test("the stream connects during history loading and applies buffered snapshot/d
   h.render({ paused: true, onEvent: event => events.push(event) });
   const source = h.sources[0];
   source.onopen();
-  assert.match(h.render().status, /行情已连接.*校准/);
+  assert.match(h.render().status, /行情已连接.*加载 FXCM K 线/);
   source.emit({ type: "snapshot", candles: [{datetime:"2026-10-14T00:00:00"}], quote: {timestamp:Date.now()/1000,bid:1,ask:2} });
   source.emit({ type: "candles", candles: [{datetime:"2026-10-14T00:01:00"}], quote: {timestamp:Date.now()/1000,bid:2,ask:3} });
   assert.equal(events.length, 0);
@@ -132,7 +132,7 @@ test("switching charts discards the previous chart's buffered data and readiness
   assert.match(h.sources[1].url,/interval=4h/);
 });
 
-test("only an actual history gap escalates the tail snapshot, once per connection scope", () => {
+test("realtime starts with a fast FXCM snapshot and escalates only after a real gap", () => {
   const h=harness();
   h.render({onEvent:()=>{throw Object.assign(new Error("gap"),{name:"RealtimeHistoryGap"});}});
   assert.match(h.sources[0].url,/snapshot_size=256/);
@@ -166,4 +166,11 @@ test("a reconnect snapshot cannot borrow a fresh quote from the previous connect
   const [id,timer]=[...h.timers][0];h.timers.delete(id);timer.fn();
   h.sources[1].emit({type:"snapshot",candles:[]});
   assert.equal(h.render().ready,false);
+});
+
+test("a loaded chart seed is sent so realtime does not wait for provider history", () => {
+  const h = harness();
+  h.render({ seed: { timestamp: 1792184280, price: 1.1239 } });
+  assert.match(h.sources[0].url, /seed_timestamp=1792184280/);
+  assert.match(h.sources[0].url, /seed_price=1\.1239/);
 });

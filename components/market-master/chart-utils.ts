@@ -444,6 +444,7 @@ export class ShapePrimitive {
   series: any;
   requestUpdate: any;
   profileCandles: any[];
+  anchorTimes: { p1: any; p2: any };
 
   constructor(p1: any, p2: any, type: string = "line") {
     this.id = "shape_" + Date.now() + Math.random().toString(36).substr(2, 9);
@@ -451,6 +452,7 @@ export class ShapePrimitive {
     this.p2 = type === "zone" ? { ...p2, time: p1.time } : p2;
     this.type = type;
     this.profileCandles = [];
+    this.anchorTimes = { p1: p1?.time, p2: p2?.time };
     this.hoveredPoint = null;
     this.config = {
       color: type === "zone" ? "#c084fc" : type === "volumeProfile" ? "#f59e0b" : "#2962ff",
@@ -510,6 +512,7 @@ export class ShapePrimitive {
         this.p2 = { ...this.p2, price: newPoint.price };
       } else if (index === 4) this.p1 = { ...this.p1, price: newPoint.price };
       this.p2 = { ...this.p2, time: this.p1.time };
+      this.anchorTimes = { p1: this.p1.time, p2: this.p2.time };
       this.refreshVolumeProfile();
       this.requestUpdate?.();
       return;
@@ -523,8 +526,34 @@ export class ShapePrimitive {
       this.p2 = { ...this.p2, time: newPoint.time };
       this.p1 = { ...this.p1, price: newPoint.price };
     }
+    this.anchorTimes = { p1: this.p1.time, p2: this.p2.time };
     this.refreshVolumeProfile();
     if (this.requestUpdate) this.requestUpdate();
+  }
+  /** Move drawing time anchors to candles available in the active timeframe. */
+  reanchorTimes(candles: any[] = []) {
+    if (!candles.length || !this.p1 || !this.p2) return;
+    const resolve = (time: any) => {
+      const numericTime = typeof time === "number"
+        ? time
+        : typeof time?.timestamp === "number"
+          ? time.timestamp
+          : Number(time);
+      if (!Number.isFinite(numericTime)) return candles[0].time;
+      let candidate = candles[0].time;
+      for (const candle of candles) {
+        if (candle.time > numericTime) break;
+        candidate = candle.time;
+      }
+      return candidate;
+    };
+
+    this.p1 = { ...this.p1, time: resolve(this.anchorTimes?.p1 ?? this.p1.time) };
+    this.p2 = this.type === "zone"
+      ? { ...this.p2, time: this.p1.time }
+      : { ...this.p2, time: resolve(this.anchorTimes?.p2 ?? this.p2.time) };
+    this.refreshVolumeProfile();
+    this.requestUpdate?.();
   }
   setProfileCandles(candles: any[] = []) {
     this.profileCandles = candles;

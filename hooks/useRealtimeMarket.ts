@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type { CandleInput } from "@/components/market-master/market-data";
 import type { RealtimeQuote } from "@/components/market-master/realtime-data";
 
+export type RealtimeSeed = { timestamp: number; price: number };
+
 export type RealtimeEvent = {
   type: "snapshot" | "candles" | "heartbeat" | "error";
+  symbol?: string;
+  interval?: string;
+  streamSymbol?: string;
+  streamInterval?: string;
   candles?: CandleInput[];
   quote?: RealtimeQuote;
   quotes?: RealtimeQuote[];
@@ -11,8 +17,9 @@ export type RealtimeEvent = {
   retryable?: boolean;
 };
 
-export function useRealtimeMarket({ enabled, paused = false, symbol, interval, onEvent }: {
+export function useRealtimeMarket({ enabled, paused = false, symbol, interval, seed, onEvent }: {
   enabled: boolean; paused?: boolean; symbol: string; interval: string;
+  seed?: RealtimeSeed | null;
   onEvent: (event: RealtimeEvent) => void;
 }) {
   const callback = useRef(onEvent);
@@ -36,6 +43,9 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
     let lastMessage = Date.now();
     let lastQuote = 0;
     let snapshotReady = false;
+    // Realtime mode owns its chart window. Start with a small FXCM-only
+    // snapshot so the SSE becomes ready quickly; request the larger provider
+    // window only when an actual overlap gap proves it is needed.
     let snapshotSize = 256;
     let pending: RealtimeEvent[] = [];
     const isActive = () => !disposed && activeKey.current === key;
@@ -51,7 +61,10 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
       retryTimer = setTimeout(() => { retryTimer = undefined; connect(); }, delay);
     };
     const apply = (event: RealtimeEvent) => {
-      callback.current(event);
+      // Scope every callback to the connection that produced it.  This keeps
+      // a late event from an old timeframe from being mistaken for the new
+      // chart's snapshot during a fast H1 -> D1 switch.
+      callback.current({ ...event, streamSymbol: symbol, streamInterval: interval });
       if (event.type === "snapshot") {
         snapshotReady = true;
         attempts = 0;
@@ -65,8 +78,6 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
     };
     const fail = (error: unknown) => {
       if (error instanceof Error && error.name === "RealtimeHistoryGap" && snapshotSize < 5000) {
-        // Most charts only need the live tail. Fetch the larger provider
-        // snapshot only when the database window cannot meet that tail.
         snapshotSize = 5000;
         retry("历史有缺口，正在补齐 K 线", true);
         return;
@@ -92,11 +103,15 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
       lastQuote = 0;
       setStatus("正在连接 K 线行情");
       const params = new URLSearchParams({ symbol, interval, snapshot_size: String(snapshotSize) });
+      if (seed && Number.isFinite(seed.timestamp) && Number.isFinite(seed.price) && seed.price > 0) {
+        params.set("seed_timestamp", String(seed.timestamp));
+        params.set("seed_price", String(seed.price));
+      }
       const current = new EventSource(`/api/market_master/realtime/stream?${params}`);
       source = current;
       current.onopen = () => {
         if (isActive() && source === current && !snapshotReady) {
-          setStatus("行情已连接，正在校准 K 线");
+          setStatus("行情已连接，正在加载 FXCM K 线");
         }
       };
       current.onmessage = (message) => {
@@ -116,7 +131,7 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
           if (pausedRef.current) {
             // Keep the stream alive while the database page/older history loads.
             // A bounded buffer preserves order without mixing chart scopes.
-            if (pending.length >= 128) { retry("图表加载较慢，正在重新校准 K 线"); return; }
+            if (pending.length >= 128) { retry("图表加载较慢，正在重新获取 FXCM 快照"); return; }
             pending.push(event);
             setReady(false);
             setStatus("行情已连接，正在加载图表历史");
@@ -146,6 +161,9 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, o
       clearTimeout(retryTimer);
       clearInterval(watchdog);
     };
+  // Capture the seed when a connection starts; changing it on every live
+  // candle must not tear down and recreate the stream.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, symbol, interval, key]);
   useEffect(() => { if (!paused) resumeRef.current(); }, [paused, enabled, key]);
   return {
