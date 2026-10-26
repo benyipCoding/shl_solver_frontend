@@ -1474,8 +1474,8 @@ export function MarketMasterPage() {
   const [mode, setMode] = useState("idle");
   const [drawType, setDrawType] = useState("line");
   const [lines, setLines] = useState([]);
-  // Symbol whose saved drawings are currently attached to the chart.
-  const drawingsSymbolRef = useRef<string | null>(null);
+  // Data mode and symbol whose saved drawings are attached to the chart.
+  const drawingsScopeRef = useRef<{ mode: MarketDataMode; symbol: string } | null>(null);
   const drawingsSeriesRef = useRef<any>(null);
   // Restored drawings wait for the symbol's candles before snapping to bars.
   const pendingDrawingReanchorRef = useRef<{ staleData: any[] } | null>(null);
@@ -4181,38 +4181,39 @@ export function MarketMasterPage() {
     updateLiquidityOverlay,
   ]);
 
-  // Swap in the saved drawings of the active symbol.
+  // Swap in the saved drawings of the active data mode and symbol.
   useEffect(() => {
     const series = seriesRef.current;
     if (!isMounted || !series) return;
     const sameSeries = drawingsSeriesRef.current === series;
-    if (sameSeries && drawingsSymbolRef.current === symbol) return;
+    const scope = drawingsScopeRef.current;
+    if (sameSeries && scope?.mode === dataMode && scope.symbol === symbol) return;
     drawingsSeriesRef.current = series;
     cancelPendingDrawing();
     setSelectedShape(null);
     setShapeConfigModal({ visible: false, shapeId: null });
     // A recreated chart already dropped the old series and its primitives.
     if (sameSeries) stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
-    const restored = loadSymbolDrawings(symbol)
+    const restored = loadSymbolDrawings(dataMode, symbol)
       .map((snapshot) => ShapePrimitive.deserialize(snapshot))
       .filter(Boolean);
     restored.forEach((shape) => series.attachPrimitive(shape));
     stateRef.current.lines = restored;
-    drawingsSymbolRef.current = symbol;
+    drawingsScopeRef.current = { mode: dataMode, symbol };
     pendingDrawingReanchorRef.current = restored.length
       ? { staleData: fullDataRef.current }
       : null;
     setLines([...restored]);
-  }, [isMounted, symbol, cancelPendingDrawing, setSelectedShape, detachShapeFromMainSeries]);
+  }, [isMounted, dataMode, symbol, cancelPendingDrawing, setSelectedShape, detachShapeFromMainSeries]);
 
   useEffect(() => {
-    const drawingsSymbol = drawingsSymbolRef.current;
-    if (!drawingsSymbol) return;
+    const scope = drawingsScopeRef.current;
+    if (!scope) return;
     const state = stateRef.current;
     const shapes = state.lines
       .filter((line) => !(state.isDrawing && line === state.activeLine))
       .map((line) => line.serialize());
-    if (!saveSymbolDrawings(drawingsSymbol, shapes) && !drawingsSaveWarnedRef.current) {
+    if (!saveSymbolDrawings(scope.mode, scope.symbol, shapes) && !drawingsSaveWarnedRef.current) {
       drawingsSaveWarnedRef.current = true;
       toast.error("绘图保存失败：浏览器存储空间不足或不可用");
     }
