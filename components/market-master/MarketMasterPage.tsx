@@ -92,6 +92,7 @@ import {
   SELECTED_LINE_WIDTH_BOOST,
   TIMEFRAME_OPTIONS,
   applySyncedCrosshair,
+  isCrosshairRefreshEcho,
   cloneIndicatorConfig,
   createDefaultIndicatorConfig,
   createInitialAiReviewModal,
@@ -4193,7 +4194,7 @@ export function MarketMasterPage() {
         updateLegend();
       }
 
-      if (isSyncingCrosshairRef.current) return;
+      if (isSyncingCrosshairRef.current || isCrosshairRefreshEcho(param)) return;
 
       isSyncingCrosshairRef.current = true;
       try {
@@ -4356,7 +4357,7 @@ export function MarketMasterPage() {
     volumeSeriesRef.current = volumeSeries;
 
     const crosshairMoveHandler = (param) => {
-      if (isSyncingCrosshairRef.current) return;
+      if (isSyncingCrosshairRef.current || isCrosshairRefreshEcho(param)) return;
       stateRef.current.isHovering = Boolean(param.time);
       if (param.time) stateRef.current.lastHoveredTime = param.time;
       updateLegend(param.time);

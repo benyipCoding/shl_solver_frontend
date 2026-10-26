@@ -23,7 +23,7 @@ vm.runInNewContext(
 );
 const {
   createDefaultIndicatorConfig, cloneIndicatorConfig,
-  loadPersistedIndicatorConfig, persistIndicatorConfig,
+  loadPersistedIndicatorConfig, persistIndicatorConfig, isCrosshairRefreshEcho,
 } = target.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -74,3 +74,10 @@ test("volume enablement and colors persist while draft edits stay isolated", () 
 //   assert.equal(config.weakThreshold, 0.5);
 //   assert.equal(config.includeDeveloping, true);
 // });
+
+test("realtime data refresh echoes do not drive the main crosshair, user moves and mouse leave do", () => {
+  // Lightweight Charts re-fires crosshairMove after setData with the saved point and no sourceEvent.
+  assert.equal(isCrosshairRefreshEcho({ time: 1, point: { x: 10, y: 20 } }), true);
+  assert.equal(isCrosshairRefreshEcho({ time: 1, point: { x: 10, y: 20 }, sourceEvent: { clientX: 1 } }), false);
+  assert.equal(isCrosshairRefreshEcho({}), false); // mouse leave: clear the main crosshair
+});

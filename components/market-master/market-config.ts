@@ -257,6 +257,17 @@ export const findPointByTime = <T extends { time: Time }>(
   return null;
 };
 
+/**
+ * Lightweight Charts re-fires crosshairMove after every setData/update while
+ * a crosshair is shown, with the saved point but no sourceEvent. On a chart
+ * whose crosshair was placed programmatically (the MACD/volume followers),
+ * that echo must not drive the main chart: it would pin the main horizontal
+ * line to the candle close on every realtime refresh. Mouse leave still has
+ * no point and is propagated as a clear.
+ */
+export const isCrosshairRefreshEcho = (param: { point?: unknown; sourceEvent?: unknown }) =>
+  !param.sourceEvent && param.point != null;
+
 export const applySyncedCrosshair = (
   chart: IChartApi | null | undefined,
   series: ISeriesApi<SeriesType> | null | undefined,
