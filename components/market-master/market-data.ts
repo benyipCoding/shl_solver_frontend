@@ -1,6 +1,22 @@
-export const KLINE_PAGE_SIZE = 5000;
+// One lazily loaded page, in both history and realtime mode. The backend and
+// FXCM sidecar accept the same maximum. Rendering is bounded separately by
+// CHART_WINDOW_BARS, so a larger page costs network time, not chart redraws.
+export const KLINE_PAGE_SIZE = 20000;
 export const KLINE_HISTORY_EDGE_BARS = 40;
 export const KLINE_FORWARD_PREFETCH_BARS = 400;
+
+/**
+ * Whether the viewport is close enough to the oldest loaded bar to page back.
+ * `range` is the chart's logical range inside the bounded chart window.
+ * Loading starts while one screen of older bars is still loaded, at any zoom
+ * level — including a zoomed-out view that already shows every loaded bar.
+ */
+export const shouldLoadOlderKlines = (
+  range: { from: number; to: number },
+  chartWindowFrom: number
+) =>
+  chartWindowFrom <= 0 &&
+  range.from <= Math.max(KLINE_HISTORY_EDGE_BARS, Math.ceil(range.to - range.from));
 
 export type CandleInput = {
   datetime?: string;

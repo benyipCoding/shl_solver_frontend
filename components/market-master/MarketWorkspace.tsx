@@ -80,6 +80,7 @@ type MarketWorkspaceProps = {
   indConfig: IndicatorConfig;
   isBottomPanelOpen: boolean;
   isDataLoading: boolean;
+  isRestoringViewport?: boolean;
   isHistoryLoading: boolean;
   historyLoadKind?: "older" | "future" | "window" | null;
   isMaximized: boolean;
@@ -142,6 +143,7 @@ export function MarketWorkspace({
   indConfig,
   isBottomPanelOpen,
   isDataLoading,
+  isRestoringViewport = false,
   isHistoryLoading,
   historyLoadKind = null,
   isMaximized,
@@ -182,9 +184,9 @@ export function MarketWorkspace({
         className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
         <div className="relative min-h-[180px] flex-1 bg-[#111827]">
-          {isDataLoading && (
+          {(isDataLoading || isRestoringViewport) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 text-sm text-blue-200 backdrop-blur-sm">
-              正在加载真实 K 线数据...
+              {isDataLoading ? "正在加载真实 K 线数据..." : "正在加载历史 K 线，定位到切换前的时间范围..."}
             </div>
           )}
           {!isDataLoading && isHistoryLoading && (

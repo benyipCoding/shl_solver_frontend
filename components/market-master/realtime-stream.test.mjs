@@ -141,7 +141,7 @@ test("realtime starts with a fast FXCM snapshot and escalates only after a real 
   const [id,timer]=[...h.timers][0];
   assert.equal(timer.delay,0);
   h.timers.delete(id);timer.fn();
-  assert.match(h.sources[1].url,/snapshot_size=5000/);
+  assert.match(h.sources[1].url,/snapshot_size=20000/);
   h.sources[1].emit({type:"snapshot"});
   assert.ok(h.sources[1].closed);
   assert.equal(h.timers.size,0);

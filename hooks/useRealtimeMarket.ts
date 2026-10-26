@@ -4,6 +4,10 @@ import type { RealtimeQuote } from "@/components/market-master/realtime-data";
 
 export type RealtimeSeed = { timestamp: number; price: number };
 
+// Snapshot used to bridge a reconnect gap; equals KLINE_PAGE_SIZE, the
+// largest window the backend and sidecar serve.
+const GAP_SNAPSHOT_BARS = 20000;
+
 export type RealtimeEvent = {
   type: "snapshot" | "candles" | "heartbeat" | "error";
   symbol?: string;
@@ -77,8 +81,8 @@ export function useRealtimeMarket({ enabled, paused = false, symbol, interval, s
       }
     };
     const fail = (error: unknown) => {
-      if (error instanceof Error && error.name === "RealtimeHistoryGap" && snapshotSize < 5000) {
-        snapshotSize = 5000;
+      if (error instanceof Error && error.name === "RealtimeHistoryGap" && snapshotSize < GAP_SNAPSHOT_BARS) {
+        snapshotSize = GAP_SNAPSHOT_BARS;
         retry("历史有缺口，正在补齐 K 线", true);
         return;
       }

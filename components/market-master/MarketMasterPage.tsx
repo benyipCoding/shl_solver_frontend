@@ -119,12 +119,19 @@ import {
   mergeCandleData,
   appendCandlePage,
   normalizeCandles,
+  shouldLoadOlderKlines,
   toVolumePoint,
   buildVolumeData,
   windowsOverlapOrTouch,
   type KlinePageMeta,
   type NormalizedCandle,
 } from "@/components/market-master/market-data";
+import {
+  captureTimeframeViewportAnchor,
+  resolveTimeframeViewportRange,
+  timeframeViewportIsLoaded,
+  type TimeframeViewportAnchor,
+} from "@/components/market-master/timeframe-viewport";
 import {
   createBacktestPersistClient,
   toPersistSide,
@@ -169,13 +176,11 @@ const TRADE_RISK_ENABLED_STORAGE_KEY = "marketMasterTradeRiskEnabled";
 const getActiveCandle = (data: any[] = [], currentIndex = 0) =>
   data[currentIndex - 1] ?? null;
 
-type PreservedChartViewport = {
-  sourceSymbol: string;
-  sourceTimeframe: string;
-  from: number;
-  to: number;
-  center: number;
-};
+type OlderHistoryResult = "loaded" | "exhausted" | "skipped" | "failed";
+
+// Realtime bootstrap: never page back more than this many times while
+// locating a timeframe-switch anchor (each page is KLINE_PAGE_SIZE bars).
+const REALTIME_ANCHOR_MAX_PAGES = 6;
 
 type PreservedBacktestTimeframeChange = {
   sourceSymbol: string;
@@ -807,6 +812,9 @@ export function MarketMasterPage() {
   const chartWindowRef = useRef<ChartWindow>({ from: 0, to: 0 });
   const indicatorOffsetRef = useRef(0);
   const chartViewportSyncRef = useRef(false);
+  // Range (source data indexes) set by syncDisplayedData that the chart has
+  // not rendered yet; getVisibleLogicalRange() still reports the old one.
+  const requestedFocusRangeRef = useRef<{ from: number; to: number } | null>(null);
   const shiftChartWindowRef = useRef<(range: { from: number; to: number }) => void>(() => {});
   const chartPanGuardRef = useRef<ReturnType<typeof bindChartPanGuard> | null>(null);
   const resumeChartViewportRef = useRef<() => void>(() => {});
@@ -836,12 +844,18 @@ export function MarketMasterPage() {
   const dataSessionRef = useRef(0);
   // A timeframe switch should follow the user's current historical context
   // instead of falling back to the newest candles.
-  const pendingTimeframeViewportRef = useRef<PreservedChartViewport | null>(null);
-  const realtimeBootstrapViewportRef = useRef<PreservedChartViewport | null>(null);
+  const pendingTimeframeViewportRef = useRef<TimeframeViewportAnchor | null>(null);
+  const realtimeBootstrapViewportRef = useRef<TimeframeViewportAnchor | null>(null);
+  // Handoff of the timeframe switch that is loading now, kept until applied.
+  const inFlightViewportAnchorRef = useRef<TimeframeViewportAnchor | null>(null);
   const realtimeAwaitingSnapshotRef = useRef(false);
+  // Realtime switch: older FXCM pages are loading to reach the anchor.
+  const [isRestoringViewport, setIsRestoringViewport] = useState(false);
+  const isRestoringViewportRef = useRef(false);
   const pendingBacktestTimeframeChangeRef = useRef<PreservedBacktestTimeframeChange | null>(null);
   const preserveVisibleRangeRef = useRef(false);
-  const loadOlderHistoryRef = useRef<() => Promise<void>>(async () => {});
+  const olderHistoryPromiseRef = useRef<{ session: number; promise: Promise<OlderHistoryResult> } | null>(null);
+  const loadOlderHistoryRef = useRef<() => Promise<OlderHistoryResult>>(async () => "skipped");
   const loadFutureHistoryRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
@@ -1724,7 +1738,7 @@ export function MarketMasterPage() {
         prependedCount?: number;
         shouldFocusLatest?: boolean;
         focusRange?: { from: number; to: number };
-        visibleTimeRange?: { from: number; to: number; center?: number };
+        viewportAnchor?: TimeframeViewportAnchor;
         preserveVisibleRange?: boolean;
       }
     ) => {
@@ -1738,9 +1752,20 @@ export function MarketMasterPage() {
       );
       const oldWindow = chartWindowRef.current;
       const visibleRange = chartRef.current?.timeScale().getVisibleLogicalRange();
-      const focusRange = options?.focusRange ?? ((prependedCount > 0 || options?.preserveVisibleRange) && visibleRange ? {
-        from: oldWindow.from + visibleRange.from + prependedCount,
-        to: oldWindow.from + visibleRange.to + prependedCount,
+      // The library applies a programmatic range on its next render, so a
+      // second sync in the same frame would read (and restore) the old one.
+      const visibleSourceRange = requestedFocusRangeRef.current ?? (visibleRange ? {
+        from: oldWindow.from + visibleRange.from,
+        to: oldWindow.from + visibleRange.to,
+      } : null);
+      // A timeframe handoff is resolved to this timeframe's own bar indexes,
+      // so the bounded chart window is centred on it like any other focus.
+      const anchorRange = options?.viewportAnchor
+        ? resolveTimeframeViewportRange(data, nextBacktestMode ? nextIndex : data.length, options.viewportAnchor)
+        : null;
+      const focusRange = options?.focusRange ?? anchorRange ?? ((prependedCount > 0 || options?.preserveVisibleRange) && visibleSourceRange ? {
+        from: visibleSourceRange.from + prependedCount,
+        to: visibleSourceRange.to + prependedCount,
       } : undefined);
       const window = selectChartWindow(nextBacktestMode ? nextIndex : data.length, focusRange);
       chartWindowRef.current = window;
@@ -1810,31 +1835,15 @@ export function MarketMasterPage() {
           chartRef.current?.timeScale().setVisibleLogicalRange(local);
           subChartRef.current?.timeScale().setVisibleLogicalRange(local);
           volumeChartRef.current?.timeScale().setVisibleLogicalRange(local);
+          requestedFocusRangeRef.current = focusRange;
+          // The chart's render is scheduled before this frame callback.
+          requestAnimationFrame(() => {
+            if (requestedFocusRangeRef.current === focusRange) requestedFocusRangeRef.current = null;
+          });
           syncTradeMarkers(tradesRef.current);
           return;
         }
-        if (options?.visibleTimeRange) {
-          // The target timeframe has a different number of candles, so use
-          // the same timestamps and clamp only when the requested window is
-          // outside the page that was loaded around the old viewport.
-          const firstTime = candleData[0]?.time;
-          const lastTime = candleData[candleData.length - 1]?.time;
-          if (firstTime != null && lastTime != null) {
-            const availableSpan = Math.max(1, lastTime - firstTime);
-            const requestedSpan = Math.max(1, options.visibleTimeRange.to - options.visibleTimeRange.from);
-            const span = Math.min(requestedSpan, availableSpan);
-            const requestedCenter = options.visibleTimeRange.center ??
-              (options.visibleTimeRange.from + requestedSpan / 2);
-            const center = Math.max(firstTime, Math.min(requestedCenter, lastTime));
-            const from = Math.max(firstTime, Math.min(center - span / 2, lastTime - span));
-            const restored = { from, to: from + span };
-            chartRef.current?.timeScale().setVisibleRange(restored);
-            subChartRef.current?.timeScale().setVisibleRange(restored);
-            volumeChartRef.current?.timeScale().setVisibleRange(restored);
-          }
-          syncTradeMarkers(tradesRef.current);
-          return;
-        }
+        requestedFocusRangeRef.current = null;
         if (nextBacktestMode) {
           if (shouldFitContent) {
             // 随机起点可能已揭示上千根历史，聚焦最近一段而非 fitContent 全挤在一起
@@ -1891,7 +1900,7 @@ export function MarketMasterPage() {
         shouldFitContent?: boolean;
         currentIndex?: number;
         skipDisplaySync?: boolean;
-        visibleTimeRange?: { from: number; to: number; center?: number };
+        viewportAnchor?: TimeframeViewportAnchor;
         preserveRiskSettings?: boolean;
         preserveVisibleRange?: boolean;
       }
@@ -1902,7 +1911,7 @@ export function MarketMasterPage() {
         shouldReplace = false,
         shouldFocusLatest = false,
         shouldFitContent = false,
-        visibleTimeRange,
+        viewportAnchor,
         preserveRiskSettings = false,
       } = options || {};
       const { assetType, currency, exchange, latestClose } = marketData;
@@ -2021,7 +2030,7 @@ export function MarketMasterPage() {
           {
             prependedCount,
             shouldFocusLatest: isInitialPage || shouldFocusLatest,
-            visibleTimeRange,
+            viewportAnchor,
             preserveVisibleRange: options?.preserveVisibleRange,
           }
         );
@@ -2061,102 +2070,123 @@ export function MarketMasterPage() {
     return { candles: normalizeCandles(page.rawCandles), hasMore: page.hasMoreHistory };
   };
 
-  const loadOlderHistory = useCallback(async () => {
+  const loadOlderHistory = useCallback((): Promise<OlderHistoryResult> => {
+    // Concurrent callers (viewport edge, realtime bootstrap) share one request.
+    const inFlight = olderHistoryPromiseRef.current;
+    if (inFlight?.session === dataSessionRef.current) return inFlight.promise;
     const realtimeMode = dataModeRef.current === "realtime";
-    if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) return;
-    if (realtimeMode && !realtimeHasMoreHistoryRef.current) return;
+    if (chartPanGuardRef.current?.isActive() || restartingBacktestRef.current || automaticRunRef.current || isDataLoadingRef.current || historyLoadingRef.current) {
+      return Promise.resolve("skipped");
+    }
+    if (realtimeMode && !realtimeHasMoreHistoryRef.current) return Promise.resolve("exhausted");
     const offset = loadedOffsetRef.current;
-    if (!realtimeMode && offset <= 0) return;
+    if (!realtimeMode && offset <= 0) return Promise.resolve("exhausted");
     const oldestTime = fullDataRef.current[0]?.time;
-    if (oldestTime == null) return;
+    if (oldestTime == null) return Promise.resolve("skipped");
 
     historyLoadingRef.current = true;
     setIsHistoryLoading(true);
     setHistoryLoadKind("older");
     const session = dataSessionRef.current;
-    try {
-      const page = realtimeMode
-        ? await fetchRealtimeKlinePage(
-            (input, init) =>
-              customFetch(input, {
-                ...init,
-                signal: automaticRunRef.current?.controller.signal ?? init?.signal,
-              }),
-            {
-              symbol,
-              interval: getIntervalByTimeframe(timeframe),
+    const request = (async (): Promise<OlderHistoryResult> => {
+      try {
+        const page = realtimeMode
+          ? await fetchRealtimeKlinePage(
+              (input, init) =>
+                customFetch(input, {
+                  ...init,
+                  signal: automaticRunRef.current?.controller.signal ?? init?.signal,
+                }),
+              {
+                symbol,
+                interval: getIntervalByTimeframe(timeframe),
+                outputsize: KLINE_PAGE_SIZE,
+                endDate: new Date((oldestTime - 1) * 1000).toISOString(),
+              }
+            )
+          : await fetchSymbolPage({
               outputsize: KLINE_PAGE_SIZE,
-              endDate: new Date((oldestTime - 1) * 1000).toISOString(),
-            }
-          )
-        : await fetchSymbolPage({
-            outputsize: KLINE_PAGE_SIZE,
-            endDate: new Date(oldestTime * 1000).toISOString(),
-          });
-      await chartPanGuardRef.current?.whenIdle();
-      if (session !== dataSessionRef.current) return;
-      const olderData = normalizeCandles(page.rawCandles);
-      if (!olderData.length) {
-        if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
-        else {
-          loadedOffsetRef.current = 0;
-          setLoadedOffset(0);
-        }
-        return;
-      }
-
-      if (realtimeMode) {
-        realtimeHasMoreHistoryRef.current = page.hasMoreHistory;
-      }
-
-      const previousLength = fullDataRef.current.length;
-      if (
-        !windowsOverlapOrTouch(
-          loadedOffsetRef.current,
-          previousLength,
-          page.offset,
-          olderData.length
-        )
-      ) {
-        applyCandlePage(page, olderData, { shouldReplace: true });
-        return;
-      }
-
-      const merged = mergeCandleData(fullDataRef.current, olderData);
-      const prependedCount = merged.length - previousLength;
-      if (prependedCount <= 0) {
-        if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
-        loadedOffsetRef.current = Math.min(loadedOffsetRef.current, page.offset);
-        setLoadedOffset(loadedOffsetRef.current);
-        return;
-      }
-
-      preserveVisibleRangeRef.current = true;
-      const mergedPage = realtimeMode
-        ? {
-            ...page,
-            total: merged.length,
-            offset: 0,
-            earliest: new Date(merged[0].time * 1000).toISOString(),
-            latest: new Date(merged[merged.length - 1].time * 1000).toISOString(),
-            latestClose: merged[merged.length - 1].close,
+              endDate: new Date(oldestTime * 1000).toISOString(),
+            });
+        await chartPanGuardRef.current?.whenIdle();
+        if (session !== dataSessionRef.current) return "skipped";
+        const olderData = normalizeCandles(page.rawCandles);
+        if (!olderData.length) {
+          if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
+          else {
+            loadedOffsetRef.current = 0;
+            setLoadedOffset(0);
           }
-        : page;
-      applyCandlePage(mergedPage, merged, { prependedCount });
-      requestAnimationFrame(() => {
-        preserveVisibleRangeRef.current = false;
-      });
-    } catch (error: any) {
-      if (session === dataSessionRef.current) {
-        toast.error(error?.message || "加载更早 K 线失败");
+          return "exhausted";
+        }
+
+        if (realtimeMode) {
+          realtimeHasMoreHistoryRef.current = page.hasMoreHistory;
+        }
+
+        const previousLength = fullDataRef.current.length;
+        if (
+          !windowsOverlapOrTouch(
+            loadedOffsetRef.current,
+            previousLength,
+            page.offset,
+            olderData.length
+          )
+        ) {
+          applyCandlePage(page, olderData, { shouldReplace: true });
+          return "loaded";
+        }
+
+        const merged = mergeCandleData(fullDataRef.current, olderData);
+        const prependedCount = merged.length - previousLength;
+        if (prependedCount <= 0) {
+          if (realtimeMode) realtimeHasMoreHistoryRef.current = false;
+          loadedOffsetRef.current = Math.min(loadedOffsetRef.current, page.offset);
+          setLoadedOffset(loadedOffsetRef.current);
+          return "exhausted";
+        }
+
+        preserveVisibleRangeRef.current = true;
+        const mergedPage = realtimeMode
+          ? {
+              ...page,
+              total: merged.length,
+              offset: 0,
+              earliest: new Date(merged[0].time * 1000).toISOString(),
+              latest: new Date(merged[merged.length - 1].time * 1000).toISOString(),
+              latestClose: merged[merged.length - 1].close,
+            }
+          : page;
+        applyCandlePage(mergedPage, merged, { prependedCount });
+        requestAnimationFrame(() => {
+          preserveVisibleRangeRef.current = false;
+        });
+        return "loaded";
+      } catch (error: any) {
+        if (session === dataSessionRef.current) {
+          toast.error(error?.message || "加载更早 K 线失败");
+        }
+        return "failed";
+      } finally {
+        if (session === dataSessionRef.current) {
+          historyLoadingRef.current = false;
+          setIsHistoryLoading(false);
+          setHistoryLoadKind(null);
+        }
       }
-    } finally {
-      if (session === dataSessionRef.current) {
-        historyLoadingRef.current = false;
-        setIsHistoryLoading(false);
-        setHistoryLoadKind(null);
+    })();
+    olderHistoryPromiseRef.current = { session, promise: request };
+    void request.then((result) => {
+      if (olderHistoryPromiseRef.current?.promise === request) olderHistoryPromiseRef.current = null;
+      // The visible range does not change when a page is prepended (the view
+      // is preserved), so no range event fires. If the user is still at the
+      // left edge — e.g. zoomed out past the loaded bars — check again once
+      // the preserved range has been applied instead of waiting for input.
+      if (result === "loaded" && session === dataSessionRef.current) {
+        requestAnimationFrame(() => requestAnimationFrame(() => resumeChartViewportRef.current()));
       }
-    }
+    });
+    return request;
   }, [applyCandlePage, customFetch, fetchSymbolPage, symbol, timeframe]);
 
   const loadFutureHistory = useCallback(async () => {
@@ -2334,6 +2364,7 @@ export function MarketMasterPage() {
     // timeframe change will capture a fresh range from the current chart.
     pendingTimeframeViewportRef.current = null;
     pendingBacktestTimeframeChangeRef.current = null;
+    inFlightViewportAnchorRef.current = preservedViewport;
     realtimeBootstrapViewportRef.current = dataMode === "realtime" ? preservedViewport : null;
     realtimeAwaitingSnapshotRef.current = dataMode === "realtime";
 
@@ -2410,6 +2441,9 @@ export function MarketMasterPage() {
       setIsHistoryLoading(false);
       historyLoadingRef.current = false;
       setHistoryLoadKind(null);
+      requestedFocusRangeRef.current = null;
+      isRestoringViewportRef.current = false;
+      setIsRestoringViewport(false);
       setTotalCandles(0);
       setLoadedOffset(0);
       loadedOffsetRef.current = 0;
@@ -2449,39 +2483,21 @@ export function MarketMasterPage() {
         // its series is being replaced, which may request a completely
         // unrelated historical page.  That leaves the cursor outside the
         // page and the old fallback then reveals just one candle.
-        const viewportAnchor = preservedBacktest?.cursorTime ?? preservedViewport?.center;
-        const targetBarSeconds = timeframeSeconds(timeframe);
+        // Otherwise the anchor is the time at the centre of the viewport.
+        const pageAnchorTime = preservedBacktest?.cursorTime ?? preservedViewport?.anchorTime ?? null;
         const minimumBacktestBeforeCount = preservedBacktest
           ? Math.min(INITIAL_VISIBLE_COUNT - 1, KLINE_PAGE_SIZE - 1)
           : 0;
-        const estimatedBeforeCount = preservedViewport
-          ? Math.round(
-              (viewportAnchor - preservedViewport.from) /
-                targetBarSeconds
-            )
-          : Math.floor((KLINE_PAGE_SIZE - 1) / 2);
-        // The restored range uses roughly half of the source viewport before
-        // its center.  Add a real target-timeframe margin so the first candle
-        // of the new page is not mistaken for the user's left edge and does
-        // not immediately trigger the older-history loader.
-        const timeframeHistoryMargin = preservedViewport
-          ? KLINE_HISTORY_EDGE_BARS * 2
-          : 0;
-        const beforeCount = viewportAnchor != null
-          ? Math.max(
-              1,
-              minimumBacktestBeforeCount,
-              Math.min(
-                KLINE_PAGE_SIZE - 1,
-                Math.max(0, estimatedBeforeCount) + timeframeHistoryMargin
-              )
-            )
+        // Centre the page on the anchor: half a page of context either side
+        // keeps the restored viewport well away from both lazy-load edges.
+        const beforeCount = pageAnchorTime != null
+          ? Math.max(minimumBacktestBeforeCount, Math.floor(KLINE_PAGE_SIZE / 2))
           : undefined;
         const firstPage = await fetchKlinePage((input, init) => customFetch(input, { ...init, signal: loadController.signal }), {
           symbol,
           interval: getIntervalByTimeframe(timeframe),
           outputsize: KLINE_PAGE_SIZE,
-          ...(viewportAnchor != null ? { aroundTime: viewportAnchor, beforeCount } : {}),
+          ...(pageAnchorTime != null ? { aroundTime: pageAnchorTime, beforeCount } : {}),
         });
 
         const loadedPage = firstPage;
@@ -2494,16 +2510,11 @@ export function MarketMasterPage() {
 
         if (cancelled || session !== dataSessionRef.current) return;
 
-        const resolvedViewportCenter = preservedViewport?.center == null
-          ? null
-          : findCandleAtOrBefore(newData, preservedViewport.center);
         const resolvedBacktestCursor = preservedBacktest?.cursorTime == null
           ? null
           : findCandleAtOrBefore(newData, preservedBacktest.cursorTime);
 
-        // A target timeframe often has no candle at the source timestamp
-        // (for example H2 18:00 -> H4). Keep the last candle at or before the
-        // source center so the chart never jumps forward unexpectedly.
+        // Drawings keep their timestamps; snap them onto this timeframe's bars.
         if (
           preservedViewport &&
           preservedViewport.sourceTimeframe !== timeframe
@@ -2535,14 +2546,9 @@ export function MarketMasterPage() {
           isInitialPage: true,
           currentIndex: preservedCurrentIndex,
           preserveRiskSettings: Boolean(preservedBacktest),
-          visibleTimeRange: preservedViewport
-            ? {
-                from: preservedViewport.from,
-                to: preservedViewport.to,
-                center: resolvedViewportCenter ?? preservedViewport.center,
-              }
-            : undefined,
+          viewportAnchor: preservedViewport ?? undefined,
         });
+        inFlightViewportAnchorRef.current = null;
         if (preservedBacktest) {
           if (backtestSampleRef.current) {
             backtestSampleRef.current = {
@@ -3011,7 +3017,13 @@ export function MarketMasterPage() {
     const nextCurrentIndex = fullDataRef.current.length;
     currentIndexRef.current = nextCurrentIndex;
     setCurrentIndex(nextCurrentIndex);
-    syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false);
+    // This runs after every load. The loader has already placed the viewport
+    // (newest bars, or the timeframe-switch anchor); keep it rather than
+    // jumping back to the newest candles.
+    syncDisplayedData(fullDataRef.current, nextCurrentIndex, false, false, {
+      shouldFocusLatest: false,
+      preserveVisibleRange: true,
+    });
   }, [
     applyCandlePage,
     applyReplayWindow,
@@ -3990,9 +4002,7 @@ export function MarketMasterPage() {
       ) {
         void loadFutureHistoryRef.current();
       }
-      if (chartWindowRef.current.from > 0 || preserveVisibleRangeRef.current) return;
-      if (range.from > KLINE_HISTORY_EDGE_BARS) return;
-      if (loadedCount > 0 && range.to - range.from >= loadedCount - 2) return;
+      if (preserveVisibleRangeRef.current || !shouldLoadOlderKlines(range, chartWindowRef.current.from)) return;
       void loadOlderHistoryRef.current();
     };
     resumeChartViewportRef.current = () => handleVisibleLogicalRangeChange(chart.timeScale().getVisibleLogicalRange());
@@ -5008,66 +5018,27 @@ export function MarketMasterPage() {
     settleClosedTrades(nextTrades, newlyClosed, balanceChange);
   }, [settleClosedTrades]);
 
-  const captureTimeframeViewport = useCallback(() => {
+  const captureTimeframeViewport = useCallback((): TimeframeViewportAnchor | null => {
+    // A switch made while the previous one is still loading keeps that
+    // handoff: the half-loaded chart does not describe what the user saw.
+    const inFlight = inFlightViewportAnchorRef.current;
+    if (inFlight && (isDataLoadingRef.current || realtimeAwaitingSnapshotRef.current || isRestoringViewportRef.current)) {
+      return inFlight.sourceSymbol === symbol ? inFlight : null;
+    }
     const chart = chartRef.current;
     const data = fullDataRef.current;
     if (!chart || !data.length) return null;
-
-    const toTimestamp = (value: unknown) => {
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (value && typeof (value as { timestamp?: unknown }).timestamp === "number") {
-        return (value as { timestamp: number }).timestamp;
-      }
-      return toUnixSeconds(value);
-    };
-
-    const logical = chart.timeScale?.().getVisibleLogicalRange?.();
-    const window = chartWindowRef.current;
-    let from: number | null = null;
-    let to: number | null = null;
-    let center: number | null = null;
-    if (logical && Number.isFinite(logical.from) && Number.isFinite(logical.to)) {
-      const firstIndex = Math.max(0, Math.min(data.length - 1, Math.floor(window.from + logical.from)));
-      const lastIndex = Math.max(0, Math.min(data.length - 1, Math.ceil(window.from + logical.to)));
-      const centerIndex = Math.max(
-        0,
-        Math.min(
-          data.length - 1,
-          Math.round(window.from + (logical.from + logical.to) / 2)
-        )
-      );
-      const logicalFrom = data[firstIndex]?.time ?? null;
-      const logicalTo = data[lastIndex]?.time ?? null;
-      from = logicalFrom;
-      to = logicalTo;
-      center = data[centerIndex]?.time ?? null;
-    }
-    if (from == null || to == null || from >= to || center == null) {
-      const range = chart.timeScale?.().getVisibleRange?.();
-      from = toTimestamp(range?.from);
-      to = toTimestamp(range?.to);
-      const midpoint = from != null && to != null ? from + (to - from) / 2 : null;
-      if (midpoint != null) {
-        let nearest = 0;
-        let nearestDistance = Number.POSITIVE_INFINITY;
-        data.forEach((candle, index) => {
-          const distance = Math.abs(candle.time - midpoint);
-          if (distance < nearestDistance) {
-            nearest = index;
-            nearestDistance = distance;
-          }
-        });
-        center = data[nearest]?.time ?? null;
-      }
-    }
-    if (from == null || to == null || from >= to) return null;
-    return {
+    const inBacktest = isBacktestModeRef.current;
+    const requested = requestedFocusRangeRef.current;
+    return captureTimeframeViewportAnchor({
+      data,
+      count: inBacktest ? currentIndexRef.current : data.length,
+      windowFrom: requested ? 0 : chartWindowRef.current.from,
+      logical: requested ?? chart.timeScale().getVisibleLogicalRange(),
       sourceSymbol: symbol,
       sourceTimeframe: timeframeRef.current,
-      from,
-      to,
-      center: center ?? from + (to - from) / 2,
-    };
+      sourceBarSeconds: timeframeSeconds(timeframeRef.current),
+    });
   }, [symbol]);
 
   const applyMarketChange = useCallback(
@@ -5552,6 +5523,44 @@ export function MarketMasterPage() {
   }, [trades]);
 
   const openTrades = trades.filter((t) => t.status === "Open");
+
+  // After the realtime snapshot is on screen, page back through FXCM until a
+  // full page of history is loaded and, after a timeframe switch, until the
+  // switched-from viewport is covered. Prepending preserves the visible
+  // range, so this runs in the background unless `viewportReady` is false.
+  const prefetchRealtimeHistory = async (
+    session: number,
+    anchor: TimeframeViewportAnchor | null,
+    viewportReady: boolean
+  ) => {
+    const active = () => session === dataSessionRef.current && dataModeRef.current === "realtime";
+    for (let page = 0; page < REALTIME_ANCHOR_MAX_PAGES && active(); page++) {
+      const data = fullDataRef.current;
+      const needsAnchor = anchor != null &&
+        !timeframeViewportIsLoaded(data, anchor, realtimeHasMoreHistoryRef.current);
+      if (!needsAnchor && data.length >= KLINE_PAGE_SIZE) break;
+      await chartPanGuardRef.current?.whenIdle();
+      if (!active()) return;
+      if (await loadOlderHistoryRef.current() !== "loaded") break;
+    }
+    if (!active()) return;
+    if (anchor && anchor.sourceTimeframe !== timeframeRef.current) {
+      // Snap drawings once the history around them is loaded.
+      stateRef.current.lines.forEach((line: { reanchorTimes?: (candles: any[]) => void }) => {
+        line.reanchorTimes?.(fullDataRef.current);
+      });
+      setLines([...stateRef.current.lines]);
+    }
+    if (anchor && !viewportReady) {
+      syncDisplayedData(fullDataRef.current, currentIndexRef.current, false, false, {
+        viewportAnchor: anchor,
+      });
+    }
+    inFlightViewportAnchorRef.current = null;
+    isRestoringViewportRef.current = false;
+    setIsRestoringViewport(false);
+  };
+
   // Realtime mode is sourced entirely from the FXCM snapshot and stream.
   // There is deliberately no database candle seed on this path.
   const { status: realtimeStatus, ready: realtimeReady } = useRealtimeMarket({
@@ -5602,18 +5611,11 @@ export function MarketMasterPage() {
         // remains available through the direct FXCM history endpoint.
         realtimeHasMoreHistoryRef.current = incoming.length > 0;
         const preservedViewport = realtimeBootstrapViewportRef.current;
-        const resolvedCenter = preservedViewport?.center == null
-          ? null
-          : findCandleAtOrBefore(incoming, preservedViewport.center);
-        const canRestoreViewport = preservedViewport != null &&
-          preservedViewport.center >= first.time &&
-          preservedViewport.center <= last.time;
-        if (preservedViewport && preservedViewport.sourceTimeframe !== timeframe) {
-          stateRef.current.lines.forEach((line: { reanchorTimes?: (candles: any[]) => void }) => {
-            line.reanchorTimes?.(incoming);
-          });
-          setLines([...stateRef.current.lines]);
-        }
+        // The snapshot is short so the stream is live quickly. Restore the
+        // switched-from viewport now only if the snapshot already holds it;
+        // otherwise page back first, under a loading overlay.
+        const viewportReady = preservedViewport == null ||
+          timeframeViewportIsLoaded(incoming, preservedViewport, true);
         applyCandlePage(
           {
             rawCandles: event.candles,
@@ -5633,21 +5635,20 @@ export function MarketMasterPage() {
             isInitialPage: true,
             shouldFocusLatest: true,
             preserveRiskSettings: true,
-            visibleTimeRange: canRestoreViewport && preservedViewport
-              ? {
-                  from: preservedViewport.from,
-                  to: preservedViewport.to,
-                  center: resolvedCenter ?? preservedViewport.center,
-                }
-              : undefined,
+            viewportAnchor: viewportReady ? preservedViewport ?? undefined : undefined,
           }
         );
+        if (!viewportReady) {
+          isRestoringViewportRef.current = true;
+          setIsRestoringViewport(true);
+        }
         realtimeBootstrapViewportRef.current = null;
         realtimeAwaitingSnapshotRef.current = false;
         isDataLoadingRef.current = false;
         setIsDataLoading(false);
         latestUnixRef.current = last.time;
         setRealtimeRevision((revision) => revision + 1);
+        void prefetchRealtimeHistory(dataSessionRef.current, preservedViewport, viewportReady);
         return;
       }
 
@@ -6101,6 +6102,7 @@ export function MarketMasterPage() {
         indConfig={indConfig}
         isBottomPanelOpen={isBottomPanelOpen}
         isDataLoading={isDataLoading}
+        isRestoringViewport={isRestoringViewport}
         isHistoryLoading={isHistoryLoading}
         historyLoadKind={historyLoadKind}
         isMaximized={isMaximized}

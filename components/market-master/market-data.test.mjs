@@ -12,7 +12,23 @@ vm.runInNewContext(
   }).outputText,
   { exports: target.exports, module: target }
 );
-const { normalizeCandles, toVolumePoint, buildVolumeData } = target.exports;
+const { normalizeCandles, toVolumePoint, buildVolumeData, shouldLoadOlderKlines, KLINE_PAGE_SIZE } = target.exports;
+
+test("lazy pages are 20k bars", () => {
+  assert.equal(KLINE_PAGE_SIZE, 20000);
+});
+
+test("older history loads near the left edge at any zoom, including when every loaded bar is visible", () => {
+  // Regression: a zoomed-out realtime snapshot (all 256 bars on screen) never paged back.
+  assert.equal(shouldLoadOlderKlines({ from: -30, to: 260 }, 0), true);
+  assert.equal(shouldLoadOlderKlines({ from: 0, to: 255 }, 0), true);
+  // Prefetch while one screen of older bars remains.
+  assert.equal(shouldLoadOlderKlines({ from: 150, to: 350 }, 0), true);
+  assert.equal(shouldLoadOlderKlines({ from: 30, to: 50 }, 0), true);
+  assert.equal(shouldLoadOlderKlines({ from: 250, to: 450 }, 0), false);
+  // The bounded chart window shifts over loaded bars before fetching more.
+  assert.equal(shouldLoadOlderKlines({ from: 0, to: 200 }, 1200), false);
+});
 
 const candle = (datetime, overrides = {}) => ({
   datetime,
