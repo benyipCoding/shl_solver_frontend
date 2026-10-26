@@ -4076,8 +4076,22 @@ export function MarketMasterPage() {
       }
     };
 
+    // Double-clicking a drawing is a shortcut for "样式配置" in its context menu.
+    const dblClickHandler = () => {
+      const state = stateRef.current;
+      if (state.mode !== "idle") return;
+      const hoveredShape = state.lines.find((line) => line.hoveredPoint !== null);
+      if (!hoveredShape) return;
+      hideCandleTooltip();
+      setContextMenu(null);
+      setSelectedShape(hoveredShape);
+      setSelectedIndicator(null);
+      setShapeConfigModal({ visible: true, shapeId: hoveredShape.id });
+    };
+
     chart.subscribeCrosshairMove(crosshairMoveHandler);
     chart.subscribeClick(clickHandler);
+    chart.subscribeDblClick(dblClickHandler);
 
     const handleVisibleLogicalRangeChange = (range) => {
       if (!range || chartPanGuardRef.current?.isActive() || preserveVisibleRangeRef.current || chartViewportSyncRef.current) return;
@@ -4120,6 +4134,7 @@ export function MarketMasterPage() {
       if (ro) ro.disconnect();
       chart.unsubscribeCrosshairMove(crosshairMoveHandler);
       chart.unsubscribeClick(clickHandler);
+      chart.unsubscribeDblClick(dblClickHandler);
       chart
         .timeScale()
         .unsubscribeVisibleLogicalRangeChange(handleVisibleLogicalRangeChange);
