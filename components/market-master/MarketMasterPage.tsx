@@ -133,6 +133,8 @@ import {
   timeframeViewportIsLoaded,
   type TimeframeViewportAnchor,
 } from "@/components/market-master/timeframe-viewport";
+import { barMinutesOfDay, nearestCandleIndex } from "@/components/market-master/chart-locate";
+import type { ChartLocateOptions } from "@/components/market-master/ChartLocatePopover";
 import {
   createBacktestPersistClient,
   toPersistSide,
@@ -734,7 +736,7 @@ export function MarketMasterPage() {
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyLoadKind, setHistoryLoadKind] = useState<
-    "older" | "future" | "window" | null
+    "older" | "future" | "window" | "locate" | null
   >(null);
   const [isSyncingLatest, setIsSyncingLatest] = useState(false);
   const [isRepairSelecting, setIsRepairSelecting] = useState(false);
@@ -5042,6 +5044,151 @@ export function MarketMasterPage() {
     });
   }, [symbol]);
 
+  // ---- Toolbar "locate": newest bar, or a chosen date/time ----
+  const currentBarSpan = () => {
+    const requested = requestedFocusRangeRef.current;
+    if (requested) return Math.max(1, requested.to - requested.from);
+    const logical = chartRef.current?.timeScale().getVisibleLogicalRange();
+    return logical ? Math.max(1, logical.to - logical.from) : INITIAL_VISIBLE_COUNT;
+  };
+  // Same candle width as now, centred on the target bar (newest: right edge).
+  const locateAnchor = (anchorTime: number): TimeframeViewportAnchor => ({
+    sourceSymbol: symbol,
+    sourceTimeframe: timeframeRef.current,
+    anchorTime,
+    barSpan: currentBarSpan(),
+  });
+  const isLocateBusy = () =>
+    isDataLoadingRef.current || historyLoadingRef.current || isRestoringViewportRef.current ||
+    Boolean(automaticRunRef.current) || restartingBacktestRef.current;
+
+  const getLocateOptions = (): ChartLocateOptions | null => {
+    const data = fullDataRef.current;
+    const backtest = isBacktestModeRef.current;
+    const realtime = dataModeRef.current === "realtime";
+    const count = Math.min(backtest ? currentIndexRef.current : data.length, data.length);
+    if (count <= 0) return null;
+    const requested = requestedFocusRangeRef.current;
+    const range = requested ? null : chartRef.current?.timeScale().getVisibleLogicalRange();
+    const logical = requested ?? (range
+      ? { from: chartWindowRef.current.from + range.from, to: chartWindowRef.current.from + range.to }
+      : null);
+    const centerIndex = logical
+      ? Math.max(0, Math.min(count - 1, Math.round((logical.from + logical.to) / 2)))
+      : count - 1;
+    // History (and backtest) can page back to the database's first bar;
+    // realtime pages back through FXCM, so its start is not known up front.
+    const earliest = realtime ? null : earliestUnixRef.current ?? data[0].time;
+    const latest = backtest || realtime ? data[count - 1].time : latestUnixRef.current ?? data[count - 1].time;
+    return {
+      minDate: earliest == null ? undefined : new Date(earliest * 1000).toISOString().slice(0, 10),
+      maxDate: new Date(latest * 1000).toISOString().slice(0, 10),
+      minutesOfDay: timeframeSeconds(timeframeRef.current) < 86400 ? barMinutesOfDay(data, count) : [],
+      initialTime: data[centerIndex].time,
+      latestLabel: backtest ? "跳到回测当前进度" : realtime ? "跳到最新实时K线" : "跳到最新K线",
+    };
+  };
+
+  // History mode outside the loaded window: load one page around the target
+  // from the database instead of paging through everything in between.
+  const loadLocatePage = async (
+    params: { aroundTime?: number; beforeCount?: number },
+    resolveAnchor: (data: NormalizedCandle[]) => TimeframeViewportAnchor
+  ) => {
+    historyLoadingRef.current = true;
+    setIsHistoryLoading(true);
+    setHistoryLoadKind("locate");
+    const session = dataSessionRef.current;
+    try {
+      const page = await fetchSymbolPage({ outputsize: KLINE_PAGE_SIZE, ...params });
+      if (session !== dataSessionRef.current) return;
+      const data = normalizeCandles(page.rawCandles);
+      if (!data.length) {
+        toast.error("该时间附近没有可用的K线");
+        return;
+      }
+      applyCandlePage(page, data, { shouldReplace: true, viewportAnchor: resolveAnchor(data) });
+    } catch (error) {
+      if (session === dataSessionRef.current) toast.error((error as Error)?.message || "加载定位处的K线失败");
+    } finally {
+      if (session === dataSessionRef.current) {
+        historyLoadingRef.current = false;
+        setIsHistoryLoading(false);
+        setHistoryLoadKind(null);
+      }
+    }
+  };
+
+  const jumpToLatestCandle = async () => {
+    if (isLocateBusy()) {
+      toast("K线正在加载，请稍后再定位");
+      return;
+    }
+    const backtest = isBacktestModeRef.current;
+    const loadedEnd = loadedOffsetRef.current + fullDataRef.current.length;
+    const newest = locateAnchor(Number.POSITIVE_INFINITY);
+    if (dataModeRef.current === "history" && !backtest && totalCandlesRef.current > loadedEnd) {
+      await loadLocatePage({}, () => newest);
+      return;
+    }
+    // Backtest: the newest revealed bar; realtime: the forming bar.
+    syncDisplayedData(fullDataRef.current, currentIndexRef.current, backtest, false, { viewportAnchor: newest });
+  };
+
+  const jumpToCandleTime = async (requestedTime: number) => {
+    if (isLocateBusy()) {
+      toast("K线正在加载，请稍后再定位");
+      return;
+    }
+    const backtest = isBacktestModeRef.current;
+    const realtime = dataModeRef.current === "realtime";
+    const session = dataSessionRef.current;
+    const visibleCount = () => (backtest ? currentIndexRef.current : fullDataRef.current.length);
+    let data = fullDataRef.current;
+    if (!data.length || visibleCount() <= 0) return;
+    let target = requestedTime;
+    const revealedLast = data[visibleCount() - 1].time;
+    if (backtest && target > revealedLast) {
+      target = revealedLast;
+      toast("逐K回测中只能定位到已揭示的K线，已跳到当前进度");
+    }
+
+    if (!realtime && !backtest && (target < data[0].time || target > data[data.length - 1].time)) {
+      await loadLocatePage(
+        { aroundTime: target, beforeCount: Math.floor(KLINE_PAGE_SIZE / 2) },
+        (page) => locateAnchor(page[nearestCandleIndex(page, page.length, target)].time)
+      );
+      return;
+    }
+
+    if (target < data[0].time) {
+      // Realtime and backtest keep one continuous series: page back to it.
+      isRestoringViewportRef.current = true;
+      setIsRestoringViewport(true);
+      try {
+        for (let page = 0; page < REALTIME_ANCHOR_MAX_PAGES && fullDataRef.current[0].time > target; page++) {
+          await chartPanGuardRef.current?.whenIdle();
+          if (session !== dataSessionRef.current) return;
+          if (await loadOlderHistoryRef.current() !== "loaded") break;
+        }
+      } finally {
+        if (session === dataSessionRef.current) {
+          isRestoringViewportRef.current = false;
+          setIsRestoringViewport(false);
+        }
+      }
+      if (session !== dataSessionRef.current) return;
+      if (fullDataRef.current[0].time > target) toast("目标时间早于可加载的历史，已跳到最早的K线");
+    }
+
+    data = fullDataRef.current;
+    const index = nearestCandleIndex(data, visibleCount(), target);
+    if (index < 0) return;
+    syncDisplayedData(data, currentIndexRef.current, backtest, false, {
+      viewportAnchor: locateAnchor(data[index].time),
+    });
+  };
+
   const applyMarketChange = useCallback(
     (kind: "symbol" | "timeframe" | "dataMode", value: string) => {
       if (kind === "dataMode") {
@@ -6007,6 +6154,9 @@ export function MarketMasterPage() {
         setIsSwingPointsEnabled={setIsSwingPointsEnabled}
         isSessionBreaksEnabled={isSessionBreaksEnabled}
         onToggleSessionBreaks={handleToggleSessionBreaks}
+        getLocateOptions={getLocateOptions}
+        onJumpToLatest={jumpToLatestCandle}
+        onJumpToTime={jumpToCandleTime}
         sessionBreaksSupported={timeframeSeconds(timeframe) < 86400}
         handleAIChartAnalysis={handleAIChartAnalysis}
         isAIAnalyzing={isAIAnalyzing}

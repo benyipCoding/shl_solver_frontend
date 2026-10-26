@@ -37,6 +37,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { ChartLocatePopover } from "@/components/market-master/ChartLocatePopover";
 
 export const TopBar = ({
   dataMode = "history",
@@ -65,6 +66,9 @@ export const TopBar = ({
   isSessionBreaksEnabled = false,
   onToggleSessionBreaks,
   sessionBreaksSupported = false,
+  getLocateOptions,
+  onJumpToLatest,
+  onJumpToTime,
   handleAIChartAnalysis,
   isAIAnalyzing,
   setIsIndicatorModalOpen,
@@ -808,6 +812,14 @@ export const TopBar = ({
             >
               <CalendarDays size={20} />
             </button>
+            {getLocateOptions && (
+              <ChartLocatePopover
+                disabled={isDataLoading || isHistoryLoading || Boolean(dataError) || totalCandles === 0 || isAutomaticRunBusy || isRestartingBacktest}
+                getOptions={getLocateOptions}
+                onJumpToLatest={onJumpToLatest}
+                onJumpToTime={onJumpToTime}
+              />
+            )}
             <div className="w-px h-4 bg-gray-600 mx-1 self-center"></div>
             <button
               onClick={() => setIsIndicatorModalOpen(true)}

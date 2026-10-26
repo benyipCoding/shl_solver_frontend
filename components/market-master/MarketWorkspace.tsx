@@ -17,6 +17,8 @@ import { TradeTerminal } from "./TradeTerminal";
 import { BrokerTradeTerminal } from "./BrokerTradeTerminal";
 import type { BrokerTrading } from "@/hooks/useBrokerTrading";
 import type { TradePosition } from "./trade-management";
+import type { SubPaneId } from "./chart-panes";
+import { useChartPaneHeights } from "@/hooks/useChartPaneHeights";
 
 type LegendData = {
   open: number;
@@ -82,7 +84,7 @@ type MarketWorkspaceProps = {
   isDataLoading: boolean;
   isRestoringViewport?: boolean;
   isHistoryLoading: boolean;
-  historyLoadKind?: "older" | "future" | "window" | null;
+  historyLoadKind?: "older" | "future" | "window" | "locate" | null;
   isMaximized: boolean;
   isRightPanelOpen: boolean;
   layoutRef: RefObject<HTMLDivElement | null>;
@@ -177,16 +179,43 @@ export function MarketWorkspace({
   trades,
   children,
 }: MarketWorkspaceProps) {
+  const {
+    draggingPane,
+    endPaneResize,
+    heights: paneHeights,
+    movePaneResize,
+    paneRef,
+    resetPaneHeight,
+    startPaneResize,
+  } = useChartPaneHeights();
+  // Border above a sub-pane; it trades height with the pane directly above.
+  const paneSplitter = (upper: "main" | SubPaneId, lower: SubPaneId) => (
+    <div
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="拖动调整图表高度"
+      title="拖动调整图表高度，双击恢复默认"
+      onPointerDown={startPaneResize(upper, lower)}
+      onPointerMove={movePaneResize}
+      onPointerUp={endPaneResize}
+      onPointerCancel={endPaneResize}
+      onDoubleClick={() => resetPaneHeight(lower)}
+      className={`relative z-10 -my-[3px] h-[7px] shrink-0 cursor-row-resize touch-none transition-colors hover:bg-blue-500/30 ${
+        draggingPane === lower ? "bg-blue-500/40" : ""
+      }`}
+    />
+  );
+
   return (
     <div ref={layoutRef} className="relative flex flex-1 overflow-hidden">
       <div
         ref={mainColumnRef}
         className="flex min-w-0 flex-1 flex-col overflow-hidden"
       >
-        <div className="relative min-h-[180px] flex-1 bg-[#111827]">
+        <div ref={paneRef("main")} className="relative min-h-[180px] flex-1 bg-[#111827]">
           {(isDataLoading || isRestoringViewport) && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-950/70 text-sm text-blue-200 backdrop-blur-sm">
-              {isDataLoading ? "正在加载真实 K 线数据..." : "正在加载历史 K 线，定位到切换前的时间范围..."}
+              {isDataLoading ? "正在加载真实 K 线数据..." : "正在加载历史 K 线并定位..."}
             </div>
           )}
           {!isDataLoading && isHistoryLoading && (
@@ -197,7 +226,9 @@ export function MarketWorkspace({
                   ? "正在加载后续 K 线"
                   : historyLoadKind === "window"
                     ? "正在加载回测窗口"
-                    : "正在按需加载历史 K 线"}
+                    : historyLoadKind === "locate"
+                      ? "正在加载定位处的 K 线"
+                      : "正在按需加载历史 K 线"}
             </div>
           )}
           {!isDataLoading && dataError && (
@@ -302,8 +333,13 @@ export function MarketWorkspace({
           )}
         </div>
 
+        {indConfig.macd.enabled && paneSplitter("main", "macd")}
         {indConfig.macd.enabled && (
-          <div className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48">
+          <div
+            ref={paneRef("macd")}
+            style={paneHeights.macd ? { height: paneHeights.macd } : undefined}
+            className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48"
+          >
             {legendData && (
               <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex items-center gap-2 overflow-hidden rounded border border-gray-700/50 bg-gray-900/70 px-2.5 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:right-auto sm:gap-4 sm:px-3 sm:text-sm">
                 <div className="font-semibold tracking-wider text-gray-400">
@@ -329,8 +365,13 @@ export function MarketWorkspace({
           </div>
         )}
 
+        {indConfig.volume.enabled && paneSplitter(indConfig.macd.enabled ? "macd" : "main", "volume")}
         {indConfig.volume.enabled && (
-          <div className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48">
+          <div
+            ref={paneRef("volume")}
+            style={paneHeights.volume ? { height: paneHeights.volume } : undefined}
+            className="relative h-36 min-h-24 shrink border-t border-gray-800 bg-[#111827] sm:h-48"
+          >
             <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-4 rounded border border-gray-700/50 bg-gray-900/70 px-3 py-2 font-mono text-xs backdrop-blur-sm sm:left-4 sm:text-sm">
               <span className="font-semibold tracking-wider text-gray-400">交易量 (VOL)</span>
               <span style={{

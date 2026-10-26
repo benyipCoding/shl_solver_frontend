@@ -907,10 +907,20 @@ test("backtest controls stay in historical mode and automatic trading requires a
     "@/context/AuthContext": { useAuth: () => ({ user, isLoading: false }) },
     "@/components/common/UserHeaderActions": { default: Empty },
     "@/components/market-master/SymbolSearchSelect": { SymbolFavoriteButton: Empty, SymbolSearchSelect: Empty },
+    "@/components/market-master/ChartLocatePopover": {
+      ChartLocatePopover: ({ disabled }) => React.createElement("button", { "aria-label": "定位K线", disabled }),
+    },
     "lucide-react": new Proxy({}, { get: () => Empty }),
   }, { process: environment });
   const props = { isBacktestMode: true, totalCandles: 10000, currentIndex: 200, timeframeOptions: [], balance: 10000, totalFloatingPnl: 0 };
   const html = (extra = {}) => renderToStaticMarkup(React.createElement(TopBar, { ...props, ...extra }));
+  // Locate is available in history, backtest and realtime alike, and waits for loads.
+  const locateProps = { getLocateOptions: () => null, onJumpToLatest() {}, onJumpToTime() {} };
+  assert.doesNotMatch(html(), /aria-label="定位K线"/);
+  for (const mode of [{ isBacktestMode: true }, { isBacktestMode: false }, { dataMode: "realtime", realtimeAvailable: true, isBacktestMode: false }]) {
+    assert.match(html({ ...locateProps, ...mode }), /<button aria-label="定位K线"><\/button>/);
+  }
+  assert.match(html({ ...locateProps, isHistoryLoading: true }), /<button aria-label="定位K线" disabled=""><\/button>/);
   const restartProps = { onRestartBacktest() {}, canRestartBacktest: true };
   assert.equal((html(restartProps).match(/aria-label="从头再跑"/g) || []).length, 2);
   assert.match(html({ ...restartProps, isAutomaticRunBusy: true }), /disabled="" aria-label="从头再跑"/);
