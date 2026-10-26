@@ -1295,7 +1295,7 @@ test("million-bar display keeps every series bounded and historical navigation l
     macdHistSeriesRef: { current: series() }, macdLineSeriesRef: { current: series() }, macdSignalSeriesRef: { current: series() },
     BOLLINGER_LINE_DEFINITIONS: [{ key: "middle" }, { key: "upper" }, { key: "lower" }],
     toBollingerLineData: (rows, key) => rows.map((row) => ({ time: row.time, value: row[key] })),
-    focusLatestCandles() {}, volumeChartRef: { current: null }, stateRef: { current: { lines: [] } },
+    focusLatestCandles() {}, volumeChartRef: { current: null }, stateRef: { current: { lines: [] } }, pendingDrawingReanchorRef: { current: null },
     requestAnimationFrame: () => 0,
   });
   vm.runInContext(transpile(`globalThis.recomputeIndicators = ${pageHandler("recomputeIndicators")}; globalThis.syncDisplayedData = ${pageHandler("syncDisplayedData")};`), context);

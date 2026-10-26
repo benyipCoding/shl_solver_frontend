@@ -148,6 +148,75 @@ test("ordinary rectangles retain finite endpoints and zones never extend backwar
   assert.equal(zone.paneViews()[0].renderer(), null);
 });
 
+function paintedNote(shape) {
+  const texts = [];
+  const context = {
+    fillRect() {},
+    strokeRect() {},
+    save() {},
+    restore() {},
+    measureText: (text) => ({ width: text.length * 8 }),
+    fillText(text, x, y) { texts.push({ text, x, y, font: this.font, color: this.fillStyle }); },
+  };
+  shape.paneViews()[0].renderer().draw({
+    useMediaCoordinateSpace: (draw) => draw({ context, mediaSize: { width: 800, height: 400 } }),
+  });
+  return texts;
+}
+
+test("zone notes default to white and stay visible inside the zone's top-left corner", () => {
+  const zone = new ShapePrimitive({ time: 10, price: 120 }, { time: 20, price: 100 }, "zone");
+  const viewport = attachShape(zone);
+  assert.deepEqual(paintedNote(zone), []);
+  zone.updateConfig({ noteText: "H8 阻力位\n第二行" });
+  const [first, second] = paintedNote(zone);
+  assert.equal(first.text, "H8 阻力位");
+  assert.equal(first.color, "#ffffff");
+  assert.match(first.font, /16px/);
+  assert.deepEqual([first.x, first.y], [106, 286]);
+  assert.equal(second.text, "第二行");
+  assert.equal(second.y, 306);
+  // Scrolling the zone start off-screen keeps the note pinned to the left edge.
+  viewport.offset = 200;
+  assert.equal(paintedNote(zone)[0].x, 6);
+  zone.updateConfig({ noteColor: "#ff9800", noteFontSize: 24 });
+  const [styled] = paintedNote(zone);
+  assert.equal(styled.color, "#ff9800");
+  assert.match(styled.font, /24px/);
+});
+
+test("shapes round-trip through their persisted snapshot", () => {
+  const zone = new ShapePrimitive({ time: 10, price: 120 }, { time: 20, price: 100 }, "zone");
+  zone.updateConfig({ color: "#ef5350", noteText: "H8 阻力位", noteFontSize: 20 });
+  zone.setSelected(true);
+  const snapshot = JSON.parse(JSON.stringify(zone.serialize()));
+  assert.equal("isSelected" in snapshot.config, false);
+  const restored = ShapePrimitive.deserialize(snapshot);
+  assert.equal(restored.id, zone.id);
+  assert.equal(restored.type, "zone");
+  assert.equal(JSON.stringify([restored.p1, restored.p2]), JSON.stringify([zone.p1, zone.p2]));
+  assert.equal(restored.config.color, "#ef5350");
+  assert.equal(restored.config.noteText, "H8 阻力位");
+  assert.equal(restored.config.noteFontSize, 20);
+  assert.equal(restored.config.isSelected, false);
+
+  const profile = new ShapePrimitive({ time: 2, price: 100 }, { time: 3, price: 110 }, "volumeProfile");
+  profile.setProfileCandles([
+    { time: 1, open: 1, close: 1, low: 100, high: 110, volume: 10 },
+    { time: 2, open: 1, close: 1, low: 105, high: 115, volume: 20 },
+    { time: 3, open: 1, close: 1, low: 110, high: 120, volume: 30 },
+  ]);
+  const profileSnapshot = JSON.parse(JSON.stringify(profile.serialize()));
+  assert.equal("profile" in profileSnapshot.config, false);
+  assert.equal(JSON.stringify(profileSnapshot.profileCandles), JSON.stringify([
+    { time: 2, low: 105, high: 115, volume: 20 },
+    { time: 3, low: 110, high: 120, volume: 30 },
+  ]));
+  const restoredProfile = ShapePrimitive.deserialize(profileSnapshot);
+  assert.equal(restoredProfile.config.profile.coveredCount, 2);
+  assert.equal(ShapePrimitive.deserialize({ type: "line" }), null);
+});
+
 test("calculates a 20-period SMA with two population standard deviations", () => {
   const data = Array.from({ length: 21 }, (_, index) => ({
     time: index + 1,

@@ -56,6 +56,7 @@ import {
   calculateMACD,
   distToSegmentSquared,
 } from "@/components/market-master/chart-utils";
+import { loadSymbolDrawings, saveSymbolDrawings } from "./drawing-persistence";
 import { useAutomaticPens } from "@/hooks/useAutomaticPens";
 import { useAutomaticPenTrading } from "@/hooks/useAutomaticPenTrading";
 import type { AutomaticPenEvent } from "./automatic-pen-trading";
@@ -1472,7 +1473,13 @@ export function MarketMasterPage() {
 
   const [mode, setMode] = useState("idle");
   const [drawType, setDrawType] = useState("line");
-  const [, setLines] = useState([]);
+  const [lines, setLines] = useState([]);
+  // Symbol whose saved drawings are currently attached to the chart.
+  const drawingsSymbolRef = useRef<string | null>(null);
+  const drawingsSeriesRef = useRef<any>(null);
+  // Restored drawings wait for the symbol's candles before snapping to bars.
+  const pendingDrawingReanchorRef = useRef<{ staleData: any[] } | null>(null);
+  const drawingsSaveWarnedRef = useRef(false);
 
   const [contextMenu, setContextMenu] = useState(null);
   const [shapeConfigModal, setShapeConfigModal] = useState({
@@ -1821,6 +1828,17 @@ export function MarketMasterPage() {
       chartViewportSyncRef.current = true;
       try {
         seriesRef.current?.setData(candleData);
+        const pendingReanchor = pendingDrawingReanchorRef.current;
+        if (pendingReanchor && data.length && data !== pendingReanchor.staleData) {
+          pendingDrawingReanchorRef.current = null;
+          // Saved drawings may come from another timeframe. Drawings older
+          // than the loaded history keep their times until it is paged in.
+          stateRef.current.lines.forEach((line: any) => {
+            const times = [line.anchorTimes?.p1, line.anchorTimes?.p2].map(Number);
+            if (times.every((time) => time >= data[0].time)) line.reanchorTimes?.(data);
+          });
+          setLines([...stateRef.current.lines]);
+        }
         // setData temporarily clears the series while a timeframe is loading.
         // Keep every user-created primitive attached and invalidate it after
         // the new candles are installed so its timestamps are projected again.
@@ -3954,6 +3972,7 @@ export function MarketMasterPage() {
       if (state.dragPointIndex !== null) {
         state.dragPointIndex = null;
         state.activeLine = null;
+        setLines([...state.lines]);
         chart.applyOptions({ handleScroll: true, handleScale: true });
         if (chartContainerRef.current)
           chartContainerRef.current.style.cursor = "default";
@@ -4146,6 +4165,43 @@ export function MarketMasterPage() {
     setSelectedShape,
     updateLiquidityOverlay,
   ]);
+
+  // Swap in the saved drawings of the active symbol.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!isMounted || !series) return;
+    const sameSeries = drawingsSeriesRef.current === series;
+    if (sameSeries && drawingsSymbolRef.current === symbol) return;
+    drawingsSeriesRef.current = series;
+    cancelPendingDrawing();
+    setSelectedShape(null);
+    setShapeConfigModal({ visible: false, shapeId: null });
+    // A recreated chart already dropped the old series and its primitives.
+    if (sameSeries) stateRef.current.lines.forEach((line) => detachShapeFromMainSeries(line));
+    const restored = loadSymbolDrawings(symbol)
+      .map((snapshot) => ShapePrimitive.deserialize(snapshot))
+      .filter(Boolean);
+    restored.forEach((shape) => series.attachPrimitive(shape));
+    stateRef.current.lines = restored;
+    drawingsSymbolRef.current = symbol;
+    pendingDrawingReanchorRef.current = restored.length
+      ? { staleData: fullDataRef.current }
+      : null;
+    setLines([...restored]);
+  }, [isMounted, symbol, cancelPendingDrawing, setSelectedShape, detachShapeFromMainSeries]);
+
+  useEffect(() => {
+    const drawingsSymbol = drawingsSymbolRef.current;
+    if (!drawingsSymbol) return;
+    const state = stateRef.current;
+    const shapes = state.lines
+      .filter((line) => !(state.isDrawing && line === state.activeLine))
+      .map((line) => line.serialize());
+    if (!saveSymbolDrawings(drawingsSymbol, shapes) && !drawingsSaveWarnedRef.current) {
+      drawingsSaveWarnedRef.current = true;
+      toast.error("绘图保存失败：浏览器存储空间不足或不可用");
+    }
+  }, [lines]);
 
   useEffect(() => {
     if (!chartRef.current) return;

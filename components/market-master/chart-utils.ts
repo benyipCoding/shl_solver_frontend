@@ -34,6 +34,15 @@ export const hexToRgba = (hex: any, alpha: any) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+export const DEFAULT_SHAPE_NOTE_COLOR = "#ffffff";
+export const DEFAULT_SHAPE_NOTE_FONT_SIZE = 16;
+export const SHAPE_NOTE_FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32];
+// Near-black is unreadable on the dark chart, so white takes its slot.
+export const SHAPE_NOTE_COLORS = [
+  DEFAULT_SHAPE_NOTE_COLOR,
+  ...PRESET_COLORS.filter((color) => color !== "#131722"),
+];
+
 export const DEFAULT_VOLUME_PROFILE_SETTINGS = {
   binCount: 24,
   valueAreaPercent: 70,
@@ -367,6 +376,8 @@ export class ShapeRenderer {
         ctx.setLineDash([]);
       }
 
+      this.drawNote(ctx, scope.mediaSize);
+
       const drawHandle = (point: any, isHovered: boolean) => {
         ctx.beginPath();
         ctx.arc(point.x, point.y, isHovered ? 6 : 4, 0, 2 * Math.PI);
@@ -392,6 +403,49 @@ export class ShapeRenderer {
         }
       }
     });
+  }
+
+  drawNote(ctx: any, mediaSize: { width: number; height: number }) {
+    const lines = String(this.config.noteText ?? "")
+      .split("\n")
+      .map((line) => line.trimEnd());
+    if (!lines.some(Boolean)) return;
+
+    const fontSize = Number(this.config.noteFontSize) || DEFAULT_SHAPE_NOTE_FONT_SIZE;
+    const lineHeight = Math.round(fontSize * 1.25);
+    const padding = 6;
+    const left = Math.min(this.p1.x, this.p2.x);
+    const top = Math.min(this.p1.y, this.p2.y);
+
+    ctx.save();
+    ctx.font = `600 ${fontSize}px Arial, "Microsoft YaHei", sans-serif`;
+    ctx.fillStyle = this.config.noteColor || DEFAULT_SHAPE_NOTE_COLOR;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+    ctx.shadowBlur = 3;
+    const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width));
+    const blockHeight = lines.length * lineHeight;
+
+    let x: number;
+    let y: number;
+    if (this.type === "rectangle" || this.type === "zone") {
+      // Inside the top-left corner; a zone runs to the right edge, so keep
+      // its note on screen while the left edge is scrolled out of view.
+      x = Math.max(left, 0) + padding;
+      y = top + padding;
+    } else {
+      // Above the higher endpoint, starting from the left-most one.
+      x = left;
+      y = top - padding - blockHeight;
+    }
+    x = Math.max(4, Math.min(x, mediaSize.width - textWidth - 4));
+    y = Math.max(4, Math.min(y, mediaSize.height - blockHeight - 4));
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x, y + index * lineHeight);
+    });
+    ctx.restore();
   }
 }
 
@@ -460,6 +514,9 @@ export class ShapePrimitive {
       isSelected: false,
       fillBaseColor: type === "zone" ? "#c084fc" : "#2962ff",
       profileSettings: { ...DEFAULT_VOLUME_PROFILE_SETTINGS },
+      noteText: "",
+      noteColor: DEFAULT_SHAPE_NOTE_COLOR,
+      noteFontSize: DEFAULT_SHAPE_NOTE_FONT_SIZE,
       fibColors: [
         "#787b86",
         "#f23645",
@@ -588,6 +645,42 @@ export class ShapePrimitive {
     if (this.config.isSelected === isSelected) return;
     this.config = { ...this.config, isSelected };
     if (this.requestUpdate) this.requestUpdate();
+  }
+  /** Plain JSON snapshot used to persist the drawing in browser storage. */
+  serialize() {
+    const { isSelected, profile, ...config } = this.config;
+    const snapshot: any = {
+      id: this.id,
+      type: this.type,
+      p1: this.p1,
+      p2: this.p2,
+      anchorTimes: this.anchorTimes,
+      config,
+    };
+    if (this.type === "volumeProfile") {
+      // Only the candles inside the profile range affect the histogram.
+      const from = Math.min(Number(this.p1?.time), Number(this.p2?.time));
+      const to = Math.max(Number(this.p1?.time), Number(this.p2?.time));
+      snapshot.profileCandles = this.profileCandles
+        .filter((candle) => Number(candle?.time) >= from && Number(candle?.time) <= to)
+        .map(({ time, low, high, volume }) => ({ time, low, high, volume }));
+    }
+    return snapshot;
+  }
+  static deserialize(snapshot: any) {
+    if (!snapshot?.p1 || !snapshot?.p2 || typeof snapshot.type !== "string") return null;
+    const shape = new ShapePrimitive(snapshot.p1, snapshot.p2, snapshot.type);
+    if (typeof snapshot.id === "string") shape.id = snapshot.id;
+    shape.p2 = snapshot.p2;
+    shape.anchorTimes = {
+      p1: snapshot.anchorTimes?.p1 ?? snapshot.p1.time,
+      p2: snapshot.anchorTimes?.p2 ?? snapshot.p2.time,
+    };
+    shape.config = { ...shape.config, ...snapshot.config, isSelected: false };
+    if (Array.isArray(snapshot.profileCandles)) {
+      shape.setProfileCandles(snapshot.profileCandles);
+    }
+    return shape;
   }
 }
 

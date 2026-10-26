@@ -2,7 +2,11 @@ import React, { useEffect, useState } from "react";
 import { RotateCcw, X } from "lucide-react";
 import { ColorPicker } from "./ColorPicker";
 import {
+  DEFAULT_SHAPE_NOTE_COLOR,
+  DEFAULT_SHAPE_NOTE_FONT_SIZE,
   DEFAULT_VOLUME_PROFILE_SETTINGS,
+  SHAPE_NOTE_COLORS,
+  SHAPE_NOTE_FONT_SIZES,
   normalizeVolumeProfileSettings,
 } from "./chart-utils";
 
@@ -81,6 +85,43 @@ export const ShapeConfigModal = ({
               <option value={2}>正常</option>
               <option value={3}>粗</option>
             </select>
+          </div>
+          <div className="space-y-3 border-t border-gray-800 pt-4">
+            <label htmlFor="shape-note-text" className="block text-sm text-gray-400">
+              备注
+            </label>
+            <textarea
+              id="shape-note-text"
+              rows={2}
+              value={shape.config.noteText ?? ""}
+              onChange={(e) => updateShapeConfig("noteText", e.target.value)}
+              placeholder="例如：H8 阻力位"
+              className="w-full resize-y rounded border border-gray-700 bg-gray-800 px-2 py-1.5 text-sm text-white outline-none placeholder:text-gray-500 focus:border-cyan-500"
+            />
+            <div className="flex justify-between items-center">
+              <label className="text-sm text-gray-400">备注颜色</label>
+              <ColorPicker
+                value={shape.config.noteColor ?? DEFAULT_SHAPE_NOTE_COLOR}
+                colors={SHAPE_NOTE_COLORS}
+                onChange={(c: any) => updateShapeConfig("noteColor", c)}
+              />
+            </div>
+            <div className="flex justify-between items-center">
+              <label className="text-sm text-gray-400">备注字号</label>
+              <select
+                value={shape.config.noteFontSize ?? DEFAULT_SHAPE_NOTE_FONT_SIZE}
+                onChange={(e) =>
+                  updateShapeConfig("noteFontSize", Number(e.target.value))
+                }
+                className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm outline-none w-24"
+              >
+                {SHAPE_NOTE_FONT_SIZES.map((size) => (
+                  <option key={size} value={size}>
+                    {size}px
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           {shape.type === "volumeProfile" && (
             <div className="mt-5 space-y-4 border-t border-gray-800 pt-4">

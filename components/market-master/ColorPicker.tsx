@@ -7,7 +7,7 @@ const PICKER_HEIGHT = 116;
 const PICKER_GAP = 8;
 const VIEWPORT_PADDING = 12;
 
-export const ColorPicker = ({ value, onChange }: any) => {
+export const ColorPicker = ({ value, onChange, colors = PRESET_COLORS }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const [panelStyle, setPanelStyle] = useState<any>(null);
   const pickerRef = useRef<any>(null);
@@ -77,7 +77,7 @@ export const ColorPicker = ({ value, onChange }: any) => {
               zIndex: 150,
             }}
           >
-            {PRESET_COLORS.map((c) => (
+            {colors.map((c: string) => (
               <div
                 key={c}
                 className={`w-7 h-7 rounded cursor-pointer border-2 hover:scale-110 transition-transform ${value === c ? "border-white shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "border-transparent"}`}
