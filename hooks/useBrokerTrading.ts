@@ -176,7 +176,7 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
     const current = latest.current;
     if (inFlight.current || !current.enabled || !current.connected || !current.snapshot) throw new Error("账户未就绪或上一条指令仍在处理中");
     const account = current.snapshot.account.id;
-    if (input.action === "open" && (current.snapshot.unresolved.length || localStorage.getItem(storageKey(account)))) {
+    if ((input.action === "open" || input.action === "entry") && (current.snapshot.unresolved.length || localStorage.getItem(storageKey(account)))) {
       throw new Error("有待确认指令，请先核对结果再开仓");
     }
     const payload = { ...input, client_id: crypto.randomUUID(), account_id: account, symbol: current.snapshot.instrument.symbol };

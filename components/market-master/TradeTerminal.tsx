@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { OrderUnitsInput } from "./OrderUnitsInput";
+import { pendingOrderKind, pendingOrderLabel, type PendingOrder } from "./pending-orders";
 
 type RiskInputMode = "points" | "amount";
 
@@ -30,6 +31,10 @@ type TradeTerminalProps = {
   isRealtimeMode?: boolean;
   isReplayMode?: boolean;
   isAutomaticTradingEnabled?: boolean;
+  pendingOrders?: PendingOrder[];
+  onPlacePending?: (type: "Buy" | "Sell", price: number) => void;
+  onManagePending?: (id: string) => void;
+  onCancelPending?: (id: string) => void;
 };
 
 const roundTo = (value: number, decimals: number) => {
@@ -118,12 +123,23 @@ export const TradeTerminal = ({
   isMaximized,
   panelWidth,
   canPlaceOrder = false,
+  pendingOrders = [],
+  onPlacePending,
+  onManagePending,
+  onCancelPending,
   isRealtimeMode = false,
   isReplayMode = false,
   isAutomaticTradingEnabled = false,
 }: TradeTerminalProps) => {
   const [orderUnitsInput, setOrderUnitsInput] = useState(() => String(orderUnits));
   const parsedOrderUnits = Number(orderUnitsInput);
+  const [orderMode, setOrderMode] = useState<"market" | "pending">("market");
+  const [pendingPriceInput, setPendingPriceInput] = useState("");
+  const pendingPrice = Number(pendingPriceInput);
+  const hasPendingPrice = Number.isFinite(pendingPrice) && pendingPrice > 0;
+  const pendingKind = (side: "Buy" | "Sell") =>
+    hasPendingPrice && currentPrice > 0 ? pendingOrderKind(side, pendingPrice, currentPrice) : null;
+  const isPendingMode = orderMode === "pending" && Boolean(onPlacePending);
   const hasValidOrderUnits =
     /^\d+$/.test(orderUnitsInput.trim()) &&
     Number.isSafeInteger(parsedOrderUnits) &&
@@ -407,11 +423,50 @@ export const TradeTerminal = ({
               </div>
             </div>
 
+            {onPlacePending && (
+              <div className="mb-3 space-y-2">
+                <div role="group" aria-label="下单方式" className="grid grid-cols-2 rounded-lg border border-gray-700 bg-gray-800 p-0.5">
+                  {([["market", "市价单"], ["pending", "挂单"]] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={orderMode === mode}
+                      onClick={() => {
+                        setOrderMode(mode);
+                        if (mode === "pending" && !pendingPriceInput && currentPrice > 0) {
+                          setPendingPriceInput(currentPrice.toFixed(priceDecimals));
+                        }
+                      }}
+                      className={`rounded-md py-1.5 text-sm font-semibold transition-colors ${orderMode === mode ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {isPendingMode && (
+                  <label className="block">
+                    <span className="mb-1 flex items-center justify-between text-sm text-gray-300">
+                      挂单价
+                      <span className="text-xs text-gray-500">止损止盈按上方设置从挂单价计算</span>
+                    </span>
+                    <input
+                      aria-label="挂单价"
+                      type="number"
+                      step={riskInputStep}
+                      value={pendingPriceInput}
+                      onChange={(event) => setPendingPriceInput(event.target.value)}
+                      className={`w-full rounded-lg border bg-gray-800 px-3 py-2 font-mono text-gray-100 outline-none focus:border-blue-500 ${hasPendingPrice ? "border-gray-700" : "border-red-500/60"}`}
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+
             <div className="mt-auto space-y-2 md:mb-4">
               <div className="flex gap-3">
               <button
-                onClick={() => handlePlaceOrder("Sell")}
-                disabled={!canPlaceOrder || !hasValidOrderUnits}
+                onClick={() => isPendingMode ? onPlacePending?.("Sell", pendingPrice) : handlePlaceOrder("Sell")}
+                disabled={!canPlaceOrder || !hasValidOrderUnits || (isPendingMode && !hasPendingPrice)}
                 title={
                   canPlaceOrder
                     ? hasValidOrderUnits ? "做空" : "请先输入有效的交易数量"
@@ -421,11 +476,13 @@ export const TradeTerminal = ({
                 }
                 className="flex-1 rounded-lg bg-red-600 py-3 text-lg font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600 disabled:active:scale-100"
               >
-                做空 (Sell)
+                {isPendingMode
+                  ? `挂卖单${pendingKind("Sell") ? ` (Sell ${pendingKind("Sell") === "limit" ? "Limit" : "Stop"})` : ""}`
+                  : "做空 (Sell)"}
               </button>
               <button
-                onClick={() => handlePlaceOrder("Buy")}
-                disabled={!canPlaceOrder || !hasValidOrderUnits}
+                onClick={() => isPendingMode ? onPlacePending?.("Buy", pendingPrice) : handlePlaceOrder("Buy")}
+                disabled={!canPlaceOrder || !hasValidOrderUnits || (isPendingMode && !hasPendingPrice)}
                 title={
                   canPlaceOrder
                     ? hasValidOrderUnits ? "做多" : "请先输入有效的交易数量"
@@ -435,7 +492,9 @@ export const TradeTerminal = ({
                 }
                 className="flex-1 rounded-lg bg-emerald-600 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
               >
-                做多 (Buy)
+                {isPendingMode
+                  ? `挂买单${pendingKind("Buy") ? ` (Buy ${pendingKind("Buy") === "limit" ? "Limit" : "Stop"})` : ""}`
+                  : "做多 (Buy)"}
               </button>
               </div>
               <button
@@ -447,6 +506,22 @@ export const TradeTerminal = ({
               >
                 全部平仓{openTradeCount > 0 ? `（${openTradeCount} 笔）` : ""}
               </button>
+              {pendingOrders.length > 0 && (
+                <div className="space-y-1.5 rounded-lg border border-gray-800 bg-gray-950/40 p-2.5">
+                  <div className="text-xs font-semibold text-gray-400">当前挂单（{pendingOrders.length}）</div>
+                  {pendingOrders.map((order) => (
+                    <div key={order.id} className="flex items-center gap-2 text-xs">
+                      <span className={`min-w-0 flex-1 truncate ${order.type === "Buy" ? "text-emerald-300" : "text-red-300"}`}>
+                        {pendingOrderLabel(order)} {order.units} @ <span className="font-mono">{order.price.toFixed(priceDecimals)}</span>
+                      </span>
+                      <button type="button" onClick={() => onManagePending?.(order.id)}
+                        className="rounded border border-gray-700 px-2 py-0.5 text-blue-300 hover:bg-gray-800">管理</button>
+                      <button type="button" onClick={() => onCancelPending?.(order.id)}
+                        className="rounded border border-gray-700 px-2 py-0.5 text-red-300 hover:bg-gray-800">撤销</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

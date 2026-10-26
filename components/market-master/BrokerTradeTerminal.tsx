@@ -13,6 +13,7 @@ import {
   brokerRiskPrice,
   type BrokerPosition,
 } from "./broker-trading";
+import { brokerPendingOrders, pendingOrderKind, pendingOrderLabel } from "./pending-orders";
 
 const inputClass =
   "w-full rounded border border-gray-600 bg-gray-800 px-3 py-2 font-mono text-gray-100 outline-none transition-colors focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-40";
@@ -20,6 +21,7 @@ const inputClass =
 export function BrokerTradeTerminal({
   broker,
   onManage,
+  onManagePending,
   onCloseAll,
   width,
   visible,
@@ -27,6 +29,7 @@ export function BrokerTradeTerminal({
 }: {
   broker: BrokerTrading;
   onManage: (id: string) => void;
+  onManagePending?: (orderId: string) => void;
   onCloseAll: () => void;
   width: number;
   visible: boolean;
@@ -39,6 +42,8 @@ export function BrokerTradeTerminal({
     "price",
   );
   const [message, setMessage] = useState("");
+  const [orderMode, setOrderMode] = useState<"market" | "pending">("market");
+  const [pendingRate, setPendingRate] = useState("");
   const snapshot = broker.snapshot;
   const instrument = snapshot?.instrument;
   const currency = snapshot?.account.currency;
@@ -88,23 +93,35 @@ export function BrokerTradeTerminal({
     snapshot?.positions.filter(
       (position) => position.symbol === instrument?.symbol,
     ) ?? [];
+  const isPendingMode = orderMode === "pending";
+  const pendingRateValue = Number(pendingRate);
+  const hasPendingRate = Number.isFinite(pendingRateValue) && pendingRateValue > 0;
+  const pendingKind = (side: "Buy" | "Sell") => {
+    const market = side === "Buy" ? instrument?.ask : instrument?.bid;
+    return hasPendingRate && market ? pendingOrderKind(side, pendingRateValue, market) : null;
+  };
+  const currentPendingOrders = snapshot ? brokerPendingOrders(snapshot.orders, snapshot.instrument.symbol) : [];
+  // Entry orders wait for a price, so they do not need a fresh quote or an
+  // open market at submission; FXCM still accepts or rejects them.
   const canOpen =
     broker.ready &&
     validQuantity &&
-    freshQuote &&
     instrument?.can_open === true &&
-    instrument.trading_status === "O" &&
-    unresolved.length === 0;
+    unresolved.length === 0 &&
+    (isPendingMode ? hasPendingRate : freshQuote && instrument.trading_status === "O");
 
   const submit = async (side: "Buy" | "Sell") => {
     setMessage("");
     try {
       if (!instrument) return;
+      const entryRate = isPendingMode ? Number(pendingRateValue.toFixed(instrument.digits)) : undefined;
       const result = await broker.send({
-        action: "open",
+        action: isPendingMode ? "entry" : "open",
         side,
         amount,
-        stop: brokerRiskPrice(stop, riskMode, side, "stop", amount, instrument),
+        ...(entryRate != null ? { rate: entryRate } : {}),
+        // Pending SL/TP points and amounts are measured from the pending rate.
+        stop: brokerRiskPrice(stop, riskMode, side, "stop", amount, instrument, entryRate),
         limit: brokerRiskPrice(
           limit,
           riskMode,
@@ -112,6 +129,7 @@ export function BrokerTradeTerminal({
           "limit",
           amount,
           instrument,
+          entryRate,
         ),
       });
       setMessage(result.message);
@@ -370,13 +388,52 @@ export function BrokerTradeTerminal({
             </div>
           </div>
 
+          <div className="mb-3 space-y-2">
+            <div role="group" aria-label="福汇下单方式" className="grid grid-cols-2 rounded-lg border border-gray-700 bg-gray-800 p-0.5">
+              {([["market", "市价单"], ["pending", "挂单"]] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={orderMode === mode}
+                  onClick={() => {
+                    setOrderMode(mode);
+                    if (mode === "pending" && !pendingRate && instrument) {
+                      setPendingRate(((instrument.bid + instrument.ask) / 2).toFixed(instrument.digits));
+                    }
+                  }}
+                  className={`cursor-pointer rounded-md py-1.5 text-sm font-semibold transition-colors ${orderMode === mode ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {isPendingMode && (
+              <label className="block">
+                <span className="mb-1 flex items-center justify-between text-sm text-gray-300">
+                  挂单价
+                  <span className="text-xs text-gray-500">买单对比 Ask、卖单对比 Bid</span>
+                </span>
+                <input
+                  aria-label="福汇挂单价"
+                  type="number"
+                  step="any"
+                  value={pendingRate}
+                  onChange={(event) => setPendingRate(event.target.value)}
+                  className={`${inputClass} ${hasPendingRate ? "" : "border-red-500/60"}`}
+                />
+              </label>
+            )}
+          </div>
+
           {!canOpen && (
             <p className="mb-3 text-center text-sm leading-5 text-gray-400">
               {!broker.ready
                 ? "等待福汇账户连接后可下单"
                 : unresolved.length > 0
                   ? "请先核对待确认指令的执行结果"
-                  : !freshQuote
+                  : isPendingMode && !hasPendingRate
+                    ? "请输入有效的挂单价"
+                    : !isPendingMode && !freshQuote
                     ? "报价已过期，等待最新报价"
                     : !validQuantity
                       ? "请输入符合最小数量和步长要求的交易数量"
@@ -417,7 +474,9 @@ export function BrokerTradeTerminal({
                 className="flex-1 rounded-lg bg-red-600 py-3 text-lg font-bold text-white shadow-lg shadow-red-900/20 transition-all hover:bg-red-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-red-600 disabled:active:scale-100"
                 onClick={() => void submit("Sell")}
               >
-                做空 (Sell)
+                {isPendingMode
+                  ? `挂卖单${pendingKind("Sell") ? ` (Sell ${pendingKind("Sell") === "limit" ? "Limit" : "Stop"})` : ""}`
+                  : "做空 (Sell)"}
               </button>
               <button
                 type="button"
@@ -425,7 +484,9 @@ export function BrokerTradeTerminal({
                 className="flex-1 rounded-lg bg-emerald-600 py-3 text-lg font-bold text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600 disabled:active:scale-100"
                 onClick={() => void submit("Buy")}
               >
-                做多 (Buy)
+                {isPendingMode
+                  ? `挂买单${pendingKind("Buy") ? ` (Buy ${pendingKind("Buy") === "limit" ? "Limit" : "Stop"})` : ""}`
+                  : "做多 (Buy)"}
               </button>
             </div>
             <button
@@ -447,6 +508,24 @@ export function BrokerTradeTerminal({
           </div>
 
           <div className="mt-3 space-y-2">
+            {currentPendingOrders.length > 0 && (
+              <div className="space-y-1.5 rounded-lg border border-gray-800 bg-gray-950/30 p-3">
+                <div className="text-sm font-semibold text-gray-300">
+                  当前品种挂单（{currentPendingOrders.length}）
+                </div>
+                {currentPendingOrders.map((order) => (
+                  <div key={order.id} className="flex items-center gap-2 rounded bg-gray-900/80 px-2.5 py-2 text-xs">
+                    <span className={`min-w-0 flex-1 truncate ${order.type === "Buy" ? "text-emerald-300" : "text-red-300"}`}>
+                      {pendingOrderLabel(order)} {order.units} @ <span className="font-mono">{price(order.price)}</span>
+                    </span>
+                    <button type="button" onClick={() => onManagePending?.(order.id)}
+                      className="rounded border border-gray-700 px-2 py-1 text-blue-300 transition-colors hover:bg-gray-800">
+                      管理
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <details className="group rounded-lg border border-gray-800 bg-gray-950/30">
               <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-semibold text-gray-300 marker:hidden">
                 <span className="flex items-center justify-between">

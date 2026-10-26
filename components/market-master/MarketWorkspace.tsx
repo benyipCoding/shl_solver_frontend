@@ -18,6 +18,7 @@ import { BrokerTradeTerminal } from "./BrokerTradeTerminal";
 import type { BrokerTrading } from "@/hooks/useBrokerTrading";
 import type { TradePosition } from "./trade-management";
 import type { SubPaneId } from "./chart-panes";
+import type { PendingOrder } from "./pending-orders";
 import { useChartPaneHeights } from "@/hooks/useChartPaneHeights";
 
 type LegendData = {
@@ -83,6 +84,10 @@ type MarketWorkspaceProps = {
   isBottomPanelOpen: boolean;
   isDataLoading: boolean;
   isRestoringViewport?: boolean;
+  pendingOrders?: PendingOrder[];
+  onPlacePending?: (type: "Buy" | "Sell", price: number) => void;
+  onManagePending?: (id: string) => void;
+  onCancelPending?: (id: string) => void;
   isHistoryLoading: boolean;
   historyLoadKind?: "older" | "future" | "window" | "locate" | null;
   isMaximized: boolean;
@@ -146,6 +151,10 @@ export function MarketWorkspace({
   isBottomPanelOpen,
   isDataLoading,
   isRestoringViewport = false,
+  pendingOrders,
+  onPlacePending,
+  onManagePending,
+  onCancelPending,
   isHistoryLoading,
   historyLoadKind = null,
   isMaximized,
@@ -426,7 +435,7 @@ export function MarketWorkspace({
       )}
 
       {brokerTrading ? (!isMaximized && <BrokerTradeTerminal key={brokerTrading.snapshot?.instrument.symbol ?? symbol} broker={brokerTrading}
-        onManage={onManageTrade} onCloseAll={handleCloseAll} width={rightPanelWidth} visible={isRightPanelOpen} onToggle={() => setIsRightPanelOpen(!isRightPanelOpen)} />) : <TradeTerminal
+        onManage={onManageTrade} onManagePending={onManagePending} onCloseAll={handleCloseAll} width={rightPanelWidth} visible={isRightPanelOpen} onToggle={() => setIsRightPanelOpen(!isRightPanelOpen)} />) : <TradeTerminal
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         isRightPanelOpen={isRightPanelOpen}
         setIsRightPanelOpen={setIsRightPanelOpen}
@@ -452,6 +461,10 @@ export function MarketWorkspace({
         canPlaceOrder={canPlaceOrder}
         isRealtimeMode={isRealtimeMode}
         isReplayMode={isReplayMode}
+        pendingOrders={pendingOrders}
+        onPlacePending={onPlacePending}
+        onManagePending={onManagePending}
+        onCancelPending={onCancelPending}
       />}
     </div>
   );

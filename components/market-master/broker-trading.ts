@@ -8,8 +8,9 @@ export type BrokerPosition = {
   open_order_id: string | null; close_order_id: string | null;
 };
 export type BrokerCommand = {
-  client_id: string; account_id: string; symbol: string; action: "open" | "close" | "risk";
-  side?: "Buy" | "Sell"; amount?: number; trade_id?: string;
+  client_id: string; account_id: string; symbol: string;
+  action: "open" | "close" | "risk" | "entry" | "entry_edit" | "entry_cancel" | "entry_risk";
+  side?: "Buy" | "Sell"; amount?: number; trade_id?: string; order_id?: string;
   stop?: number | null; limit?: number | null; kind?: "stop" | "limit"; rate?: number | null;
 };
 export type BrokerResult = { client_id: string; status: "pending" | "unknown" | "confirmed" | "rejected"; message: string; order_id?: string; };
@@ -22,7 +23,9 @@ export type BrokerSnapshot = {
     stop_distance_points: number; limit_distance_points: number; trading_status: string; can_open: boolean; can_close: boolean;
     rollover_buy: number | null; rollover_sell: number | null; commission_buy: number | null; commission_sell: number | null; };
   positions: BrokerPosition[]; closed_positions: BrokerPosition[];
-  orders: {order_id: string; trade_id: string; type: string; status: string; rate: number | null; amount: number}[];
+  orders: {order_id: string; trade_id: string; type: string; status: string; rate: number | null; amount: number;
+    /** Pending entry order fields; stop/limit are its attached orders' rates. */
+    side?: "Buy" | "Sell"; symbol?: string | null; entry?: boolean; stop?: number | null; limit?: number | null}[];
   unresolved: BrokerResult[];
 };
 
@@ -78,8 +81,9 @@ export function brokerHistoryTrades(
 export const brokerMoney = (value: number | null | undefined, currency?: string | null) =>
   value == null ? "—" : `${value.toFixed(2)} ${currency || "账户币种"}`;
 
+/** `entryRate`: a pending order's own price; omitted for market orders (bid/ask). */
 export function brokerRiskPrice(value: string, mode: "price" | "distance" | "amount", side: "Buy" | "Sell",
-  kind: "stop" | "limit", quantity: number, instrument: BrokerSnapshot["instrument"]): number | null {
+  kind: "stop" | "limit", quantity: number, instrument: BrokerSnapshot["instrument"], entryRate?: number): number | null {
   if (!value.trim()) return null;
   const input = Number(value);
   if (!Number.isFinite(input) || input <= 0) throw new Error("止损/止盈必须为有效正数，留空表示不设置");
@@ -87,7 +91,7 @@ export function brokerRiskPrice(value: string, mode: "price" | "distance" | "amo
   const cashPerPrice = (instrument.pip_cost ?? 0) * quantity / instrument.base_unit_size / instrument.point_size;
   if (mode === "amount" && !(cashPerPrice > 0)) throw new Error("福汇未提供有效点值，请改用价格或价差");
   const distance = mode === "amount" ? input / cashPerPrice : input;
-  const entry = side === "Buy" ? instrument.ask : instrument.bid;
+  const entry = entryRate ?? (side === "Buy" ? instrument.ask : instrument.bid);
   const direction = (side === "Buy" ? 1 : -1) * (kind === "limit" ? 1 : -1);
   return Number((entry + direction * distance).toFixed(instrument.digits));
 }

@@ -404,7 +404,11 @@ function pageHarness(data, index, initialTrades = [], penMode = "simple") {
     updateAutomaticPensAfterCandle() {}, updateAutomaticSegmentsAfterCandle() {}, toVolumePoint() {},
     indConfig: { emas: [], bollinger: { enabled: false }, macd: { enabled: false }, volume: {} },
     fullMacdDataRef: { current: [] }, subChartRef: { current: null },
-    advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null },
+    advanceAutomaticTrading: tracker.advanceEvent, placeOrderRef: { current: null }, fillPendingOrdersRef: { current: () => {} },
+    // Session breaks are display-only; the step handler refreshes them per candle.
+    sessionBreaksPrimitiveRef: { current: null }, sessionBreaksEnabledRef: { current: false },
+    timeframeRef: { current: "H4" }, timeframeSeconds: () => 14400,
+    updateLiquidityOverlay() {}, requestedFocusRangeRef: { current: null },
     ...risk, priceDecimals: 5,
     automaticRunRef: { current: null }, automaticTradingConfigRef: { current: { ...configModule.DEFAULT_AUTOMATIC_TRADING_CONFIG, penMode, firstOrderUnits: 1234 } },
     restartingBacktestRef: { current: false }, backtestSampleRef: { current: null }, chartPanGuardRef: { current: null },
@@ -430,7 +434,7 @@ function pageHarness(data, index, initialTrades = [], penMode = "simple") {
   context.commitTrades = (next) => { context.tradesRef.current = next; };
   context.settleClosedTrades = (next) => { events.push("settle"); context.commitTrades(next); };
   vm.createContext(context);
-  vm.runInContext(transpile(`globalThis.canPersistBacktestTrades = ${pageHandler("canPersistBacktestTrades")}; globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
+  vm.runInContext(transpile(`globalThis.canPersistBacktestTrades = ${pageHandler("canPersistBacktestTrades")}; globalThis.openSimulatedTrade = ${pageHandler("openSimulatedTrade")}; globalThis.placeOrder = ${pageHandler("handlePlaceOrder")}; globalThis.step = ${pageHandler("handleNextCandle")}; globalThis.settleReal = ${pageHandler("settleClosedTrades")}; globalThis.commitReal = ${pageHandler("commitTrades")}; globalThis.runBulk = ${pageHandler("handleRunAutomaticTrading")};`), context);
   context.placeOrderRef.current = context.placeOrder;
   context.commitTrades = context.commitReal;
   context.handleNextCandle = context.step;
@@ -958,6 +962,7 @@ function installRestartHarness(context, sample) {
     backtestCompletionRequestedRef: { current: false }, wasBacktestModeRef: { current: true },
     clientSessionIdRef: { current: "original-session" }, stateRef: { current: { lastHoveredTime: 123 } },
     setIsRestartingBacktest() {}, setManagedTradeId() {}, clearClosedTradeMarkers() {},
+    simPendingOrdersRef: { current: [] }, setSimPendingOrders() {}, setPendingDialog() {},
     disableAutomaticDrawings() {}, resetSupportResistance() {},
     stopAutomaticTrading: () => { context.isAutomaticTradingEnabled = false; context.advanceAutomaticTrading = () => null; },
     toggleAutomaticTrading: (startTime) => {
@@ -1290,7 +1295,8 @@ test("million-bar display keeps every series bounded and historical navigation l
     macdHistSeriesRef: { current: series() }, macdLineSeriesRef: { current: series() }, macdSignalSeriesRef: { current: series() },
     BOLLINGER_LINE_DEFINITIONS: [{ key: "middle" }, { key: "upper" }, { key: "lower" }],
     toBollingerLineData: (rows, key) => rows.map((row) => ({ time: row.time, value: row[key] })),
-    focusLatestCandles() {}, volumeChartRef: { current: null },
+    focusLatestCandles() {}, volumeChartRef: { current: null }, stateRef: { current: { lines: [] } },
+    requestAnimationFrame: () => 0,
   });
   vm.runInContext(transpile(`globalThis.recomputeIndicators = ${pageHandler("recomputeIndicators")}; globalThis.syncDisplayedData = ${pageHandler("syncDisplayedData")};`), context);
   context.syncDisplayedData(data, 900000, true, true);
@@ -1329,4 +1335,47 @@ test("large backtest benchmark", { skip: process.env.BACKTEST_PERF !== "1" }, as
       console.log(JSON.stringify({ fullLedgerScanCandles: count, seconds: (performance.now() - before) / 1000 }));
     }
   }
+});
+
+const pendingModule = loadModule("./pending-orders.ts");
+
+test("backtest pending orders fill inside the candle, persist as an open, and arm SL/TP from the next candle", () => {
+  const bar = (time, open, high, low, close) => ({ time, open, high, low, close });
+  // Flat history, then a dip to 98 that fills a 99 buy limit; the same candle
+  // also pierces the 98.5 stop, which must not apply until the next candle.
+  const data = [bar(1, 100, 100, 100, 100), bar(2, 100, 101, 98, 99.5), bar(3, 99.5, 99.6, 98.2, 98.4)];
+  const { context, events } = pageHarness(data, 1);
+  const filledToasts = [];
+  Object.assign(context, {
+    ...pendingModule,
+    simPendingOrdersRef: { current: [
+      { id: "p1", type: "Buy", kind: "limit", price: 99, units: 10, sl: 98.5, tp: 105 },
+      { id: "p2", type: "Buy", kind: "stop", price: 120, units: 5, sl: null, tp: null },
+    ] },
+    setSimPendingOrders() {},
+    toast: { success: (message) => filledToasts.push(message), error: (message) => assert.fail(message) },
+  });
+  vm.runInContext(transpile(`
+    globalThis.commitPendingOrders = ${pageHandler("commitPendingOrders")};
+    globalThis.canTradeSimPending = ${pageHandler("canTradeSimPending")};
+    fillPendingOrdersRef.current = ${pageHandler("fillPendingOrdersRef.current")};
+  `), context);
+
+  context.step();
+  const opened = context.tradesRef.current.filter((trade) => trade.status === "Open");
+  assert.equal(opened.length, 1);
+  assert.deepEqual(plain({ type: opened[0].type, entry: opened[0].entry, units: opened[0].units, sl: opened[0].sl, tp: opened[0].tp, entryTime: opened[0].entryTime }),
+    { type: "Buy", entry: 99, units: 10, sl: 98.5, tp: 105, entryTime: 2 });
+  // The untouched buy stop keeps waiting.
+  assert.deepEqual(plain(context.simPendingOrdersRef.current.map((order) => order.id)), ["p2"]);
+  const open = events.find((event) => event.client_trade_id === String(opened[0].id) && event.side);
+  assert.deepEqual(plain({ price: open.price, bar_time: open.bar_time, bar_index: open.bar_index, sl: open.sl_price, tp: open.tp_price }),
+    { price: 99, bar_time: 2, bar_index: 5001, sl: 98.5, tp: 105 });
+  assert.match(filledToasts[0], /Buy Limit 10 @ 99/);
+
+  context.step(); // low 98.2 now hits the 98.5 stop
+  const closed = context.tradesRef.current.find((trade) => trade.id === opened[0].id);
+  assert.equal(closed.status, "Closed");
+  assert.equal(closed.closePrice, 98.5);
+  assert.equal(closed.reason, "SL Hit");
 });

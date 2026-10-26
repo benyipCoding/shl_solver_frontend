@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
   useCallback,
+  useMemo,
 } from "react";
 import {
   CandlestickSeries,
@@ -15,6 +16,7 @@ import {
   LineSeries,
   createChart,
   createSeriesMarkers,
+  type IPriceLine,
   type Time,
 } from "lightweight-charts";
 
@@ -151,6 +153,17 @@ import {
 } from "@/components/market-master/backtest-replay";
 import { useResizableMarketPanels } from "@/hooks/useResizableMarketPanels";
 import { TradeManagementDialog } from "./TradeManagementDialog";
+import {
+  brokerPendingOrders,
+  getPendingOrderError,
+  pendingBracketsFromDistances,
+  pendingOrderKind,
+  pendingOrderLabel,
+  pendingOrderLabelZh,
+  resolvePendingFill,
+  type PendingOrder,
+} from "./pending-orders";
+import { BrokerPendingOrderDialog } from "./BrokerPendingOrderDialog";
 import { TradeConnectionPrimitive } from "./trade-connection";
 import { LiquidityZonesPrimitive } from "./liquidity-zones-primitive";
 import { calculateLiquidityZones } from "./liquidity-zones";
@@ -171,6 +184,7 @@ const toBollingerLineData = (data: any[], key: string) =>
       : { time: point.time, value: point[key] }
   );
 
+const NO_PENDING_ORDERS: PendingOrder[] = [];
 const CLOSED_TRADE_PROFIT_COLOR = "#15803d";
 const CLOSED_TRADE_LOSS_COLOR = "#b91c1c";
 const CLOSED_TRADE_MARKER_SIZE = 2.4;
@@ -1104,6 +1118,12 @@ export function MarketMasterPage() {
     balanceRef.current = balance;
   }, [balance]);
   const [trades, setTrades] = useState([]);
+  // Simulated pending orders (backtest only); realtime ones come from FXCM.
+  const [simPendingOrders, setSimPendingOrders] = useState<PendingOrder[]>([]);
+  const simPendingOrdersRef = useRef<PendingOrder[]>([]);
+  const [pendingDialog, setPendingDialog] = useState<
+    { mode: "create"; side: "Buy" | "Sell"; price: number } | { mode: "manage"; id: string } | null
+  >(null);
   const [orderUnits, setOrderUnits] = useState(100);
   const [slEnabled, setSlEnabled] = useState(true);
   const [slDistance, setSlDistance] = useState(20);
@@ -1128,6 +1148,12 @@ export function MarketMasterPage() {
     tradesRef.current = trades;
   }, [trades]);
   const orderLinesRef = useRef<any>({});
+  const PENDING_LINE_KEYS = { pending: "entry", pendingSl: "sl", pendingTp: "tp" } as const;
+  // Price line for a draggable order line: a position's SL/TP or a pending order line.
+  const orderPriceLineFor = ({ id, type }: { id: string | number; type: string }) =>
+    type in PENDING_LINE_KEYS
+      ? pendingLinesRef.current[id]?.[PENDING_LINE_KEYS[type as keyof typeof PENDING_LINE_KEYS]]
+      : orderLinesRef.current[id]?.[type];
   const seriesMarkersRef = useRef<any>(null);
   const closedTradeMarkersRef = useRef<any[]>([]);
   const markerTradesRef = useRef<TradePosition[]>([]);
@@ -1136,6 +1162,13 @@ export function MarketMasterPage() {
     () => {}
   );
   const placeOrderRef = useRef<(type: "Buy" | "Sell", candle: NormalizedCandle, barIndex: number, event?: AutomaticPenEvent) => void>(() => {});
+  // Pending orders shown on the chart (simulated in backtest, FXCM entry
+  // orders in realtime) and their dashed price lines.
+  const pendingOrdersRef = useRef<PendingOrder[]>([]);
+  const pendingLinesRef = useRef<Record<string, Record<"entry" | "sl" | "tp", IPriceLine | null>>>({});
+  const fillPendingOrdersRef = useRef<(candle: NormalizedCandle, barIndex: number) => void>(() => {});
+  const updatePendingPriceRef = useRef<(id: string, line: "pending" | "pendingSl" | "pendingTp", price: number) => void>(() => {});
+  const openPendingManagementRef = useRef<(id: string) => void>(() => {});
   const tradeConnectionRef = useRef<TradeConnectionPrimitive | null>(null);
   const focusedTradeIdRef = useRef<string | number | null>(null);
   const [focusedTradeId, setFocusedTradeId] = useState<string | number | null>(null);
@@ -1217,6 +1250,9 @@ export function MarketMasterPage() {
     setBalance(initialBalance);
     tradesRef.current = [];
     setTrades([]);
+    simPendingOrdersRef.current = [];
+    setSimPendingOrders([]);
+    setPendingDialog(null);
     clearClosedTradeMarkers();
   }, [clearClosedTradeMarkers, stopAutomaticTrading]);
 
@@ -1455,6 +1491,7 @@ export function MarketMasterPage() {
     hoveredOrderLine: null,
     draggingOrderLine: null,
     draggingOrderLinePrice: null,
+    draggingOrderLineStartY: 0,
     isHovering: false,
     dragStartX: 0,
     dragStartY: 0,
@@ -2435,6 +2472,9 @@ export function MarketMasterPage() {
       if (!preservedBacktest) {
         tradesRef.current = [];
         setTrades([]);
+        simPendingOrdersRef.current = [];
+        setSimPendingOrders([]);
+        setPendingDialog(null);
         removeOrderLines();
         clearClosedTradeMarkers();
       }
@@ -3481,9 +3521,9 @@ export function MarketMasterPage() {
         state.currentLogical = { time: dragTime, price };
 
       if (state.draggingOrderLine && price !== null) {
-        const { id, type } = state.draggingOrderLine;
-        if (orderLinesRef.current[id] && orderLinesRef.current[id][type]) {
-          orderLinesRef.current[id][type].applyOptions({ price: price });
+        const line = orderPriceLineFor(state.draggingOrderLine);
+        if (line) {
+          line.applyOptions({ price: price });
           state.draggingOrderLinePrice = price;
         }
         return;
@@ -3558,6 +3598,26 @@ export function MarketMasterPage() {
           const riskY = riskTrade ? series.priceToCoordinate(riskTrade[foundOrderLineHover.type]) : null;
           if (entryY !== null && riskY !== null && Math.abs(param.point.y - entryY) < Math.abs(param.point.y - riskY)) {
             foundOrderLineHover = null;
+          }
+        }
+
+        if (!foundOrderLineHover) {
+          // Pending order lines: the dashed entry line and its SL/TP.
+          for (const order of pendingOrdersRef.current) {
+            const hits = [
+              ["pending", order.price],
+              ["pendingSl", order.sl],
+              ["pendingTp", order.tp],
+            ] as const;
+            const hit = hits.find(([, price]) => {
+              if (price == null) return false;
+              const y = series.priceToCoordinate(price);
+              return y !== null && Math.abs(param.point.y - y) < 6;
+            });
+            if (hit) {
+              foundOrderLineHover = { id: order.id, type: hit[0] };
+              break;
+            }
           }
         }
 
@@ -3828,6 +3888,7 @@ export function MarketMasterPage() {
       if (state.hoveredOrderLine) {
         state.draggingOrderLine = state.hoveredOrderLine;
         state.draggingOrderLinePrice = null;
+        state.draggingOrderLineStartY = e.clientY;
         chart.applyOptions({ handleScroll: false, handleScale: false });
         return;
       }
@@ -3864,13 +3925,21 @@ export function MarketMasterPage() {
       }
     };
 
-    const mouseupHandler = () => {
+    const mouseupHandler = (e) => {
       const state = stateRef.current;
 
       if (state.draggingOrderLine) {
-        if (state.draggingOrderLinePrice !== null) {
-          const { id, type } = state.draggingOrderLine;
-          updateTradePriceRef.current(id, type, state.draggingOrderLinePrice);
+        const { id, type } = state.draggingOrderLine;
+        const isPending = String(type).startsWith("pending");
+        // A press that barely moves is a click: it opens the pending order.
+        const moved = Math.abs((e?.clientY ?? state.draggingOrderLineStartY) - state.draggingOrderLineStartY) >= 3;
+        if (isPending && type === "pending" && !moved) {
+          const order = pendingOrdersRef.current.find((item) => item.id === id);
+          if (order) orderPriceLineFor(state.draggingOrderLine)?.applyOptions({ price: order.price });
+          openPendingManagementRef.current(id);
+        } else if (state.draggingOrderLinePrice !== null) {
+          if (isPending) updatePendingPriceRef.current(id, type, state.draggingOrderLinePrice);
+          else updateTradePriceRef.current(id, type, state.draggingOrderLinePrice);
         }
         state.draggingOrderLine = null;
         state.draggingOrderLinePrice = null;
@@ -3911,8 +3980,10 @@ export function MarketMasterPage() {
         ignoreContextMenuCloseRef.current = false;
       }, 0);
 
-      const menuWidth = 188;
-      const menuHeight = 48;
+      const menuWidth = 220;
+      const menuHeight = 132;
+      const chartRect = chartContainerRef.current?.getBoundingClientRect();
+      const pointerPrice = chartRect ? series.coordinateToPrice(e.clientY - chartRect.top) : null;
       const x = Math.max(
         8,
         Math.min(e.clientX, window.innerWidth - menuWidth - 8)
@@ -3941,6 +4012,7 @@ export function MarketMasterPage() {
         kind: "chart",
         x,
         y,
+        price: pointerPrice != null && Number.isFinite(pointerPrice) && pointerPrice > 0 ? Number(pointerPrice) : null,
       });
     };
 
@@ -4575,6 +4647,9 @@ export function MarketMasterPage() {
         return trade;
       });
       settleClosedTrades(nextTrades, newlyClosed, balanceChange, currentIndex);
+      // Pending orders fill after existing positions settle on this candle;
+      // like market orders, their SL/TP apply from the next candle.
+      fillPendingOrdersRef.current(nextCandle, currentIndex);
     }
 
     // Existing positions settle against this candle before entering at its close;
@@ -4855,6 +4930,25 @@ export function MarketMasterPage() {
         ? entry + tpDistance
         : entry - tpDistance
       : null;
+    openSimulatedTrade({
+      type,
+      entry,
+      sl,
+      tp,
+      units,
+      entryCandle,
+      barIndex,
+      extra: plan ? { automaticPen: plan.automaticPen } : {},
+      fundedBy: plan?.automaticPen.fundedBy,
+    });
+  };
+  placeOrderRef.current = handlePlaceOrder;
+
+  // Record a simulated fill: a market order, or a pending order reaching its price.
+  const openSimulatedTrade = ({ type, entry, sl, tp, units, entryCandle, barIndex, extra = {}, fundedBy }: {
+    type: "Buy" | "Sell"; entry: number; sl: number | null; tp: number | null; units: number;
+    entryCandle: NormalizedCandle; barIndex: number; extra?: Record<string, unknown>; fundedBy?: string;
+  }) => {
     const newTrade = {
       id: typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
@@ -4864,7 +4958,7 @@ export function MarketMasterPage() {
       sl,
       tp,
       units,
-      ...(plan ? { automaticPen: plan.automaticPen } : {}),
+      ...extra,
       status: "Open",
       pnl: 0,
       visibleOnChart: true,
@@ -4874,7 +4968,6 @@ export function MarketMasterPage() {
             realtimeQuoteSequence: realtimeQuoteSequenceRef.current } : {}),
     };
     // Consume funding only after a valid order has actually been created.
-    const fundedBy = plan?.automaticPen.fundedBy;
     const previousTrades = fundedBy === undefined ? tradesRef.current : tradesRef.current.map((trade) =>
       String(trade.id) === fundedBy
         ? { ...trade, automaticPen: { ...trade.automaticPen, fundedChildId: newTrade.id } }
@@ -4898,8 +4991,174 @@ export function MarketMasterPage() {
         tp_price: tp,
       });
     }
+    return newTrade;
   };
-  placeOrderRef.current = handlePlaceOrder;
+
+  // ---- Pending orders ----
+  const commitPendingOrders = (next: PendingOrder[]) => {
+    simPendingOrdersRef.current = next;
+    setSimPendingOrders(next);
+  };
+  const canTradeSimPending = () =>
+    dataModeRef.current === "history" && isBacktestModeRef.current && !isReplayModeRef.current;
+
+  const placeSimPendingOrder = (draft: {
+    type: "Buy" | "Sell"; price: number; units: number; sl: number | null; tp: number | null;
+  }): string | null => {
+    if (!canTradeSimPending()) return "仅在逐K回测中可挂单";
+    const candle = getActiveCandle(fullDataRef.current, currentIndexRef.current);
+    if (!candle?.close) return "暂无有效市价";
+    const order: PendingOrder = {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `pending-${Date.now()}`,
+      type: draft.type,
+      price: Number(draft.price.toFixed(priceDecimals)),
+      units: draft.units,
+      sl: draft.sl,
+      tp: draft.tp,
+      kind: "limit",
+      createdTime: candle.time,
+    };
+    order.kind = pendingOrderKind(order.type, order.price, candle.close);
+    const error = getPendingOrderError(order);
+    if (error) return error;
+    commitPendingOrders([...simPendingOrdersRef.current, order]);
+    toast.success(`已挂${pendingOrderLabelZh(order)} ${order.units} Units @ ${order.price.toFixed(priceDecimals)}`);
+    return null;
+  };
+
+  const updateSimPendingOrder = (
+    id: string,
+    patch: Partial<Pick<PendingOrder, "price" | "units" | "sl" | "tp">>
+  ): string | null => {
+    if (!canTradeSimPending()) return "仅在逐K回测中可修改挂单";
+    const order = simPendingOrdersRef.current.find((item) => item.id === id);
+    if (!order) return "挂单已成交或已撤销";
+    const market = getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close;
+    if (!market) return "暂无有效市价";
+    const next = { ...order, ...patch };
+    next.price = Number(next.price.toFixed(priceDecimals));
+    const error = getPendingOrderError(next);
+    if (error) return error;
+    // Moving the price across the market turns a limit into a stop (and back).
+    next.kind = pendingOrderKind(next.type, next.price, market);
+    commitPendingOrders(simPendingOrdersRef.current.map((item) => (item.id === id ? next : item)));
+    return null;
+  };
+
+  const cancelSimPendingOrder = (id: string) => {
+    const order = simPendingOrdersRef.current.find((item) => item.id === id);
+    if (!order) return;
+    commitPendingOrders(simPendingOrdersRef.current.filter((item) => item.id !== id));
+    toast(`已撤销${pendingOrderLabelZh(order)} @ ${order.price.toFixed(priceDecimals)}`);
+  };
+
+  fillPendingOrdersRef.current = (candle, barIndex) => {
+    const orders = simPendingOrdersRef.current;
+    if (!orders.length || !canTradeSimPending()) return;
+    const remaining: PendingOrder[] = [];
+    const filled: string[] = [];
+    for (const order of orders) {
+      const fill = resolvePendingFill(order, candle);
+      if (fill == null) {
+        remaining.push(order);
+        continue;
+      }
+      const entry = Number(fill.toFixed(priceDecimals));
+      openSimulatedTrade({ type: order.type, entry, sl: order.sl, tp: order.tp, units: order.units, entryCandle: candle, barIndex });
+      filled.push(`${pendingOrderLabel(order)} ${order.units} @ ${entry.toFixed(priceDecimals)}`);
+    }
+    if (!filled.length) return;
+    commitPendingOrders(remaining);
+    if (!automaticRunRef.current?.suppress) toast.success(`挂单成交：${filled.join("，")}`);
+  };
+
+  // Realtime pending orders are FXCM entry orders from the account snapshot.
+  const brokerPending = useMemo(
+    () => (broker.snapshot ? brokerPendingOrders(broker.snapshot.orders, broker.snapshot.instrument.symbol) : []),
+    [broker.snapshot]
+  );
+  const pendingOrders = dataMode === "realtime"
+    ? brokerPending
+    : dataMode === "history" && isBacktestMode && !isReplayMode
+      ? simPendingOrders
+      : NO_PENDING_ORDERS;
+  pendingOrdersRef.current = pendingOrders;
+  const [brokerPendingDialog, setBrokerPendingDialog] = useState<
+    { mode: "create"; side: "Buy" | "Sell"; price: number } | { mode: "manage"; id: string } | null
+  >(null);
+
+  const revertPendingLine = (id: string, line: "pending" | "pendingSl" | "pendingTp") => {
+    const order = pendingOrdersRef.current.find((item) => item.id === id);
+    const price = order ? (line === "pending" ? order.price : line === "pendingSl" ? order.sl : order.tp) : null;
+    if (price != null) orderPriceLineFor({ id, type: line })?.applyOptions({ price });
+  };
+
+  updatePendingPriceRef.current = (id, line, rawPrice) => {
+    if (dataModeRef.current === "realtime") {
+      const digits = brokerRef.current.snapshot?.instrument.digits ?? priceDecimals;
+      const rate = Number(rawPrice.toFixed(digits));
+      const order = pendingOrdersRef.current.find((item) => item.id === id);
+      if (!order?.brokerOrderId) return revertPendingLine(id, line);
+      void brokerRef.current
+        .send(line === "pending"
+          ? { action: "entry_edit", order_id: order.brokerOrderId, rate }
+          : { action: "entry_risk", order_id: order.brokerOrderId, kind: line === "pendingSl" ? "stop" : "limit", rate })
+        .then(() => toast.success("福汇已确认修改挂单"))
+        .catch((error) => {
+          revertPendingLine(id, line);
+          toast.error(error.message);
+        });
+      return;
+    }
+    const patch = line === "pending" ? { price: rawPrice }
+      : line === "pendingSl" ? { sl: Number(rawPrice.toFixed(priceDecimals)) }
+      : { tp: Number(rawPrice.toFixed(priceDecimals)) };
+    const error = updateSimPendingOrder(id, patch);
+    if (error) {
+      revertPendingLine(id, line);
+      toast.error(error);
+    }
+  };
+
+  openPendingManagementRef.current = (id) => {
+    if (dataModeRef.current === "realtime") setBrokerPendingDialog({ mode: "manage", id });
+    else if (canTradeSimPending()) setPendingDialog({ mode: "manage", id });
+  };
+
+  const canPlacePending = dataMode === "realtime"
+    ? broker.ready
+    : dataMode === "history" && isBacktestMode && !isReplayMode && !isDataLoading && !dataError;
+  // Kind preview: buys compare with the ask, sells with the bid in realtime.
+  const pendingMarketPrice = (side: "Buy" | "Sell") => {
+    if (dataMode === "realtime") {
+      const instrument = broker.snapshot?.instrument;
+      return instrument ? (side === "Buy" ? instrument.ask : instrument.bid) : 0;
+    }
+    return currentPrice;
+  };
+
+  const openPendingCreate = (side: "Buy" | "Sell", price: number) => {
+    if (!canPlacePending || !Number.isFinite(price) || price <= 0) return;
+    const digits = dataMode === "realtime" ? broker.snapshot?.instrument.digits ?? priceDecimals : priceDecimals;
+    const rounded = Number(price.toFixed(digits));
+    if (dataMode === "realtime") setBrokerPendingDialog({ mode: "create", side, price: rounded });
+    else setPendingDialog({ mode: "create", side, price: rounded });
+  };
+
+  // Terminal "挂单" buttons place directly with the terminal's size and SL/TP.
+  const placePendingFromTerminal = (side: "Buy" | "Sell", price: number) => {
+    const brackets = pendingBracketsFromDistances(
+      side, price, { enabled: slEnabled, distance: slDistance }, { enabled: tpEnabled, distance: tpDistance }, priceDecimals
+    );
+    const error = placeSimPendingOrder({ type: side, price, units: orderUnits, ...brackets });
+    if (error) toast.error(error);
+  };
+
+  const handleMenuPending = (side: "Buy" | "Sell") => {
+    const price = contextMenu?.price;
+    setContextMenu(null);
+    if (price != null) openPendingCreate(side, price);
+  };
 
   const handleCloseMarket = (tradeId, unitsOverride?: number) => {
     if (dataModeRef.current === "realtime") { setManagedTradeId(tradeId); return; }
@@ -5670,6 +5929,40 @@ export function MarketMasterPage() {
       });
   }, [trades]);
 
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    const lines = pendingLinesRef.current;
+    const live = new Set(pendingOrders.map((order) => order.id));
+    for (const id of Object.keys(lines)) {
+      if (live.has(id)) continue;
+      for (const line of Object.values(lines[id])) if (line) series.removePriceLine(line);
+      delete lines[id];
+    }
+    const dragging = stateRef.current.draggingOrderLine;
+    for (const order of pendingOrders) {
+      const color = order.type === "Buy" ? "#10b981" : "#ef4444";
+      const entry = lines[order.id] ?? (lines[order.id] = { entry: null, sl: null, tp: null });
+      const sync = (key: "entry" | "sl" | "tp", lineType: string, price: number | null, options: Record<string, unknown>) => {
+        // Leave the line being dragged where the pointer put it.
+        if (dragging?.id === order.id && dragging.type === lineType) return;
+        if (price == null) {
+          if (entry[key]) series.removePriceLine(entry[key]);
+          entry[key] = null;
+        } else if (!entry[key]) {
+          entry[key] = series.createPriceLine({ price, axisLabelVisible: true, ...options });
+        } else {
+          entry[key].applyOptions({ price, ...options });
+        }
+      };
+      sync("entry", "pending", order.price, {
+        color, lineWidth: 1, lineStyle: 2, title: `${pendingOrderLabel(order)} ${order.units}`,
+      });
+      sync("sl", "pendingSl", order.sl, { color: "#ef4444", lineWidth: 1, lineStyle: 3, title: "挂单 SL" });
+      sync("tp", "pendingTp", order.tp, { color: "#10b981", lineWidth: 1, lineStyle: 3, title: "挂单 TP" });
+    }
+  }, [pendingOrders]);
+
   const openTrades = trades.filter((t) => t.status === "Open");
 
   // After the realtime snapshot is on screen, page back through FXCM until a
@@ -6101,6 +6394,17 @@ export function MarketMasterPage() {
         handleAddDraftEma={handleAddDraftEma}
         handleIndDragStart={handleIndDragStart}
         handleMenuCloseAll={handleMenuCloseAll}
+        handleMenuPending={handleMenuPending}
+        pendingMenu={{
+          enabled: canPlacePending,
+          disabledReason: dataMode === "realtime"
+            ? "等待福汇账户连接后可挂单"
+            : isReplayMode ? "回放模式下不可挂单" : "请先开启逐K回测后再挂单",
+          buyKind: contextMenu?.price != null && pendingMarketPrice("Buy") > 0
+            ? pendingOrderKind("Buy", contextMenu.price, pendingMarketPrice("Buy")) : null,
+          sellKind: contextMenu?.price != null && pendingMarketPrice("Sell") > 0
+            ? pendingOrderKind("Sell", contextMenu.price, pendingMarketPrice("Sell")) : null,
+        }}
         handleMenuConfig={handleMenuConfig}
         handleMenuDelete={handleMenuDelete}
         handleRemoveDraftEma={handleRemoveDraftEma}
@@ -6254,6 +6558,10 @@ export function MarketMasterPage() {
         isBottomPanelOpen={isBottomPanelOpen}
         isDataLoading={isDataLoading}
         isRestoringViewport={isRestoringViewport}
+        pendingOrders={dataMode === "history" ? pendingOrders : undefined}
+        onPlacePending={dataMode === "history" ? placePendingFromTerminal : undefined}
+        onManagePending={(id) => openPendingManagementRef.current(id)}
+        onCancelPending={cancelSimPendingOrder}
         isHistoryLoading={isHistoryLoading}
         historyLoadKind={historyLoadKind}
         isMaximized={isMaximized}
@@ -6358,6 +6666,65 @@ export function MarketMasterPage() {
           onDismiss={() => setManagedTradeId(null)}
           onSaveRisk={handleSaveTradeRisk}
           onCloseUnits={handleCloseMarket}
+        />
+      )}
+      {dataMode === "history" && isBacktestMode && !isReplayMode && pendingDialog && (() => {
+        const order = pendingDialog.mode === "manage"
+          ? simPendingOrders.find((item) => item.id === pendingDialog.id)
+          : undefined;
+        if (pendingDialog.mode === "manage" && !order) return null;
+        const side = order?.type ?? (pendingDialog.mode === "create" ? pendingDialog.side : "Buy");
+        const price = order?.price ?? (pendingDialog.mode === "create" ? pendingDialog.price : 0);
+        // A new order starts from the terminal's size and SL/TP distances.
+        const brackets = order
+          ? { sl: order.sl, tp: order.tp }
+          : pendingBracketsFromDistances(
+              side, price, { enabled: slEnabled, distance: slDistance }, { enabled: tpEnabled, distance: tpDistance }, priceDecimals
+            );
+        return (
+          <TradeManagementDialog
+            key={order?.id ?? `new:${side}:${price}`}
+            trade={{
+              id: order?.id ?? "new-pending",
+              type: side,
+              entry: price,
+              units: order?.units ?? orderUnits,
+              sl: brackets.sl,
+              tp: brackets.tp,
+              status: "Open",
+              pnl: 0,
+              entryTime: 0,
+            }}
+            symbol={symbol}
+            currentPrice={currentPrice}
+            priceDecimals={priceDecimals}
+            riskInputStep={activeInstrumentProfile.inputStep}
+            defaultSlDistance={activeInstrumentProfile.sl}
+            defaultTpDistance={activeInstrumentProfile.tp}
+            onDismiss={() => setPendingDialog(null)}
+            onSaveRisk={() => null}
+            onCloseUnits={() => {}}
+            pending={{
+              mode: pendingDialog.mode,
+              onSubmit: (draft) => order
+                ? updateSimPendingOrder(order.id, draft)
+                : placeSimPendingOrder({ type: side, ...draft }),
+              onCancelOrder: order
+                ? () => {
+                    cancelSimPendingOrder(order.id);
+                    setPendingDialog(null);
+                  }
+                : undefined,
+            }}
+          />
+        );
+      })()}
+      {dataMode === "realtime" && brokerPendingDialog && (
+        <BrokerPendingOrderDialog
+          key={brokerPendingDialog.mode === "manage" ? brokerPendingDialog.id : `new:${brokerPendingDialog.side}:${brokerPendingDialog.price}`}
+          broker={broker}
+          target={brokerPendingDialog}
+          onDismiss={() => setBrokerPendingDialog(null)}
         />
       )}
     </div>

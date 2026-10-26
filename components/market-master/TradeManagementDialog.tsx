@@ -13,6 +13,18 @@ import {
   type TradeRiskKind,
   type TradePosition,
 } from "./trade-management";
+import {
+  getPendingRiskError,
+  pendingOrderKind,
+  pendingOrderLabelZh,
+} from "./pending-orders";
+
+/** Pending-order variant: no position yet, so no closing; price is editable. */
+export type PendingDialogConfig = {
+  mode: "create" | "manage";
+  onSubmit: (draft: { price: number; units: number; sl: number | null; tp: number | null }) => string | null;
+  onCancelOrder?: () => void;
+};
 
 type Props = {
   trade: TradePosition;
@@ -29,6 +41,7 @@ type Props = {
     tp: number | null,
   ) => string | null;
   onCloseUnits: (tradeId: TradePosition["id"], units: number) => void;
+  pending?: PendingDialogConfig;
 };
 
 const Money = ({ value }: { value: number }) => (
@@ -125,7 +138,7 @@ export function TradeManagementDialog(props: Props) {
           className="flex items-center gap-2 font-semibold"
         >
           <GripHorizontal size={18} className="text-gray-500" />
-          订单管理 · {props.symbol}
+          {props.pending ? (props.pending.mode === "create" ? "新建挂单" : "挂单管理") : "订单管理"} · {props.symbol}
         </h3>
         <button
           type="button"
@@ -159,15 +172,25 @@ function TradeManagementForm({
   onDismiss,
   onSaveRisk,
   onCloseUnits,
+  pending,
 }: Props & {
   riskInputMode: TradeRiskInputMode;
   setRiskInputMode: (mode: TradeRiskInputMode) => void;
 }) {
+  const [priceInput, setPriceInput] = useState(trade.entry.toFixed(priceDecimals));
+  const [unitsInput, setUnitsInput] = useState(String(trade.units));
+  const draftPrice = Number(priceInput);
+  const draftUnits = Number(unitsInput);
+  // A pending order's SL/TP and P&L preview are measured from its own price.
+  const riskTrade = pending
+    ? { ...trade, entry: draftPrice, units: draftUnits > 0 ? draftUnits : trade.units }
+    : trade;
+  const riskReference = pending ? draftPrice : currentPrice;
   const suggestedPrice = (kind: TradeRiskKind) =>
     suggestTradeRiskPrice(
       trade.type,
       kind,
-      currentPrice,
+      riskReference,
       kind === "sl" ? defaultSlDistance : defaultTpDistance,
       priceDecimals,
     );
@@ -176,7 +199,7 @@ function TradeManagementForm({
     return {
       price,
       input: formatTradeRiskInput(
-        trade,
+        riskTrade,
         kind,
         price,
         riskInputMode,
@@ -200,7 +223,7 @@ function TradeManagementForm({
     setSlDraft((draft) => ({
       ...draft,
       input: formatTradeRiskInput(
-        trade,
+        riskTrade,
         "sl",
         draft.price,
         mode,
@@ -210,7 +233,7 @@ function TradeManagementForm({
     setTpDraft((draft) => ({
       ...draft,
       input: formatTradeRiskInput(
-        trade,
+        riskTrade,
         "tp",
         draft.price,
         mode,
@@ -225,10 +248,26 @@ function TradeManagementForm({
       : riskInputMode === "points"
         ? "点"
         : "USD";
-  const riskError =
-    getRiskPriceError(trade.type, "sl", sl, currentPrice) ||
-    getRiskPriceError(trade.type, "tp", tp, currentPrice);
-  const hasChanges = sl !== trade.sl || tp !== trade.tp;
+  const pendingError = !pending
+    ? null
+    : !Number.isFinite(draftPrice) || draftPrice <= 0
+      ? "挂单价必须是大于 0 的有效价格"
+      : !Number.isSafeInteger(draftUnits) || draftUnits <= 0
+        ? "交易数量必须为正整数"
+        : null;
+  const riskError = pending
+    ? pendingError ||
+      getPendingRiskError(trade.type, "sl", sl, draftPrice) ||
+      getPendingRiskError(trade.type, "tp", tp, draftPrice)
+    : getRiskPriceError(trade.type, "sl", sl, currentPrice) ||
+      getRiskPriceError(trade.type, "tp", tp, currentPrice);
+  const hasChanges =
+    sl !== trade.sl ||
+    tp !== trade.tp ||
+    (pending != null && (draftPrice !== trade.entry || draftUnits !== trade.units));
+  const pendingKind = pending && Number.isFinite(draftPrice) && draftPrice > 0 && currentPrice > 0
+    ? pendingOrderKind(trade.type, draftPrice, currentPrice)
+    : null;
   const units = Number(closeInput);
   const canClose =
     Number.isInteger(units) &&
@@ -239,6 +278,32 @@ function TradeManagementForm({
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 text-sm">
+      {pending ? (
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-800 px-3 py-2 sm:grid-cols-4">
+        <div className="space-y-0.5 font-semibold">
+          <span className={`block ${trade.type === "Buy" ? "text-emerald-400" : "text-red-400"}`}>
+            {pendingKind ? pendingOrderLabelZh({ type: trade.type, kind: pendingKind }) : trade.type === "Buy" ? "买入挂单" : "卖出挂单"}
+          </span>
+          <span className="block">{Number.isSafeInteger(draftUnits) && draftUnits > 0 ? draftUnits : "—"} Units</span>
+        </div>
+        <div className="space-y-0.5 text-gray-400">
+          <span className="block text-xs">挂单价</span>
+          <span className="block font-mono text-gray-200">
+            {Number.isFinite(draftPrice) && draftPrice > 0 ? draftPrice.toFixed(priceDecimals) : "—"}
+          </span>
+        </div>
+        <div className="space-y-0.5 text-gray-400">
+          <span className="block text-xs">当前市价</span>
+          <span className="block font-mono text-gray-200">{currentPrice.toFixed(priceDecimals)}</span>
+        </div>
+        <div className="space-y-0.5 text-gray-400">
+          <span className="block text-xs">距当前市价</span>
+          <span className="block font-mono text-gray-200">
+            {Number.isFinite(draftPrice) && draftPrice > 0 ? Math.abs(draftPrice - currentPrice).toFixed(priceDecimals) : "—"}
+          </span>
+        </div>
+      </div>
+      ) : (
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-gray-800 px-3 py-2 sm:grid-cols-4">
         <div className="space-y-0.5 font-semibold">
           <span
@@ -267,6 +332,7 @@ function TradeManagementForm({
           <Money value={floatingPnl} />
         </div>
       </div>
+      )}
 
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -301,15 +367,17 @@ function TradeManagementForm({
           </div>
           <button
             type="button"
-            disabled={!hasChanges || !!riskError}
+            disabled={(pending?.mode !== "create" && !hasChanges) || !!riskError}
             onClick={() => {
-              const error = onSaveRisk(trade.id, sl, tp);
+              const error = pending
+                ? pending.onSubmit({ price: draftPrice, units: draftUnits, sl, tp })
+                : onSaveRisk(trade.id, sl, tp);
               setSaveError(error);
               if (error === null) onDismiss();
             }}
             className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            保存止损 / 止盈
+            {pending ? (pending.mode === "create" ? "确认挂单" : "保存挂单") : "保存止损 / 止盈"}
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -364,7 +432,7 @@ function TradeManagementForm({
                         field.setDraft({
                           price,
                           input: formatTradeRiskInput(
-                            trade,
+                            riskTrade,
                             field.kind,
                             price,
                             riskInputMode,
@@ -401,7 +469,7 @@ function TradeManagementForm({
                     field.setDraft({
                       input,
                       price: tradeRiskInputToPrice(
-                        trade,
+                        riskTrade,
                         field.kind,
                         input,
                         riskInputMode,
@@ -416,7 +484,7 @@ function TradeManagementForm({
                       field.setDraft((draft) => ({
                         ...draft,
                         input: formatTradeRiskInput(
-                          trade,
+                          riskTrade,
                           field.kind,
                           draft.price,
                           riskInputMode,
@@ -439,11 +507,11 @@ function TradeManagementForm({
                   >
                     <div className="flex justify-between">
                       <span>预计盈亏</span>
-                      <Money value={calculateTradePnl(trade, field.price)} />
+                      <Money value={calculateTradePnl(riskTrade, field.price)} />
                     </div>
                     <div>
-                      距当前市价{" "}
-                      {Math.abs(field.price - currentPrice).toFixed(
+                      {pending ? "距挂单价" : "距当前市价"}{" "}
+                      {Math.abs(field.price - riskReference).toFixed(
                         priceDecimals,
                       )}{" "}
                       点
@@ -460,6 +528,51 @@ function TradeManagementForm({
         )}
       </div>
 
+      {pending ? (
+      <div className="grid gap-3 border-t border-gray-700 pt-3 sm:grid-cols-3">
+        <label className="min-w-0 space-y-2">
+          <span className="flex items-center justify-between font-semibold">
+            挂单价
+            {pendingKind && <span className="text-xs font-normal text-gray-400">{pendingKind === "limit" ? "限价" : "止损"}挂单</span>}
+          </span>
+          <input
+            aria-label="挂单价"
+            type="number"
+            step={riskInputStep}
+            value={priceInput}
+            onChange={(e) => { setPriceInput(e.target.value); setSaveError(null); }}
+            className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-1.5 font-mono outline-none focus:border-blue-500"
+          />
+        </label>
+        <label className="min-w-0 space-y-2">
+          <span className="block font-semibold">数量 (Units)</span>
+          <input
+            aria-label="挂单数量"
+            type="number"
+            min={1}
+            step={1}
+            value={unitsInput}
+            onChange={(e) => { setUnitsInput(e.target.value); setSaveError(null); }}
+            className="w-full rounded border border-gray-600 bg-gray-800 px-3 py-1.5 font-mono outline-none focus:border-blue-500"
+          />
+        </label>
+        <div className="flex min-w-0 items-end">
+          {pending.onCancelOrder ? (
+            <button
+              type="button"
+              onClick={pending.onCancelOrder}
+              className="w-full rounded-lg border border-red-500/50 bg-red-500/10 py-1.5 font-semibold text-red-300 hover:bg-red-500/20"
+            >
+              撤销挂单
+            </button>
+          ) : (
+            <p className="text-xs leading-5 text-gray-500">
+              买单价格低于现价为限价挂单、高于现价为止损挂单；卖单相反。
+            </p>
+          )}
+        </div>
+      </div>
+      ) : (
       <div className="grid gap-3 border-t border-gray-700 pt-3 sm:grid-cols-2">
         <div className="min-w-0 space-y-2">
           <label
@@ -520,8 +633,11 @@ function TradeManagementForm({
           </button>
         </div>
       </div>
+      )}
       <p className="text-xs text-gray-500">
-        {riskInputMode === "price"
+        {pending
+          ? "K线触及挂单价时成交（跳空按开盘价）；止损止盈从成交后的下一根K线开始生效。也可在图上拖动挂单虚线改价。"
+          : riskInputMode === "price"
           ? "未设置时按品种和当前市价预填参考价，勾选后保存即可。拖动标题栏可移动窗口。"
           : `点数即价差，按建仓价和剩余 ${trade.units} Units 换算；止损正数为亏损，负数为锁盈。`}
       </p>
