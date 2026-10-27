@@ -7,8 +7,10 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import type { BrokerTrading } from "@/hooks/useBrokerTrading";
 import {
+  brokerExpectedPl,
   brokerMoney,
   brokerRiskPrice,
   type BrokerPosition,
@@ -115,7 +117,7 @@ export function BrokerTradeTerminal({
     try {
       if (!instrument) return;
       const entryRate = isPendingMode ? Number(pendingRateValue.toFixed(instrument.digits)) : undefined;
-      const result = await broker.send({
+      await broker.send({
         action: isPendingMode ? "entry" : "open",
         side,
         amount,
@@ -132,7 +134,6 @@ export function BrokerTradeTerminal({
           entryRate,
         ),
       });
-      setMessage(result.message);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "交易请求失败");
     }
@@ -441,7 +442,8 @@ export function BrokerTradeTerminal({
             </p>
           )}
 
-          {(message || broker.result?.message) && (
+          {/* Confirmed commands are announced by a toast, not kept here. */}
+          {(message || (broker.result && broker.result.status !== "confirmed")) && (
             <p
               role="status"
               className="mb-3 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs leading-5 text-amber-200"
@@ -658,12 +660,16 @@ export function BrokerCloseAllDialog({
     setRunning(true);
     try {
       for (const position of selection.positions) {
-        await broker.send({
-          action: "close",
-          trade_id: position.trade_id,
-          amount: position.amount,
-        });
+        await broker.send(
+          {
+            action: "close",
+            trade_id: position.trade_id,
+            amount: position.amount,
+          },
+          { quiet: true },
+        );
       }
+      toast.success(`福汇已确认平仓 ${selection.positions.length} 笔持仓`);
       onDismiss();
     } catch (error) {
       setMessage(
@@ -733,17 +739,26 @@ export function BrokerCloseAllDialog({
 export function BrokerTradeManagement({
   broker,
   tradeId,
+  draft,
   onDismiss,
 }: {
   broker: BrokerTrading;
   tradeId: string;
+  /** SL/TP prices dragged on the chart, waiting for the user to save them. */
+  draft?: { stop?: number; limit?: number };
   onDismiss: () => void;
 }) {
   const position = broker.snapshot?.positions.find(
     (item) => item.trade_id === tradeId,
   );
-  const [stop, setStop] = useState(position?.stop?.toString() ?? "");
-  const [limit, setLimit] = useState(position?.limit?.toString() ?? "");
+  const digits = broker.snapshot?.instrument.digits;
+  const formatRate = (rate: number) => (digits == null ? String(rate) : rate.toFixed(digits));
+  const [stop, setStop] = useState(
+    draft?.stop != null ? formatRate(draft.stop) : position?.stop?.toString() ?? "",
+  );
+  const [limit, setLimit] = useState(
+    draft?.limit != null ? formatRate(draft.limit) : position?.limit?.toString() ?? "",
+  );
   const [amount, setAmount] = useState(position?.amount.toString() ?? "");
   const [status, setStatus] = useState("");
 
@@ -777,6 +792,7 @@ export function BrokerTradeManagement({
   }
 
   const currency = broker.snapshot?.account.currency;
+  const instrument = broker.snapshot?.instrument;
   const execute = async (kind: "stop" | "limit" | "close") => {
     try {
       setStatus("");
@@ -792,7 +808,8 @@ export function BrokerTradeManagement({
                 : null,
             },
       );
-      setStatus("福汇已确认执行");
+      // The broker hook confirms success with a toast; a saved SL/TP is done.
+      if (kind !== "close") onDismiss();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "指令失败");
     }
@@ -878,21 +895,34 @@ export function BrokerTradeManagement({
                     label: "止损价格",
                     value: stop,
                     setValue: setStop,
+                    dragged: draft?.stop != null,
                   },
                   {
                     kind: "limit",
                     label: "止盈价格",
                     value: limit,
                     setValue: setLimit,
+                    dragged: draft?.limit != null,
                   },
                 ] as const
-              ).map((field) => (
+              ).map((field) => {
+                const expected = field.value.trim() && instrument
+                  ? brokerExpectedPl(position, Number(field.value), instrument)
+                  : null;
+                return (
                 <div
                   key={field.kind}
-                  className="rounded-lg border border-gray-700 p-3"
+                  className={`rounded-lg border p-3 ${
+                    field.dragged ? "border-amber-500/60" : "border-gray-700"
+                  }`}
                 >
-                  <label className="mb-1.5 block text-gray-300">
+                  <label className="mb-1.5 flex items-center justify-between gap-2 text-gray-300">
                     {field.label}
+                    {field.dragged && (
+                      <span className="text-xs font-normal text-amber-300">
+                        已从图表拖动填入，保存后生效
+                      </span>
+                    )}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -914,11 +944,25 @@ export function BrokerTradeManagement({
                       保存
                     </button>
                   </div>
+                  {expected != null && (
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      {field.kind === "stop" ? "触发止损" : "触发止盈"}预计
+                      {expected >= 0 ? "盈利" : "亏损"}{" "}
+                      <span
+                        className={`font-mono ${
+                          expected >= 0 ? "text-emerald-400" : "text-red-400"
+                        }`}
+                      >
+                        {brokerMoney(Math.abs(expected), currency)}
+                      </span>
+                    </p>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             <p className="text-xs text-gray-500">
-              清空价格并保存，可撤销对应的止损或止盈。
+              预计盈亏按建仓价和持仓数量估算，不含佣金和过夜费。清空价格并保存，可撤销对应的止损或止盈。
             </p>
           </div>
 

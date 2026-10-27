@@ -74,11 +74,11 @@ export function BrokerPendingOrderDialog({
     amountValue >= instrument.min_quantity && amountValue <= instrument.max_quantity &&
     amountValue % instrument.base_unit_size === 0;
 
-  const run = async (command: Parameters<BrokerTrading["send"]>[0], done?: string) => {
+  const run = async (command: Parameters<BrokerTrading["send"]>[0]) => {
     try {
       setStatus("");
+      // Success is announced by the broker hook's toast.
       await broker.send(command);
-      setStatus(done ?? "福汇已确认执行");
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "指令失败");

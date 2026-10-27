@@ -1175,6 +1175,10 @@ export function MarketMasterPage() {
   const focusedTradeIdRef = useRef<string | number | null>(null);
   const [focusedTradeId, setFocusedTradeId] = useState<string | number | null>(null);
   const [managedTradeId, setManagedTradeId] = useState<string | number | null>(null);
+  const [brokerRiskDraft, setBrokerRiskDraft] = useState<{ tradeId: string; stop?: number; limit?: number } | null>(null);
+  useEffect(() => {
+    if (managedTradeId == null) setBrokerRiskDraft(null);
+  }, [managedTradeId]);
   const ignoreContextMenuCloseRef = useRef(false);
 
   const syncTradeMarkers = useCallback((tradeList: any[] = []) => {
@@ -1330,10 +1334,12 @@ export function MarketMasterPage() {
     const trade = tradesRef.current.find((t) => t.id === tradeId && t.status === "Open");
     if (!trade) return;
     if (dataModeRef.current === "realtime") {
+      // A drag only proposes a price: the order dialog asks the user to save
+      // it before anything is sent to FXCM, so a stray click changes nothing.
       orderLinesRef.current[tradeId]?.[type]?.applyOptions({ price: trade[type] });
       const rate = Number(newPrice.toFixed(brokerRef.current.snapshot?.instrument.digits ?? priceDecimals));
-      void brokerRef.current.send({action: "risk", trade_id: String(tradeId), kind: type === "sl" ? "stop" : "limit", rate})
-        .then(() => toast.success("福汇已确认修改"), error => toast.error(error.message));
+      setBrokerRiskDraft({ tradeId: String(tradeId), [type === "sl" ? "stop" : "limit"]: rate });
+      setManagedTradeId(tradeId);
       return;
     }
     const markPrice = getActiveCandle(fullDataRef.current, currentIndexRef.current)?.close;
@@ -5164,7 +5170,6 @@ export function MarketMasterPage() {
         .send(line === "pending"
           ? { action: "entry_edit", order_id: order.brokerOrderId, rate }
           : { action: "entry_risk", order_id: order.brokerOrderId, kind: line === "pendingSl" ? "stop" : "limit", rate })
-        .then(() => toast.success("福汇已确认修改挂单"))
         .catch((error) => {
           revertPendingLine(id, line);
           toast.error(error.message);
@@ -6563,7 +6568,9 @@ export function MarketMasterPage() {
         onStartKlineRepair={handleBeginKlineRepair}
         isRepairSelecting={isRepairSelecting}
         isRepairingKline={isRepairingKline}
-        balance={balance}
+        // Shown balance moves with open positions: FXCM equity in realtime,
+        // closed-trade balance plus floating P/L in history mode.
+        balance={dataMode === "realtime" ? broker.snapshot?.account.equity ?? balance + totalFloatingPnl : balance + totalFloatingPnl}
         totalFloatingPnl={totalFloatingPnl}
         minBacktestCandles={MIN_BACKTEST_CANDLES}
         initialVisibleCount={INITIAL_VISIBLE_COUNT}
@@ -6711,7 +6718,8 @@ export function MarketMasterPage() {
         onCancel={cancelPendingTradeClose}
         onConfirm={confirmPendingTradeClose}
       />
-      {dataMode === "realtime" && managedTradeId != null && <BrokerTradeManagement key={managedTradeId} broker={broker} tradeId={String(managedTradeId)} onDismiss={() => setManagedTradeId(null)} />}
+      {dataMode === "realtime" && managedTradeId != null && <BrokerTradeManagement key={managedTradeId} broker={broker} tradeId={String(managedTradeId)}
+        draft={brokerRiskDraft?.tradeId === String(managedTradeId) ? brokerRiskDraft : undefined} onDismiss={() => setManagedTradeId(null)} />}
       {dataMode === "realtime" && brokerCloseAll && <BrokerCloseAllDialog broker={broker} selection={brokerCloseAll} onDismiss={() => setBrokerCloseAll(null)} />}
       {dataMode === "realtime" && isBrokerHistoryOpen && <BrokerTradeHistoryModal broker={broker} onClose={() => setIsBrokerHistoryOpen(false)} />}
       {dataMode === "history" && isBacktestMode && !isReplayMode && trades.some((trade) => trade.id === managedTradeId && trade.status === "Open") && (

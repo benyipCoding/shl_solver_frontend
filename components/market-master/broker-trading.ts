@@ -81,6 +81,19 @@ export function brokerHistoryTrades(
 export const brokerMoney = (value: number | null | undefined, currency?: string | null) =>
   value == null ? "—" : `${value.toFixed(2)} ${currency || "账户币种"}`;
 
+/**
+ * Gross P/L, in account currency, if `position` were closed at `rate`
+ * (commission and rollover excluded). Null when FXCM gives no usable pip
+ * cost or the position is not on the instrument the snapshot quotes.
+ */
+export function brokerExpectedPl(position: BrokerPosition, rate: number, instrument: BrokerSnapshot["instrument"]): number | null {
+  if (!Number.isFinite(rate) || rate <= 0 || position.symbol !== instrument.symbol) return null;
+  const cashPerPrice = (instrument.pip_cost ?? 0) * position.amount / instrument.base_unit_size / instrument.point_size;
+  if (!(cashPerPrice > 0)) return null;
+  const direction = position.side === "Buy" ? 1 : -1;
+  return (rate - position.open_rate) * direction * cashPerPrice;
+}
+
 /** `entryRate`: a pending order's own price; omitted for market orders (bid/ask). */
 export function brokerRiskPrice(value: string, mode: "price" | "distance" | "amount", side: "Buy" | "Sell",
   kind: "stop" | "limit", quantity: number, instrument: BrokerSnapshot["instrument"], entryRate?: number): number | null {

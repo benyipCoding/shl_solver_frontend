@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import type {
   BrokerCommand,
   BrokerHistoryResponse,
@@ -172,7 +173,11 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
     if (["confirmed", "rejected"].includes(data.status)) localStorage.removeItem(storageKey(account));
     else localStorage.setItem(storageKey(account), JSON.stringify(data));
   }, []);
-  const send = useCallback(async (input: Omit<BrokerCommand, "client_id" | "account_id" | "symbol">) => {
+  /** `quiet`: skip the success toast, for callers that announce a batch once. */
+  const send = useCallback(async (
+    input: Omit<BrokerCommand, "client_id" | "account_id" | "symbol">,
+    { quiet = false }: { quiet?: boolean } = {},
+  ) => {
     const current = latest.current;
     if (inFlight.current || !current.enabled || !current.connected || !current.snapshot) throw new Error("账户未就绪或上一条指令仍在处理中");
     const account = current.snapshot.account.id;
@@ -191,6 +196,7 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
       const data: BrokerResult = await readResponse(response);
       remember(data, account);
       if (data.status !== "confirmed") throw Object.assign(new Error(data.message), { brokerResult: true });
+      if (!quiet) toast.success(data.message || "福汇已确认执行");
       const currentAccount = latest.current.snapshot?.account.id;
       if (currentAccount === account) {
         void requestHistory(account, localTodayRange(), `${symbol}:${account}`, true).catch(() => {});

@@ -470,7 +470,7 @@ function installPersistenceHarness(context) {
   return { client, requests, errors };
 }
 
-test("realtime legacy handlers never simulate fills and chart risk changes go to the broker", async () => {
+test("realtime legacy handlers never simulate fills and a chart risk drag only opens the order dialog", async () => {
   const data = [{ time: 1, close: 100 }];
   const { context } = pageHarness(data, 1);
   installManualTradeHarness(context);
@@ -482,9 +482,10 @@ test("realtime legacy handlers never simulate fills and chart risk changes go to
   context.pendingSessionStartRef.current = null;
   const initialTrade = { id: "broker-trade", status: "Open", type: "Buy", units: 1000, entry: 100, sl: 90, tp: 120 };
   context.tradesRef.current = [initialTrade];
-  const submitted = [], managed = [];
+  const submitted = [], managed = [], drafts = [];
   context.brokerRef = {current: {send: async command => { submitted.push(plain(command)); }} };
   context.setManagedTradeId = id => managed.push(id);
+  context.setBrokerRiskDraft = draft => drafts.push(plain(draft));
   context.placeOrder("Buy");
   const tradeId = initialTrade.id;
   assert.match(context.saveRisk(tradeId, 90, 120), /福汇持仓管理/);
@@ -495,8 +496,11 @@ test("realtime legacy handlers never simulate fills and chart risk changes go to
   context.forceClose();
   assert.deepEqual(context.tradesRef.current, [initialTrade]);
   assert.equal(context.balanceRef.current, 10000);
-  assert.deepEqual(managed, [tradeId]);
-  assert.deepEqual(submitted, [{action: "risk", trade_id: tradeId, kind: "stop", rate: 95}]);
+  // Both the legacy save and the drag open the FXCM order dialog.
+  assert.deepEqual(managed, [tradeId, tradeId]);
+  // The dragged stop waits in the order dialog until the user saves it.
+  assert.deepEqual(drafts, [{tradeId, stop: 95}]);
+  assert.deepEqual(submitted, []);
   await client.endBatch();
   assert.deepEqual(requests, []);
   assert.deepEqual(errors, []);

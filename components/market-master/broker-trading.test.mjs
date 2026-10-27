@@ -125,3 +125,16 @@ test("missing trading permissions remain visible instead of becoming a stale acc
   assert.equal(h.sources.length,0);
   assert.equal(h.requests.length,1);
 });
+
+test("expected SL/TP P/L follows the position side, size and FXCM pip cost", () => {
+  // XAU/USD-like: 1 unit per lot, 0.01 point worth 0.01 USD, so 1 USD per unit per 1.00 move.
+  const instrument = {symbol: "XAU/USD", point_size: .01, pip_cost: .01, base_unit_size: 1};
+  const long = {symbol: "XAU/USD", side: "Buy", amount: 10, open_rate: 4025};
+  assert.equal(broker.brokerExpectedPl(long, 4020, instrument), -50);
+  assert.equal(broker.brokerExpectedPl(long, 4040, instrument), 150);
+  const short = {...long, side: "Sell"};
+  assert.equal(broker.brokerExpectedPl(short, 4020, instrument), 50);
+  assert.equal(broker.brokerExpectedPl(long, 0, instrument), null);
+  assert.equal(broker.brokerExpectedPl({...long, symbol: "EUR/USD"}, 4020, instrument), null);
+  assert.equal(broker.brokerExpectedPl(long, 4020, {...instrument, pip_cost: null}), null);
+});
