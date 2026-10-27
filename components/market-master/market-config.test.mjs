@@ -24,6 +24,7 @@ vm.runInNewContext(
 const {
   createDefaultIndicatorConfig, cloneIndicatorConfig,
   loadPersistedIndicatorConfig, persistIndicatorConfig, isCrosshairRefreshEcho,
+  replaceMacdSeriesData,
 } = target.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -80,4 +81,32 @@ test("realtime data refresh echoes do not drive the main crosshair, user moves a
   assert.equal(isCrosshairRefreshEcho({ time: 1, point: { x: 10, y: 20 } }), true);
   assert.equal(isCrosshairRefreshEcho({ time: 1, point: { x: 10, y: 20 }, sourceEvent: { clientX: 1 } }), false);
   assert.equal(isCrosshairRefreshEcho({}), false); // mouse leave: clear the main crosshair
+});
+
+test("MACD data is swapped with the crosshair hidden, then the synced crosshair returns", () => {
+  const calls = [];
+  const chart = {
+    clearCrosshairPosition: () => calls.push("clear"),
+    setCrosshairPosition: (price, time, series) => calls.push(`cross ${series.name} ${time} ${price}`),
+  };
+  const series = (name) => ({ name, setData: (rows) => calls.push(`${name} ${rows.length}`) });
+  const [hist, line, signal] = [series("hist"), series("line"), series("signal")];
+  const data = [
+    { time: 1, hist: 0.5, macd: 2, signal: 1.5, colorType: "positiveGrowing" },
+    { time: 2, hist: -0.5, macd: 1, signal: 1.5, colorType: "negativeFalling" },
+  ];
+  replaceMacdSeriesData({ chart, hist, line, signal, data, histColors: {}, crosshairTime: 2 });
+  // Hiding the crosshair before the first setData avoids Lightweight Charts'
+  // mid-update hit test that throws "Value is null".
+  assert.deepEqual(calls, ["clear", "hist 2", "line 2", "signal 2", "cross line 2 1"]);
+
+  calls.length = 0;
+  replaceMacdSeriesData({ chart, hist, line, signal, data, histColors: {}, crosshairTime: 99 });
+  assert.deepEqual(calls, ["clear", "hist 2", "line 2", "signal 2"]);
+  calls.length = 0;
+  replaceMacdSeriesData({ chart, hist, line, signal, data: [], histColors: {} });
+  assert.deepEqual(calls, ["clear", "hist 0", "line 0", "signal 0"]);
+  calls.length = 0;
+  replaceMacdSeriesData({ chart, hist: null, line, signal, data, histColors: {} });
+  assert.deepEqual(calls, []);
 });

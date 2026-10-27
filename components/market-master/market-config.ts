@@ -282,6 +282,44 @@ export const applySyncedCrosshair = (
   chart.clearCrosshairPosition();
 };
 
+type MacdPoint = { time: Time; hist: number; macd: number; signal: number; colorType: string };
+
+/**
+ * Replace the MACD histogram, MACD line and signal line together.
+ *
+ * Lightweight Charts 5.1 re-runs the crosshair hit test inside setData. When
+ * the first series moves the time scale while its siblings still hold the old
+ * bars and have pending option changes (line width, visibility), that hit test
+ * throws "Value is null". The swap therefore runs with the crosshair hidden,
+ * and the crosshair that follows the main chart is put back afterwards.
+ */
+export const replaceMacdSeriesData = ({
+  chart,
+  hist,
+  line,
+  signal,
+  data,
+  histColors,
+  crosshairTime,
+}: {
+  chart: IChartApi | null | undefined;
+  hist: ISeriesApi<SeriesType> | null | undefined;
+  line: ISeriesApi<SeriesType> | null | undefined;
+  signal: ISeriesApi<SeriesType> | null | undefined;
+  data: MacdPoint[];
+  histColors: Record<string, string>;
+  crosshairTime?: Time | null;
+}) => {
+  if (!hist || !line || !signal) return;
+  chart?.clearCrosshairPosition();
+  hist.setData(data.map((d) => ({ time: d.time, value: d.hist, color: histColors[d.colorType] })));
+  line.setData(data.map((d) => ({ time: d.time, value: d.macd })));
+  signal.setData(data.map((d) => ({ time: d.time, value: d.signal })));
+  if (crosshairTime == null) return;
+  const point = data.find((d) => d.time === crosshairTime);
+  if (point) applySyncedCrosshair(chart, line, point.time, point.macd);
+};
+
 export const createDefaultIndicatorConfig = (): IndicatorConfig => ({
   // penMomentum: { enabled: false, atrPeriod: 14, weakThreshold: 0.5, includeDeveloping: true },
   emas: [],

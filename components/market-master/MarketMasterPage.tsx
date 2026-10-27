@@ -96,6 +96,7 @@ import {
   TIMEFRAME_OPTIONS,
   applySyncedCrosshair,
   isCrosshairRefreshEcho,
+  replaceMacdSeriesData,
   cloneIndicatorConfig,
   createDefaultIndicatorConfig,
   createInitialAiReviewModal,
@@ -1865,27 +1866,15 @@ export function MarketMasterPage() {
           });
         }
 
-        if (
-          macdHistSeriesRef.current &&
-          macdLineSeriesRef.current &&
-          macdSignalSeriesRef.current
-        ) {
-          const macdData = indicatorSlice(fullMacdDataRef.current);
-
-          macdHistSeriesRef.current.setData(
-            macdData.map((d) => ({
-              time: d.time,
-              value: d.hist,
-              color: activeConfig.macd.histColors[d.colorType],
-            }))
-          );
-          macdLineSeriesRef.current.setData(
-            macdData.map((d) => ({ time: d.time, value: d.macd }))
-          );
-          macdSignalSeriesRef.current.setData(
-            macdData.map((d) => ({ time: d.time, value: d.signal }))
-          );
-        }
+        replaceMacdSeriesData({
+          chart: subChartRef.current,
+          hist: macdHistSeriesRef.current,
+          line: macdLineSeriesRef.current,
+          signal: macdSignalSeriesRef.current,
+          data: indicatorSlice(fullMacdDataRef.current),
+          histColors: activeConfig.macd.histColors,
+          crosshairTime: stateRef.current.isHovering ? stateRef.current.lastHoveredTime : null,
+        });
 
         syncTradeMarkers(tradesRef.current);
         if (focusRange) {
@@ -2460,9 +2449,14 @@ export function MarketMasterPage() {
         }
       );
 
-      if (macdHistSeriesRef.current) macdHistSeriesRef.current.setData([]);
-      if (macdLineSeriesRef.current) macdLineSeriesRef.current.setData([]);
-      if (macdSignalSeriesRef.current) macdSignalSeriesRef.current.setData([]);
+      replaceMacdSeriesData({
+        chart: subChartRef.current,
+        hist: macdHistSeriesRef.current,
+        line: macdLineSeriesRef.current,
+        signal: macdSignalSeriesRef.current,
+        data: [],
+        histColors: {},
+      });
       volumeSeriesRef.current?.setData([]);
     };
 
@@ -3293,20 +3287,15 @@ export function MarketMasterPage() {
         color: nextConfig.macd.signalColor,
         lineWidth: nextConfig.macd.lineWidth,
       });
-      const currentMacdData = sliceChartWindow(fullMacdDataRef.current, chartWindowRef.current, indicatorOffsetRef.current);
-      macdHistSeriesRef.current.setData(
-        currentMacdData.map((d) => ({
-          time: d.time,
-          value: d.hist,
-          color: nextConfig.macd.histColors[d.colorType],
-        }))
-      );
-      macdLineSeriesRef.current.setData(
-        currentMacdData.map((d) => ({ time: d.time, value: d.macd }))
-      );
-      macdSignalSeriesRef.current.setData(
-        currentMacdData.map((d) => ({ time: d.time, value: d.signal }))
-      );
+      replaceMacdSeriesData({
+        chart: subChartRef.current,
+        hist: macdHistSeriesRef.current,
+        line: macdLineSeriesRef.current,
+        signal: macdSignalSeriesRef.current,
+        data: sliceChartWindow(fullMacdDataRef.current, chartWindowRef.current, indicatorOffsetRef.current),
+        histColors: nextConfig.macd.histColors,
+        crosshairTime: stateRef.current.isHovering ? stateRef.current.lastHoveredTime : null,
+      });
     }
     if (chartRef.current)
       chartRef.current.priceScale("right").applyOptions({
