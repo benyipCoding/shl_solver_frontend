@@ -35,6 +35,7 @@ import {
   RotateCcw,
   Bot,
   CalendarDays,
+  DatabaseZap,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ChartLocatePopover } from "@/components/market-master/ChartLocatePopover";
@@ -986,6 +987,16 @@ export const TopBar = ({
         </div>
 
         <div className="order-1 ml-auto hidden w-full shrink-0 items-center justify-end gap-3 lg:order-2 lg:flex lg:w-auto lg:gap-6">
+          {isSuperuser && (
+            <Link
+              href="/market-master/sync-status"
+              className="flex items-center gap-1.5 rounded-md bg-gray-700 px-2 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-600 hover:text-white"
+              title="历史数据采集控制台：管理定时采集与采集队列"
+            >
+              <DatabaseZap size={16} />
+              <span>数据采集</span>
+            </Link>
+          )}
           <div className="flex flex-col items-end leading-tight">
             <span className="hidden text-xs text-gray-500 sm:inline">
               账户余额

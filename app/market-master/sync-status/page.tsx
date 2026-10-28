@@ -1,12 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import toast from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import {
   Activity,
   AlertTriangle,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ChevronDown,
   ChevronRight,
@@ -285,6 +288,8 @@ async function readJson(res: Response) {
 
 export default function SyncStatusPage() {
   const { customFetch } = useFetch();
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const isSuperuser = !isAuthLoading && Boolean(user?.is_superuser);
   const [data, setData] = useState<SyncStatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -648,15 +653,26 @@ export default function SyncStatusPage() {
               管理历史数据定时采集的启停与采集队列。实时模式不受此页面影响。
             </p>
           </div>
-          <button
-            onClick={() => loadStatus(true)}
-            className="inline-flex items-center gap-2 self-start bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 px-4 py-2 rounded-lg shadow-sm transition"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
-            />
-            刷新
-          </button>
+          <div className="flex items-center gap-2 self-start">
+            {isSuperuser && (
+              <Link
+                href="/market-master"
+                className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 px-4 py-2 rounded-lg shadow-sm transition"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                返回行情主页
+              </Link>
+            )}
+            <button
+              onClick={() => loadStatus(true)}
+              className="inline-flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-400 px-4 py-2 rounded-lg shadow-sm transition"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+              刷新
+            </button>
+          </div>
         </header>
 
         <SchedulerPanel
