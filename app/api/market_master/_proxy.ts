@@ -85,9 +85,11 @@ async function proxyMarketMasterRequest(
   }`;
 
   try {
+    const body = method === "GET" ? "" : await request.text();
     const response = await fetch(url, {
       method,
       headers: buildForwardHeaders(request),
+      body: body || undefined,
       cache: "no-store",
       signal: request.signal,
     });
