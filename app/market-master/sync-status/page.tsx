@@ -11,6 +11,8 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  CalendarClock,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -27,7 +29,6 @@ import {
   Square,
   X,
   XCircle,
-  Zap,
 } from "lucide-react";
 
 const POLL_INTERVAL_MS = 3000;
@@ -64,6 +65,7 @@ type SyncState = {
   enabled: boolean;
   sync_mode: string;
   backfill_completed: boolean;
+  history_complete: boolean;
   earliest_synced_bar_time: string | null;
   latest_synced_bar_time: string | null;
   next_sync_from: string | null;
@@ -133,6 +135,7 @@ type SyncStatusPayload = {
   running_tasks: RunningTask[];
   states: SyncState[];
   server_time: string;
+  history_cutoff_at: string;
 };
 
 type SymbolProgress = {
@@ -142,8 +145,8 @@ type SymbolProgress = {
   category: string;
   states: SyncState[];
   total: number;
-  incremental: number;
-  backfill: number;
+  complete: number;
+  pending: number;
   running: number;
   failed: number;
   due: number;
@@ -158,20 +161,17 @@ type FilterKey =
   | "failed"
   | "running"
   | "skipped"
-  | "incremental"
-  | "backfill"
+  | "complete"
+  | "pending"
   | "disabled";
 type NextSyncSort = "asc" | "desc";
 
-function isIncrementalState(state: SyncState): boolean {
-  if (typeof state.backfill_completed === "boolean") {
-    return state.backfill_completed;
-  }
-  return String(state.sync_mode || "").toUpperCase() === "INCREMENTAL";
+function isCompleteState(state: SyncState): boolean {
+  return Boolean(state.history_complete);
 }
 
 function getIsDue(state: SyncState, nowMs: number) {
-  if (!state.enabled) return false;
+  if (!state.enabled || isCompleteState(state)) return false;
   if (!state.next_sync_from) return true;
   return new Date(state.next_sync_from).getTime() <= nowMs;
 }
@@ -242,8 +242,8 @@ function summarizeByInstrument(
         category: state.asset_category,
         states: [],
         total: 0,
-        incremental: 0,
-        backfill: 0,
+        complete: 0,
+        pending: 0,
         running: 0,
         failed: 0,
         due: 0,
@@ -263,15 +263,15 @@ function summarizeByInstrument(
     }
     if (!state.enabled) continue;
     group.total += 1;
-    if (isIncrementalState(state)) group.incremental += 1;
-    else group.backfill += 1;
+    if (isCompleteState(state)) group.complete += 1;
+    else group.pending += 1;
     if (getIsDue(state, nowMs)) group.due += 1;
   }
   for (const group of groups.values()) {
     group.pct =
       group.total === 0
         ? 0
-        : Math.round((group.incremental / group.total) * 100);
+        : Math.round((group.complete / group.total) * 100);
   }
   return groups;
 }
@@ -463,6 +463,19 @@ export default function SyncStatusPage() {
     });
   };
 
+  const saveHistoryCutoff = (date: string) => {
+    runAction("cutoff", async () => {
+      const payload = await postJson("/api/market_master/sync/history-cutoff", {
+        cutoff_at: `${date}T00:00:00Z`,
+      });
+      const result = payload?.data || {};
+      toast.success(
+        `截止时间已设为 ${date}：新标记完成 ${result.completed ?? 0} 个周期，重新排入采集 ${result.reopened ?? 0} 个`
+      );
+      await loadStatus();
+    });
+  };
+
   const removeFromQueue = (instrumentIds: number[]) => {
     if (instrumentIds.length === 0) return;
     runAction("remove", async () => {
@@ -503,37 +516,37 @@ export default function SyncStatusPage() {
 
   const queueStats = useMemo(() => {
     const queueStates = states.filter((s) => s.in_queue && s.enabled);
-    const incremental = queueStates.filter((s) => isIncrementalState(s));
+    const complete = queueStates.filter((s) => isCompleteState(s));
     return {
       instruments: queue.length,
       total: queueStates.length,
-      incremental: incremental.length,
-      backfill: queueStates.length - incremental.length,
+      complete: complete.length,
+      pending: queueStates.length - complete.length,
       running: queueStates.filter((s) => s.last_status === "RUNNING").length,
       failed: queueStates.filter((s) => s.last_status === "FAILED").length,
       due: queueStates.filter((s) => getIsDue(s, effectiveNow)).length,
       pct:
         queueStates.length === 0
           ? 0
-          : Math.round((incremental.length / queueStates.length) * 100),
+          : Math.round((complete.length / queueStates.length) * 100),
     };
   }, [states, queue.length, effectiveNow]);
 
   const queueByInterval = useMemo(() => {
     const counts = new Map<
       string,
-      { interval: string; incremental: number; backfill: number; total: number }
+      { interval: string; complete: number; pending: number; total: number }
     >();
     for (const state of states) {
       if (!state.in_queue || !state.enabled) continue;
       const key = state.interval || "unknown";
       if (!counts.has(key)) {
-        counts.set(key, { interval: key, incremental: 0, backfill: 0, total: 0 });
+        counts.set(key, { interval: key, complete: 0, pending: 0, total: 0 });
       }
       const row = counts.get(key)!;
       row.total += 1;
-      if (isIncrementalState(state)) row.incremental += 1;
-      else row.backfill += 1;
+      if (isCompleteState(state)) row.complete += 1;
+      else row.pending += 1;
     }
     const order = data?.status.bar_intervals ?? [];
     return Array.from(counts.values()).sort(
@@ -594,10 +607,10 @@ export default function SyncStatusPage() {
           return state.last_status === "RUNNING";
         case "skipped":
           return state.last_status === "SKIPPED";
-        case "incremental":
-          return state.enabled && isIncrementalState(state);
-        case "backfill":
-          return state.enabled && !isIncrementalState(state);
+        case "complete":
+          return state.enabled && isCompleteState(state);
+        case "pending":
+          return state.enabled && !isCompleteState(state);
         case "disabled":
           return !state.enabled;
         default:
@@ -692,16 +705,24 @@ export default function SyncStatusPage() {
                 <h2 className="text-lg font-semibold">队列采集进度</h2>
               </div>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                仅统计采集队列内品种的启用周期。历史回补完成（backfill_completed）后进入增量采集。
+                仅统计采集队列内品种的启用周期。向前采集到历史截止时间、向后回补到 1994 年，即视为采集完成，不再采集。
               </p>
             </div>
             <div className="text-right shrink-0">
               <div className="text-3xl font-semibold text-teal-600 dark:text-teal-400">
                 {queueStats.pct}%
               </div>
-              <div className="text-xs text-slate-500">增量完成率</div>
+              <div className="text-xs text-slate-500">采集完成率</div>
             </div>
           </div>
+
+          <HistoryCutoffSetting
+            key={data.history_cutoff_at}
+            cutoffAt={data.history_cutoff_at}
+            pending={pendingAction === "cutoff"}
+            disabled={pendingAction !== null}
+            onSave={saveHistoryCutoff}
+          />
 
           <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mb-4">
             <div
@@ -714,13 +735,13 @@ export default function SyncStatusPage() {
             <StatCard label="队列品种" value={queueStats.instruments} />
             <StatCard label="队列状态行" value={queueStats.total} />
             <StatCard
-              label="已进入增量"
-              value={queueStats.incremental}
+              label="已采集完成"
+              value={queueStats.complete}
               accent="emerald"
             />
             <StatCard
-              label="仍需补全历史"
-              value={queueStats.backfill}
+              label="仍需采集"
+              value={queueStats.pending}
               accent="orange"
             />
             <StatCard label="已到期/待执行" value={queueStats.due} accent="amber" />
@@ -742,7 +763,7 @@ export default function SyncStatusPage() {
                   const pct =
                     row.total === 0
                       ? 0
-                      : Math.round((row.incremental / row.total) * 100);
+                      : Math.round((row.complete / row.total) * 100);
                   return (
                     <div
                       key={row.interval}
@@ -752,10 +773,10 @@ export default function SyncStatusPage() {
                         {row.interval}
                       </div>
                       <div className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                        增量 {row.incremental}
+                        完成 {row.complete}
                       </div>
                       <div className="text-[11px] text-orange-600 dark:text-orange-400">
-                        补全 {row.backfill}
+                        采集中 {row.pending}
                       </div>
                       <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                         <div
@@ -977,7 +998,7 @@ export default function SyncStatusPage() {
                         {candidate.name || candidate.provider_symbol}
                         {progress && progress.total > 0 && (
                           <span className="ml-2 text-slate-500">
-                            · 已有进度 {progress.incremental}/{progress.total} 增量
+                            · 已有进度 {progress.complete}/{progress.total} 已完成
                           </span>
                         )}
                       </div>
@@ -1029,7 +1050,7 @@ export default function SyncStatusPage() {
                       </div>
                       <ProgressBar
                         pct={group.pct}
-                        label={`${group.incremental}/${group.total} 增量`}
+                        label={`${group.complete}/${group.total} 已完成`}
                         muted
                       />
                       <div className="text-[11px] text-slate-400 mt-0.5">
@@ -1112,8 +1133,8 @@ export default function SyncStatusPage() {
                 className="py-2 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
               >
                 <option value="all">全部状态</option>
-                <option value="incremental">已增量</option>
-                <option value="backfill">待补全</option>
+                <option value="complete">已完成</option>
+                <option value="pending">采集中</option>
                 <option value="due">已到期</option>
                 <option value="running">执行中</option>
                 <option value="failed">失败</option>
@@ -1207,7 +1228,7 @@ export default function SyncStatusPage() {
                           {state.interval}
                         </span>
                         <div className="mt-1">
-                          <SyncModeBadge incremental={isIncrementalState(state)} />
+                          <SyncModeBadge complete={isCompleteState(state)} />
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -1221,7 +1242,7 @@ export default function SyncStatusPage() {
                         <div className="font-mono text-xs">
                           {formatDateTime(state.next_sync_from)}
                         </div>
-                        {state.in_queue && state.enabled && (
+                        {state.in_queue && state.enabled && !isCompleteState(state) && (
                           <CountdownBadge
                             due={due}
                             secondsLeft={getSecondsUntil(state, effectiveNow)}
@@ -1505,7 +1526,7 @@ function QueueRow({
             {progress && progress.total > 0 ? (
               <ProgressBar
                 pct={progress.pct}
-                label={`${progress.incremental}/${progress.total} 周期已增量`}
+                label={`${progress.complete}/${progress.total} 周期已完成`}
               />
             ) : (
               <span className="text-xs text-slate-400">尚未生成同步状态</span>
@@ -1571,12 +1592,12 @@ function QueueRow({
                       <StatusBadge status={state.last_status} />
                     </div>
                     <div className="mt-1 flex items-center justify-between gap-1">
-                      <SyncModeBadge incremental={isIncrementalState(state)} compact />
-                      <CountdownBadge
+                      <SyncModeBadge complete={isCompleteState(state)} compact />
+                      {!isCompleteState(state) && <CountdownBadge
                         due={due}
                         secondsLeft={getSecondsUntil(state, nowMs)}
                         compact
-                      />
+                      />}
                     </div>
                     <div className="mt-1 text-[10px] text-slate-400 font-mono">
                       {formatDate(state.earliest_synced_bar_time)} →{" "}
@@ -1589,6 +1610,55 @@ function QueueRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function HistoryCutoffSetting({
+  cutoffAt,
+  pending,
+  disabled,
+  onSave,
+}: {
+  cutoffAt: string | undefined;
+  pending: boolean;
+  disabled: boolean;
+  onSave: (date: string) => void;
+}) {
+  // 截止时间按 UTC 日期展示和保存（当天 00:00 UTC）。
+  const savedDate = cutoffAt ? new Date(cutoffAt).toISOString().slice(0, 10) : "";
+  const [draft, setDraft] = useState(savedDate);
+  const today = new Date().toISOString().slice(0, 10);
+  const dirty = draft !== "" && draft !== savedDate;
+
+  return (
+    <div className="mb-4 flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 px-4 py-3 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-2 text-sm font-medium shrink-0">
+        <CalendarClock className="w-4 h-4 text-indigo-500" />
+        历史数据截止时间（UTC）
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={draft}
+          min="1994-01-02"
+          max={today}
+          onChange={(e) => setDraft(e.target.value)}
+          className="py-1.5 px-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono"
+        />
+        <button
+          type="button"
+          onClick={() => onSave(draft)}
+          disabled={!dirty || disabled}
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:pointer-events-none transition"
+        >
+          {pending && <Loader2 className="w-4 h-4 animate-spin" />}
+          保存
+        </button>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400 sm:ml-2">
+        每个品种周期采集到该日期 00:00 前的最后一根 K 线、并回补到 1994 年即视为完成，不再采集。修改后立即重新判定所有周期。
+      </p>
     </div>
   );
 }
@@ -1685,21 +1755,21 @@ function CountdownBadge({
 }
 
 function SyncModeBadge({
-  incremental,
+  complete,
   compact = false,
 }: {
-  incremental: boolean;
+  complete: boolean;
   compact?: boolean;
 }) {
-  if (incremental) {
+  if (complete) {
     return (
       <span
         className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ${
           compact ? "text-[10px]" : "text-[11px]"
         }`}
       >
-        <Zap className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
-        增量
+        <CheckCircle2 className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
+        已完成
       </span>
     );
   }
@@ -1711,7 +1781,7 @@ function SyncModeBadge({
       }`}
     >
       <History className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      补全历史
+      采集中
     </span>
   );
 }

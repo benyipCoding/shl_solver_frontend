@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import type { TradePosition } from "./trade-management";
-import { brokerMoney } from "./broker-trading";
 import { automaticLockedProfit } from "./automatic-pen-risk";
 import { DEFAULT_TRADE_HISTORY_FILTERS, filterTradeHistory, sortTradeHistory, tradeHistoryBalance, tradeHistoryPnl, type TradeHistoryFilters, type TradeHistorySort } from "./trade-history";
 import {
@@ -44,14 +43,6 @@ function AutomaticTradeBadge({ trade }: { trade: TradePosition }) {
       {label}{trade.automaticPen.fundedChildId ? " · 已资助加仓" : ""}
     </span>
   );
-}
-
-function BrokerFees({trade}: {trade: TradePosition}) {
-  return trade.brokerTradeId ? <div className="mt-1 text-[10px] text-slate-400">
-    福汇净盈亏 · {trade.brokerCurrency || "账户币种"}<br/>
-    佣金 {brokerMoney(trade.brokerCommission, trade.brokerCurrency)}<br/>
-    过夜费 {brokerMoney(trade.brokerRollover, trade.brokerCurrency)}
-  </div> : null;
 }
 
 export const TradeHistory = ({
@@ -105,8 +96,11 @@ export const TradeHistory = ({
   const pnlFilter = () => filterSelect("pnl", "筛选交易盈亏", [["all", "全部盈亏"], ["loss", "仅亏损"], ["profit", "仅盈利"], ["flat", "持平"]]);
   if (isMaximized) return null;
 
+  // 点击订单定位图表只在历史数据模式下有意义，实时模式不提供。
+  const locateTrade = isRealtimeMode ? undefined : onLocateTrade;
+
   const rowInteractions = (trade: Pick<TradePosition, "status" | "id">) => {
-    if (!onLocateTrade) return {};
+    if (!locateTrade) return {};
     return {
       tabIndex: 0,
       title: trade.status === "Open" ? "点击定位开仓位置" : "点击定位开仓至平仓区间",
@@ -115,13 +109,13 @@ export const TradeHistory = ({
         if (
           (event.target as Element).closest("button, a, input, select, textarea")
         ) return;
-        onLocateTrade(trade.id);
+        locateTrade(trade.id);
       },
       onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onLocateTrade(trade.id);
+          locateTrade(trade.id);
         }
       },
     };
@@ -141,7 +135,7 @@ export const TradeHistory = ({
         onClick={() => setIsBottomPanelOpen(!isBottomPanelOpen)}
         title={isBottomPanelOpen ? "收起交易记录" : "展开交易记录"}
       >
-        <span>交易记录 <span className="ml-1 text-xs text-gray-500">{filteredTrades.length} / {trades.length}</span><span className="ml-3 hidden text-xs text-gray-500 lg:inline">点击订单定位图表</span></span>
+        <span>交易记录 <span className="ml-1 text-xs text-gray-500">{filteredTrades.length} / {trades.length}</span>{locateTrade && <span className="ml-3 hidden text-xs text-gray-500 lg:inline">点击订单定位图表</span>}</span>
 
         <div className="flex items-center gap-4">
           {hasFilters && <button type="button" onClick={(event) => { event.stopPropagation(); setFilters({ ...DEFAULT_TRADE_HISTORY_FILTERS }); setPage(0); }} className="text-xs text-blue-400 hover:text-blue-300">清除筛选</button>}
@@ -193,7 +187,7 @@ export const TradeHistory = ({
                 <article
                   key={trade.id}
                   {...rowInteractions(trade)}
-                  className={`rounded-lg border p-3 ${focusedTradeId === trade.id ? "border-blue-500/60 bg-blue-500/10" : "border-gray-800 bg-gray-900/80"} ${onLocateTrade ? "cursor-pointer hover:bg-gray-800/50 focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
+                  className={`rounded-lg border p-3 ${focusedTradeId === trade.id ? "border-blue-500/60 bg-blue-500/10" : "border-gray-800 bg-gray-900/80"} ${locateTrade ? "cursor-pointer hover:bg-gray-800/50 focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -207,7 +201,6 @@ export const TradeHistory = ({
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
                       <AutomaticTradeBadge trade={trade} />
-                      <BrokerFees trade={trade} />
                       <span
                         className={`text-sm font-bold ${
                           trade.type === "Buy"
@@ -263,7 +256,9 @@ export const TradeHistory = ({
                       </dd>
                     </div>
                   </dl>
-                  {!isOpen && <button type="button" onClick={() => onLocateTrade?.(trade.id, "exit")} className="mt-2 text-xs text-blue-400 hover:text-blue-300">定位平仓 · {trade.closePrice?.toFixed(priceDecimals)}</button>}
+                  {!isOpen && (locateTrade
+                    ? <button type="button" onClick={() => locateTrade(trade.id, "exit")} className="mt-2 text-xs text-blue-400 hover:text-blue-300">定位平仓 · {trade.closePrice?.toFixed(priceDecimals)}</button>
+                    : <div className="mt-2 text-xs text-gray-400">平仓价 · <span className="font-mono">{trade.closePrice?.toFixed(priceDecimals) ?? "-"}</span></div>)}
                   {isOpen && (
                     <div className="mt-3 flex items-center justify-end gap-3 border-t border-gray-800 pt-3">
                       <button
@@ -329,7 +324,7 @@ export const TradeHistory = ({
                   <tr
                     key={trade.id}
                     {...rowInteractions(trade)}
-                    className={`${focusedTradeId === trade.id ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40" : "hover:bg-gray-800/30"} ${onLocateTrade ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
+                    className={`${focusedTradeId === trade.id ? "bg-blue-500/10 ring-1 ring-inset ring-blue-500/40" : "hover:bg-gray-800/30"} ${locateTrade ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-500" : ""}`}
                   >
                     <td className="px-4 py-2">
                       <span
@@ -342,7 +337,6 @@ export const TradeHistory = ({
                         {isOpen ? "持仓中" : trade.reason}
                       </span>
                       <AutomaticTradeBadge trade={trade} />
-                      <BrokerFees trade={trade} />
                     </td>
                     <td
                       className={`px-4 py-2 font-bold ${
@@ -370,7 +364,9 @@ export const TradeHistory = ({
                         : "-"}
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-gray-400">
-                      {isOpen ? "-" : <button type="button" onClick={() => onLocateTrade?.(trade.id, "exit")} title="定位平仓位置" className="text-blue-300 underline decoration-dotted underline-offset-4 hover:text-blue-200">{trade.closePrice?.toFixed(priceDecimals) ?? "-"}</button>}
+                      {isOpen ? "-" : locateTrade
+                        ? <button type="button" onClick={() => locateTrade(trade.id, "exit")} title="定位平仓位置" className="text-blue-300 underline decoration-dotted underline-offset-4 hover:text-blue-200">{trade.closePrice?.toFixed(priceDecimals) ?? "-"}</button>
+                        : trade.closePrice?.toFixed(priceDecimals) ?? "-"}
                     </td>
                     <td
                       className={`px-4 py-2 text-right font-mono font-bold ${
