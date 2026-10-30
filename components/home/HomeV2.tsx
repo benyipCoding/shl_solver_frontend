@@ -102,12 +102,12 @@ export default function HomeV2() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const filtered = HOME_MODULES.filter(
-    (module) => category === "全部工具" || module.category === category,
+    (module) => category === "全部工具" || module.category === category
   );
   const searchResults = HOME_MODULES.filter((module) =>
     `${module.name} ${module.english} ${module.description} ${module.tags.join(" ")}`
       .toLowerCase()
-      .includes(query.trim().toLowerCase()),
+      .includes(query.trim().toLowerCase())
   );
 
   const openSearch = () => {
@@ -173,9 +173,9 @@ export default function HomeV2() {
           <div className={styles.heroCopy}>
             <p className={styles.heroEyebrow}>你的智能工作空间</p>
             <h1 id="hero-title">
-              无限可能，
+              无限可能
               <br />
-              <span>即刻接入。</span>
+              <span>即刻接入</span>
               <i aria-hidden="true">✳</i>
             </h1>
             <p className={styles.heroDescription}>
@@ -230,9 +230,7 @@ export default function HomeV2() {
           aria-labelledby="tools-title"
         >
           <div className={styles.sectionTop}>
-            <h2 id="tools-title">
-              工作空间<span>。</span>
-            </h2>
+            <h2 id="tools-title">工作空间</h2>
           </div>
           <div className={styles.toolsToolbar}>
             <div className={styles.filters} aria-label="工具分类">
@@ -317,10 +315,10 @@ export default function HomeV2() {
           if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
           event.preventDefault();
           const links = Array.from(
-            dialogRef.current?.querySelectorAll<HTMLAnchorElement>("a") ?? [],
+            dialogRef.current?.querySelectorAll<HTMLAnchorElement>("a") ?? []
           );
           const current = links.indexOf(
-            document.activeElement as HTMLAnchorElement,
+            document.activeElement as HTMLAnchorElement
           );
           const next =
             current < 0
