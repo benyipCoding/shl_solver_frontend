@@ -24,10 +24,10 @@ export const MACD_PANEL_HEIGHT = 192;
 export const VOLUME_PANEL_HEIGHT = 192;
 
 export const TIMEFRAME_OPTIONS = [
-  { value: "m1", label: "M1", interval: "1min" },
-  { value: "m5", label: "M5", interval: "5min" },
-  { value: "m15", label: "M15", interval: "15min" },
-  { value: "m30", label: "M30", interval: "30min" },
+  { value: "m1", label: "m1", interval: "1min" },
+  { value: "m5", label: "m5", interval: "5min" },
+  { value: "m15", label: "m15", interval: "15min" },
+  { value: "m30", label: "m30", interval: "30min" },
   { value: "H1", label: "H1", interval: "1h" },
   { value: "H2", label: "H2", interval: "2h" },
   { value: "H3", label: "H3", interval: "3h" },

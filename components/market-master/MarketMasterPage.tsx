@@ -5863,7 +5863,7 @@ export function MarketMasterPage() {
     // A history request can finish after the user has switched to realtime.
     if (dataModeRef.current !== "history") return;
     if (!isSupportedTimeframe(detail.timeframe || getTimeframeByInterval(detail.interval), "history")) {
-      throw new Error("历史模式已移除 M1 周期，原回测记录仍保留，但无法还原播放");
+      throw new Error("历史模式已移除 m1 周期，原回测记录仍保留，但无法还原播放");
     }
     setIsBacktestHistoryOpen(false);
     setReplayingSessionId(detail.public_id);

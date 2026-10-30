@@ -107,8 +107,8 @@ test("old M1 replay records and share links cannot reactivate history M1", () =>
     isBacktestMode: false,
   };
   const restore = pageHandler("restoreReplayDetail", context);
-  assert.throws(() => restore({ public_id: "old-m1", timeframe: "m1", interval: "1min" }), /M1/);
-  assert.throws(() => restore({ public_id: "old-m1", interval: "1min" }), /M1/);
+  assert.throws(() => restore({ public_id: "old-m1", timeframe: "m1", interval: "1min" }), /m1/);
+  assert.throws(() => restore({ public_id: "old-m1", interval: "1min" }), /m1/);
   assert.equal(context.pendingReplayRef.current, null);
   const supported = { public_id: "m5", timeframe: "m5", interval: "5min" };
   restore(supported);

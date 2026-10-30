@@ -227,44 +227,6 @@ export function BrokerTradeTerminal({
             </div>
           </div>
 
-          {snapshot && (
-            <div className="mb-3 rounded-xl border border-gray-800 bg-gray-950/40 p-3">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="font-semibold tracking-wide text-gray-300">
-                  Demo 账户
-                </span>
-                <select
-                  aria-label="福汇账户"
-                  className="min-w-0 max-w-[65%] rounded border border-gray-700 bg-gray-800 px-2 py-1 text-xs text-gray-200 outline-none focus:border-blue-500"
-                  value={snapshot.account.id}
-                  disabled={broker.busy}
-                  onChange={(event) => broker.setAccountId(event.target.value)}
-                >
-                  {snapshot.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                {[
-                  ["余额", snapshot.account.balance],
-                  ["净值", snapshot.account.equity],
-                  ["可用保证金", snapshot.account.usable_margin],
-                  ["已用保证金", snapshot.account.used_margin],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="min-w-0">
-                    <dt className="text-gray-500">{label}</dt>
-                    <dd className="truncate font-mono text-gray-200">
-                      {money(value as number)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )}
-
           <div className="mb-4 space-y-3">
             <label className="block">
               <span className="mb-1.5 flex items-center justify-between text-base font-semibold text-gray-300">
