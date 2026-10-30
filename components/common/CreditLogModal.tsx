@@ -6,11 +6,12 @@ import { Coins, X, Loader2 } from "lucide-react";
 import { useFetch } from "@/context/FetchContext";
 
 interface CreditLogModalProps {
+  className?: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-const CreditLogModal: React.FC<CreditLogModalProps> = ({ isOpen, onClose }) => {
+const CreditLogModal: React.FC<CreditLogModalProps> = ({ isOpen, onClose, className }) => {
   const { customFetch } = useFetch();
   const [creditLogs, setCreditLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
@@ -91,7 +92,7 @@ const CreditLogModal: React.FC<CreditLogModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 p-4 animate-fadeIn">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 p-4 animate-fadeIn ${className ?? ""}`}>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden animate-slideUp">
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center">

@@ -172,7 +172,7 @@ export default function HomeV2() {
               <span>寻找你的工具</span>
               <kbd>⌘ K</kbd>
             </button>
-            <UserHeaderActions />
+            <UserHeaderActions creditLogClassName={styles.creditLogDialog} />
           </div>
         </div>
       </header>

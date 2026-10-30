@@ -13,7 +13,13 @@ import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import CreditLogModal from "./CreditLogModal";
 
-const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
+const UserHeaderActions = ({
+  simpleMode = true,
+  creditLogClassName,
+}: {
+  simpleMode?: boolean;
+  creditLogClassName?: string;
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout, login } = useAuth();
@@ -210,6 +216,7 @@ const UserHeaderActions = ({ simpleMode = true }: { simpleMode?: boolean }) => {
 
       {/* Credit Logs Modal */}
       <CreditLogModal
+        className={creditLogClassName}
         isOpen={isCreditLogModalOpen}
         onClose={() => setIsCreditLogModalOpen(false)}
       />
