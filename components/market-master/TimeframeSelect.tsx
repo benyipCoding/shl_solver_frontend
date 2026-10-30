@@ -28,7 +28,6 @@ export function TimeframeSelect({ value, onChange, options, compact = false }: P
       top: openAbove ? rect.top - 8 : rect.bottom + 8,
       transform: openAbove ? "translateY(-100%)" : undefined,
       width,
-      maxHeight: Math.min(256, openAbove ? rect.top - 20 : window.innerHeight - rect.bottom - 20),
       zIndex: 160,
     });
   };

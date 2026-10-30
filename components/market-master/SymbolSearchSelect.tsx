@@ -15,7 +15,7 @@ import {
 import { useFetch } from "@/context/FetchContext";
 
 const PANEL_MIN_WIDTH = 200;
-const PANEL_MAX_HEIGHT = 320;
+const PANEL_MAX_HEIGHT = 640;
 const PANEL_GAP = 8;
 const VIEWPORT_PADDING = 12;
 
@@ -562,7 +562,7 @@ export const SymbolSearchSelect = ({ value, onChange }: any) => {
                 zIndex: 160,
               }}
             >
-              <div className="max-h-64 overflow-y-auto py-1">
+              <div className="max-h-[512px] overflow-y-auto py-1">
                 {favorites.map((sym) => (
                   <button
                     key={sym}
