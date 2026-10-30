@@ -1390,19 +1390,21 @@
   }
   .orbitCanvas {
     top: 0;
+    left: 0;
+    right: 0;
   }
   .orbitRing {
     top: 11cqw;
     height: 83cqw;
   }
   .coreLabel {
-    top: 44cqw;
+    top: 38cqw;
   }
   .orbitNode {
     position: relative;
     inset: auto;
     flex-direction: row;
-    gap: 8px;
+    gap: 6px;
     padding: 12px 10px;
     border: 1px solid #a6bf8b25;
     border-radius: 9px;
@@ -1415,14 +1417,16 @@
     padding: 0;
     background: transparent;
     white-space: normal;
+    min-width: 0;
+    word-break: keep-all;
     overflow-wrap: anywhere;
   }
   .nodeLabel svg {
     display: none;
   }
   .nodeIcon {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
   }
   .coreLabel span {
     font-size: 48px;
@@ -1584,6 +1588,15 @@
   }
   .commandFooter {
     padding: 14px;
+  }
+}
+@media (max-width: 380px) {
+  .orbitNode {
+    flex-direction: column;
+    text-align: center;
+  }
+  .orbitNode:first-of-type {
+    flex-direction: row;
   }
 }
 @media (prefers-reduced-motion: reduce) {
