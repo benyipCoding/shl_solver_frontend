@@ -20,9 +20,11 @@ jobs:
           command_timeout: 30m
           # 登录后要执行的命令
           script: |
+            set -e
+
             # 进入前端目录并拉取最新代码
             cd ~/shl_app/frontend
-            git pull origin main
+            git pull --ff-only origin main
 
             # 回到 docker-compose 所在目录，重新构建并重启前端容器
             cd ~/shl_app
