@@ -28,6 +28,93 @@ const {
 } = target.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test("M1 is available only in realtime while every other timeframe stays available", () => {
+  const { getTimeframeOptions, getIntervalByTimeframe } = target.exports;
+  const history = plain(getTimeframeOptions("history"));
+  const realtime = plain(getTimeframeOptions("realtime"));
+  assert.equal(history[0].value, "m5");
+  assert.equal(realtime[0].value, "m1");
+  assert.deepEqual(history, realtime.slice(1));
+  assert.equal(getIntervalByTimeframe("m1"), "1min");
+});
+
+test("saved M1 restores as M5 in history and remains M1 in realtime", () => {
+  const { persistLastTimeframe, resolveLastTimeframe, LAST_TIMEFRAME_STORAGE_KEY } = target.exports;
+  persistLastTimeframe("m1");
+  assert.equal(resolveLastTimeframe(), "m5");
+  assert.equal(resolveLastTimeframe("realtime"), "m1");
+  persistLastTimeframe("H4");
+  assert.equal(resolveLastTimeframe(), "H4");
+  storage.set(LAST_TIMEFRAME_STORAGE_KEY, "invalid");
+  assert.equal(resolveLastTimeframe(), "D1");
+  storage.delete(LAST_TIMEFRAME_STORAGE_KEY);
+});
+
+// Exercise the real mode/replay handlers: filtering the dropdown alone would
+// still allow a live M1 selection or an old saved replay to request history M1.
+const pageSource = fs.readFileSync(new URL("./MarketMasterPage.tsx", import.meta.url), "utf8");
+const pageAst = ts.createSourceFile("page.tsx", pageSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+function pageHandler(name, context) {
+  let handler;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(pageAst) === name) {
+      handler = node.initializer.arguments[0].getText(pageAst);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(pageAst);
+  assert.ok(handler, `missing ${name}`);
+  return vm.runInNewContext(ts.transpileModule(`(${handler})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2020 },
+  }).outputText, { ...target.exports, ...context });
+}
+
+test("switching from realtime M1 changes the timeframe before enabling history", () => {
+  const changes = [];
+  const context = {
+    timeframeRef: { current: "m1" }, dataModeRef: { current: "realtime" },
+    pendingTimeframeViewportRef: { current: {} }, pendingBacktestTimeframeChangeRef: { current: {} },
+    pendingReplayRef: { current: null },
+    setManagedTradeId() {}, setBrokerCloseAll() {}, setPendingTradeClose() {},
+    setReplayingSessionId() {}, setIsBacktestHistoryOpen() {},
+    setTimeframe: (value) => changes.push(["timeframe", value]),
+    setDataMode: (value) => changes.push(["mode", value]),
+  };
+  const apply = pageHandler("applyMarketChange", context);
+  apply("dataMode", "history");
+  assert.deepEqual(changes, [["timeframe", "m5"], ["mode", "history"]]);
+  assert.equal(context.dataModeRef.current, "history");
+  changes.length = 0;
+  apply("timeframe", "m1");
+  assert.deepEqual(changes, []);
+});
+
+test("realtime mode still accepts M1 timeframe changes", () => {
+  const changes = [];
+  const apply = pageHandler("applyMarketChange", {
+    dataModeRef: { current: "realtime" }, isBacktestModeRef: { current: false },
+    pendingTimeframeViewportRef: { current: null }, pendingBacktestTimeframeChangeRef: { current: null },
+    captureTimeframeViewport: () => null, setTimeframe: (value) => changes.push(value),
+  });
+  apply("timeframe", "m1");
+  assert.deepEqual(changes, ["m1"]);
+});
+
+test("old M1 replay records and share links cannot reactivate history M1", () => {
+  const context = {
+    dataModeRef: { current: "history" }, pendingReplayRef: { current: null },
+    setIsBacktestHistoryOpen() {}, setReplayingSessionId() {}, setPendingReplayToken() {},
+    isBacktestMode: false,
+  };
+  const restore = pageHandler("restoreReplayDetail", context);
+  assert.throws(() => restore({ public_id: "old-m1", timeframe: "m1", interval: "1min" }), /M1/);
+  assert.throws(() => restore({ public_id: "old-m1", interval: "1min" }), /M1/);
+  assert.equal(context.pendingReplayRef.current, null);
+  const supported = { public_id: "m5", timeframe: "m5", interval: "5min" };
+  restore(supported);
+  assert.equal(context.pendingReplayRef.current, supported);
+});
+
 test("old saved indicator settings gain disabled volume without losing existing indicators", () => {
   const legacy = createDefaultIndicatorConfig();
   delete legacy.volume;

@@ -93,7 +93,9 @@ import {
   MIN_BACKTEST_CANDLES,
   MIN_FORWARD_CANDLES,
   SELECTED_LINE_WIDTH_BOOST,
-  TIMEFRAME_OPTIONS,
+  getTimeframeOptions,
+  isSupportedTimeframe,
+  resolveTimeframeForMode,
   applySyncedCrosshair,
   isCrosshairRefreshEcho,
   replaceMacdSeriesData,
@@ -5525,6 +5527,8 @@ export function MarketMasterPage() {
         pendingReplayRef.current = null;
         setReplayingSessionId(null);
         setIsBacktestHistoryOpen(false);
+        // Change both in the same render so history never requests live-only M1.
+        setTimeframe(resolveTimeframeForMode(timeframeRef.current, value as MarketDataMode));
         dataModeRef.current = value as MarketDataMode;
         setDataMode(value as MarketDataMode);
         return;
@@ -5535,6 +5539,7 @@ export function MarketMasterPage() {
         setSymbol(value);
         return;
       }
+      if (!isSupportedTimeframe(value, dataModeRef.current)) return;
       pendingTimeframeViewportRef.current = captureTimeframeViewport();
       pendingBacktestTimeframeChangeRef.current = isBacktestModeRef.current
         ? {
@@ -5857,6 +5862,9 @@ export function MarketMasterPage() {
   const restoreReplayDetail = useCallback((detail) => {
     // A history request can finish after the user has switched to realtime.
     if (dataModeRef.current !== "history") return;
+    if (!isSupportedTimeframe(detail.timeframe || getTimeframeByInterval(detail.interval), "history")) {
+      throw new Error("历史模式已移除 M1 周期，原回测记录仍保留，但无法还原播放");
+    }
     setIsBacktestHistoryOpen(false);
     setReplayingSessionId(detail.public_id);
     pendingReplayRef.current = detail;
@@ -6511,7 +6519,7 @@ export function MarketMasterPage() {
         setTimeframe={(nextTimeframe: string) =>
           requestMarketChange("timeframe", nextTimeframe)
         }
-        timeframeOptions={TIMEFRAME_OPTIONS}
+        timeframeOptions={getTimeframeOptions(dataMode)}
         mode={mode}
         setMode={setInteractionMode}
         drawType={drawType}

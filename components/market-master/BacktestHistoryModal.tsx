@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { History, Loader2, Play, Share2, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useFetch } from "@/context/FetchContext";
-import { TIMEFRAME_OPTIONS } from "@/components/market-master/market-config";
+import { TIMEFRAME_OPTIONS, getTimeframeByInterval, isSupportedTimeframe } from "@/components/market-master/market-config";
 import { createBacktestPersistClient } from "@/components/market-master/backtest-persistence";
 import type { BacktestSessionListItem } from "@/components/market-master/backtest-replay";
 import { BacktestShareDialog } from "./BacktestShareDialog";
@@ -194,6 +194,9 @@ export function BacktestHistoryModal({
                 const pnl = Number(item.realized_pnl || 0);
                 const isReplaying = replayingId === item.public_id;
                 const isDeleting = deletingId === item.public_id;
+                const replaySupported = isSupportedTimeframe(
+                  item.timeframe || getTimeframeByInterval(item.interval), "history"
+                );
                 return (
                   <article
                     key={item.public_id}
@@ -224,6 +227,7 @@ export function BacktestHistoryModal({
                           {item.is_shared && item.saved_at ? `收藏于 ${formatDateTime(item.saved_at)}` : formatDateTime(item.created_at)}
                         </p>
                         {item.is_available === false && <p className="mt-1 text-xs text-gray-500">作者已停止分享或删除原记录</p>}
+                        {!replaySupported && <p className="mt-1 text-xs text-gray-500">该周期已从历史模式移除，记录保留，无法还原播放</p>}
                         <p className="mt-2 text-xs text-gray-400">
                           成交 {item.trade_count || 0} 笔
                           {item.closed_trade_count
@@ -242,7 +246,7 @@ export function BacktestHistoryModal({
                       <div className="flex shrink-0 flex-col items-stretch gap-2">
                         <button
                           type="button"
-                          disabled={Boolean(replayingId) || Boolean(deletingId) || item.is_available === false}
+                          disabled={Boolean(replayingId) || Boolean(deletingId) || item.is_available === false || !replaySupported}
                           onClick={() => onReplay(item.public_id)}
                           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >

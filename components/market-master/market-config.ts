@@ -4,6 +4,7 @@ import type {
   SeriesType,
   Time,
 } from "lightweight-charts";
+import type { MarketDataMode } from "./realtime-data";
 import type { LiquidityConfig } from "./liquidity-zones";
 // 分笔动能暂时停用；恢复步骤见 pen-momentum.md。
 // import type { PenMomentumConfig } from "./pen-momentum";
@@ -40,17 +41,29 @@ export const TIMEFRAME_OPTIONS = [
 export const DEFAULT_TIMEFRAME = "D1";
 export const LAST_TIMEFRAME_STORAGE_KEY = "marketMasterLastTimeframe";
 
-const isSupportedTimeframe = (timeframe: string) =>
-  TIMEFRAME_OPTIONS.some((option) => option.value === timeframe);
+const HISTORY_TIMEFRAME_OPTIONS = TIMEFRAME_OPTIONS.filter(
+  (option) => option.value !== "m1"
+);
 
-export const resolveLastTimeframe = () => {
+export const getTimeframeOptions = (mode: MarketDataMode) =>
+  mode === "realtime" ? TIMEFRAME_OPTIONS : HISTORY_TIMEFRAME_OPTIONS;
+
+export const isSupportedTimeframe = (
+  timeframe: string,
+  mode: MarketDataMode = "realtime"
+) => getTimeframeOptions(mode).some((option) => option.value === timeframe);
+
+export const resolveTimeframeForMode = (timeframe: string, mode: MarketDataMode) => {
+  if (mode === "history" && timeframe === "m1") return "m5";
+  return isSupportedTimeframe(timeframe, mode) ? timeframe : DEFAULT_TIMEFRAME;
+};
+
+export const resolveLastTimeframe = (mode: MarketDataMode = "history") => {
   if (typeof window === "undefined") return DEFAULT_TIMEFRAME;
 
   try {
     const savedTimeframe = localStorage.getItem(LAST_TIMEFRAME_STORAGE_KEY);
-    return savedTimeframe && isSupportedTimeframe(savedTimeframe)
-      ? savedTimeframe
-      : DEFAULT_TIMEFRAME;
+    return resolveTimeframeForMode(savedTimeframe ?? DEFAULT_TIMEFRAME, mode);
   } catch {
     return DEFAULT_TIMEFRAME;
   }
