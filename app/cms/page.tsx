@@ -148,6 +148,10 @@ export default function CMSOverview() {
       </div>
 
       <div className="mt-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
+        <Link href="/cms/homepage" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-900 transition hover:bg-sky-100 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20">
+          <div><h2 className="font-semibold">首页版本管理</h2><p className="mt-1 text-sm opacity-75">预览经典门户与轨道控制台，选择全站启用的首页。</p></div>
+          <span className="text-sm font-medium">管理版本 →</span>
+        </Link>
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6">
           快捷导航
         </h2>

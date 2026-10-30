@@ -52,8 +52,9 @@ test("broker history rows replace the cached closed-trade table for the live rec
   assert.equal(rows[0].brokerTradeId, "today");
 });
 
-function hookHarness({getStatus=200}={}) {
+function hookHarness({getStatus=200, deferHistory=false}={}) {
   const slots = [], effects = [], sources = [], requests = [], storage = new Map();
+  const historyRequests = [];
   const timers=[];
   let now=0;
   let cursor = 0, seq = 0, resolvePost;
@@ -66,10 +67,13 @@ function hookHarness({getStatus=200}={}) {
   };
   const snapshot={type:"account",account:{id:"demo"},instrument:{symbol:"EUR/USD"},positions:[],closed_positions:[],unresolved:[]};
   class Source {constructor(){sources.push(this);} close(){this.closed=true;}}
-  const {useBrokerTrading: runHook} = load("../../hooks/useBrokerTrading.ts", {react}, {
+  const {useBrokerTrading: runHook} = load("../../hooks/useBrokerTrading.ts", {react, "react-hot-toast": {default: {success() {}}}}, {
     fetch: async (url,options) => {
       requests.push({url,options});
       if (options?.method === "POST") return new Promise(resolve => {resolvePost=resolve;});
+      if (deferHistory && url.includes("/history?")) return new Promise(resolve => {
+        historyRequests.push({url, resolve: (body, status=200) => resolve(Response.json(body, {status}))});
+      });
       return Response.json(getStatus===200 ? snapshot : {detail:"Unauthorized"},{status:getStatus});
     }, EventSource:Source, URLSearchParams, AbortController, AbortSignal,
     Date:class extends Date { static now(){return now;} },
@@ -78,12 +82,81 @@ function hookHarness({getStatus=200}={}) {
     crypto:{randomUUID:()=>`command-${++seq}`},
   });
   let params={enabled:true,symbol:"EUR/USD",onSnapshot(){}};
-  return {requests,sources,storage,
+  return {requests,sources,storage,historyRequests,
     advance(ms){now+=ms;timers.forEach(fn=>fn?.());},
     render(changes={}) {params={...params,...changes};cursor=0;const value=runHook(params);effects.splice(0).forEach(fn=>fn());return value;},
     resolve(data) {resolvePost(Response.json(data));},
   };
 }
+
+const tick = () => new Promise(resolve => setImmediate(resolve));
+const historyResponse = (ids) => ({type: "history", account: {id: "demo"},
+  items: ids.map(trade_id => ({trade_id}))});
+
+for (const first of ["today", "all"]) {
+  test(`full history and today's chart records stay independent when ${first} resolves first`, async () => {
+    const displays = [];
+    const h = hookHarness({deferHistory: true});
+    h.render({onSnapshot: (_snapshot, history) => { if (history) displays.push(history); }});
+    await tick();
+    const hook = h.render();
+    assert.equal(hook.history, null);
+    assert.equal(hook.historyLoading, false);
+    const all = hook.refreshHistory();
+    const [todayRequest, allRequest] = h.historyRequests;
+    assert.match(todayRequest.url, /scope=recent.*from_ts=/);
+    assert.match(allRequest.url, /scope=all/);
+    assert.doesNotMatch(allRequest.url, /from_ts|to_ts|symbol=/);
+    if (first === "today") {
+      todayRequest.resolve(historyResponse(["today"]));
+      await tick();
+      assert.equal(h.render().history, null);
+      assert.equal(h.render().historyLoading, true);
+      allRequest.resolve(historyResponse(["today", "old"]));
+    } else {
+      allRequest.resolve(historyResponse(["today", "old"]));
+      await all;
+      todayRequest.resolve(historyResponse(["today"]));
+    }
+    await all; await tick();
+    assert.deepEqual(h.render().history.items.map(x => x.trade_id), ["today", "old"]);
+    assert.equal(h.render().historyLoading, false);
+    assert.deepEqual(displays.at(-1).items.map(x => x.trade_id), ["today"]);
+    // A completed trading command refreshes today's rows in the background.
+    const command = h.render().send({action: "close", trade_id: "open", amount: 1000});
+    h.resolve({client_id: "command-1", status: "confirmed", message: "done"});
+    await command;
+    h.historyRequests[2].resolve(historyResponse(["today", "just-closed"]));
+    await tick();
+    assert.deepEqual(h.render().history.items.map(x => x.trade_id), ["today", "old"]);
+    assert.deepEqual(displays.at(-1).items.map(x => x.trade_id), ["today", "just-closed"]);
+  });
+}
+
+test("failed full history never presents today's rows as complete history", async () => {
+  const h = hookHarness({deferHistory: true});
+  h.render(); await tick();
+  const all = h.render().refreshHistory();
+  const failure = assert.rejects(all, /report unavailable/);
+  h.historyRequests[1].resolve({message: "report unavailable"}, 502);
+  await failure;
+  h.historyRequests[0].resolve(historyResponse(["today"]));
+  await tick();
+  assert.equal(h.render().history, null);
+  assert.equal(h.render().historyError, "report unavailable");
+});
+
+test("late history responses cannot populate a disabled trading session", async () => {
+  const h = hookHarness({deferHistory: true});
+  h.render(); await tick();
+  const all = h.render().refreshHistory();
+  h.render({enabled: false});
+  h.historyRequests[1].resolve(historyResponse(["old"]));
+  h.historyRequests[0].resolve(historyResponse(["today"]));
+  await all; await tick();
+  assert.equal(h.render().history, null);
+  assert.equal(h.render().historyLoading, false);
+});
 test("broker submissions cannot double-send, persist uncertain IDs, and stop on stale mode/symbol", async () => {
   const h=hookHarness();h.render();await new Promise(resolve=>setImmediate(resolve));
   const hook=h.render();assert.equal(hook.ready,true);

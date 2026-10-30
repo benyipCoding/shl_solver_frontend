@@ -79,7 +79,7 @@ export function BrokerTradeHistoryModal({
             <History size={18} className="text-blue-300" />
             <div>
               <h2 id="broker-trade-history-title" className="font-semibold text-white">福汇历史交易记录</h2>
-              <p className="mt-0.5 text-xs text-gray-500">账户 {history?.account.id ?? broker.snapshot?.account.id ?? "—"} · 数据来自 FXCM Demo</p>
+              <p className="mt-0.5 text-xs text-gray-500">账户 {history?.account.id ?? broker.snapshot?.account.id ?? "—"} · 全部品种 · 全部历史已平仓交易</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -96,7 +96,7 @@ export function BrokerTradeHistoryModal({
           {broker.historyError && <p role="alert" className="m-4 rounded border border-red-800/60 bg-red-950/30 px-3 py-2 text-sm text-red-300">{broker.historyError}</p>}
           {broker.historyLoading && !history ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-400"><Loader2 size={17} className="animate-spin" />正在从福汇查询交易记录…</div>
-          ) : items.length === 0 ? (
+          ) : !history ? null : items.length === 0 ? (
             <div className="py-16 text-center text-sm text-gray-500">福汇账户暂无已平仓交易记录</div>
           ) : (
             <table className="w-full min-w-[980px] whitespace-nowrap text-left text-xs">
@@ -120,7 +120,7 @@ export function BrokerTradeHistoryModal({
           )}
         </div>
         <footer className="shrink-0 border-t border-gray-800 px-4 py-2.5 text-xs text-gray-500">
-          共 {items.length} 笔。成交价格、佣金和过夜费以福汇账户回报为准。
+          {history ? `共 ${items.length} 笔。` : ""}成交价格、佣金和过夜费以福汇账户报表为准。
         </footer>
       </section>
     </div>

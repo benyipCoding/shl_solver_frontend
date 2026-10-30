@@ -51,6 +51,7 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
   const displayHistoryRef = useRef<BrokerHistoryResponse | null>(null);
   const historyScopeRef = useRef("");
   const historyRequestIdRef = useRef(0);
+  const displayHistoryRequestIdRef = useRef(0);
   const inFlight = useRef(false);
   const storageKey = (account: string) => `fxcm-demo-pending:${account}`;
 
@@ -61,12 +62,17 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
       scope: string,
       updateDisplay = false,
     ) => {
-      const requestId = ++historyRequestIdRef.current;
-      const params = new URLSearchParams({ account_id: account });
+      // The account-wide modal and today's chart records have independent
+      // requests: a background refresh must never replace the modal's history.
+      const requestIdRef = updateDisplay ? displayHistoryRequestIdRef : historyRequestIdRef;
+      const requestId = ++requestIdRef.current;
+      const params = new URLSearchParams({ account_id: account, scope: updateDisplay ? "recent" : "all" });
       if (range.from_ts != null) params.set("from_ts", String(range.from_ts));
       if (range.to_ts != null) params.set("to_ts", String(range.to_ts));
-      setHistoryLoading(true);
-      setHistoryError("");
+      if (!updateDisplay) {
+        setHistoryLoading(true);
+        setHistoryError("");
+      }
       try {
         const data = (await readResponse(
           await fetch(`/api/market_master/trading/history?${params}`, {
@@ -77,22 +83,24 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
           latest.current.enabled &&
           latest.current.symbol === symbol &&
           latest.current.snapshot?.account.id === account &&
-          historyScopeRef.current === scope
+          historyScopeRef.current === scope &&
+          requestId === requestIdRef.current
         ) {
-          if (requestId === historyRequestIdRef.current) setHistory(data);
           if (updateDisplay) {
             displayHistoryRef.current = data;
             callback.current(latest.current.snapshot, data);
+          } else {
+            setHistory(data);
           }
         }
         return data;
       } catch (error) {
-        if (historyScopeRef.current === scope && requestId === historyRequestIdRef.current) {
+        if (!updateDisplay && historyScopeRef.current === scope && requestId === requestIdRef.current) {
           setHistoryError(error instanceof Error ? error.message : "查询交易记录失败");
         }
         throw error;
       } finally {
-        if (historyScopeRef.current === scope && requestId === historyRequestIdRef.current) setHistoryLoading(false);
+        if (!updateDisplay && historyScopeRef.current === scope && requestId === requestIdRef.current) setHistoryLoading(false);
       }
     },
     [symbol],
@@ -112,6 +120,7 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
     if (!enabled) {
       historyScopeRef.current = "";
       historyRequestIdRef.current += 1;
+      displayHistoryRequestIdRef.current += 1;
       displayHistoryRef.current = null;
       setHistory(null);
       setHistoryError("");
@@ -132,8 +141,12 @@ export function useBrokerTrading({ enabled, symbol, onSnapshot }: {
       const historyScope = `${symbol}:${data.account.id}`;
       if (historyScopeRef.current !== historyScope) {
         historyScopeRef.current = historyScope;
+        historyRequestIdRef.current += 1;
+        displayHistoryRequestIdRef.current += 1;
         displayHistoryRef.current = null;
         setHistory(null);
+        setHistoryError("");
+        setHistoryLoading(false);
         void requestHistory(data.account.id, localTodayRange(), historyScope, true).catch(() => {});
       }
       callback.current(data, displayHistoryRef.current);

@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Wallet, Database, ShieldCheck, Home } from "lucide-react";
+import {
+  Users,
+  Wallet,
+  Database,
+  ShieldCheck,
+  Home,
+  LayoutTemplate,
+} from "lucide-react";
 import { CMS_TABS } from "@/components/cms/config";
 
 export default function Sidebar({ className }: { className?: string }) {
@@ -10,6 +17,7 @@ export default function Sidebar({ className }: { className?: string }) {
 
   const navItems = [
     { href: "/cms", label: "概览看板", icon: Home },
+    { href: "/cms/homepage", label: "首页版本管理", icon: LayoutTemplate },
     { href: "/cms/users", label: CMS_TABS[0].label, icon: Users },
     { href: "/cms/wallets", label: CMS_TABS[1].label, icon: Wallet },
     { href: "/cms/credit-logs", label: CMS_TABS[2].label, icon: Database },
@@ -35,7 +43,9 @@ export default function Sidebar({ className }: { className?: string }) {
         </div>
 
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/cms" && pathname.startsWith(`${item.href}/`));
           return (
             <Link
               key={item.href}
