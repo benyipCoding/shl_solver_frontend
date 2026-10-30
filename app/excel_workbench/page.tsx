@@ -1,276 +1,257 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
-import * as XLSX from "xlsx";
-import { HistoryRecord } from "@/interfaces/excel_workbench";
+
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, X } from "lucide-react";
+import type {
+  SheetView,
+  TransformRequest,
+  WorkbookCommand,
+} from "@/interfaces/excel_workbench";
 import { CommandPanel } from "@/components/excel_workbench/CommandPanel";
 import { DataPanel } from "@/components/excel_workbench/DataPanel";
 import { WorkbenchHeader } from "@/components/excel_workbench/WorkbenchHeader";
 import { HistoryDrawer } from "@/components/excel_workbench/HistoryDrawer";
 import { PrivacyModal } from "@/components/excel_workbench/PrivacyModal";
 import { LocalImportArea } from "@/components/excel_workbench/LocalImportArea";
+import { useWorkbook } from "@/components/excel_workbench/useWorkbook";
 import { useFetch } from "@/context/FetchContext";
-import toast from "react-hot-toast";
+import styles from "@/components/excel_workbench/Workbench.module.css";
 
-export default function App() {
+export default function ExcelWorkbench() {
   const { customFetch } = useFetch();
-
-  // Data State
+  const { request, dispose } = useWorkbook();
   const [fileName, setFileName] = useState("");
-  const [history, setHistory] = useState<HistoryRecord[]>([]); // Array of operation records
-  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
-  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false); // 控制抽屉开关
-  const [isNewRecordAdded, setIsNewRecordAdded] = useState(false); // 控制新记录动画
-
-  // Sheet State
   const [sheetNames, setSheetNames] = useState<string[]>([]);
-  const [currentSheetName, setCurrentSheetName] = useState<string>("");
-  const workbookRef = useRef<XLSX.WorkBook | null>(null);
-
-  // AI State
+  const [view, setView] = useState<SheetView | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const operation = useRef(false);
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => () => abort.current?.abort(), []);
 
-  // Privacy Transparency State
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-
-  // Derived active state
-  const activeRecord =
-    history.find((h) => h.id === activeHistoryId) || history[0];
-  const displayData = activeRecord?.data || [];
-  const displayColumns = activeRecord?.columns || [];
-
-  // Helper to load a specific sheet
-  const loadSheetData = (workbook: XLSX.WorkBook, sheet: string) => {
-    const worksheet = workbook.Sheets[sheet];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-      raw: false,
-      defval: "",
-    });
-
-    const initialRecord = {
-      id: Date.now().toString(),
-      title: `原始导入数据 (${sheet})`,
-      data: jsonData as any[],
-      columns: jsonData.length > 0 ? Object.keys((jsonData as any[])[0]) : [],
-      timestamp: new Date().toLocaleTimeString(),
-      isOriginal: true,
-    };
-    setHistory([initialRecord]);
-    setActiveHistoryId(initialRecord.id);
+  const payload: TransformRequest = {
+    prompt,
+    columns: view?.snapshot.columns || [],
+    sample_row: view?.snapshot.data[0] || {},
+    protocol_version: 2,
   };
+  const reportError = (error: unknown) =>
+    setError(error instanceof Error ? error.message : "处理失败，请重试。");
 
-  const handleSheetChange = (sheet: string) => {
-    if (workbookRef.current && sheetNames.includes(sheet)) {
-      setCurrentSheetName(sheet);
-      loadSheetData(workbookRef.current, sheet);
-    }
-  };
-
-  const handleFileUpload = (file: File) => {
-    if (!file) return;
-    const isExcel = file.name.match(/\.(xlsx|xls|csv)$/i);
-    if (!isExcel) {
-      setError("不支持的格式，请选择 .xlsx, .xls 或 .csv 文件");
+  const handleFileUpload = async (file: File) => {
+    if (operation.current) return;
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      setError("请选择 .xlsx、.xls 或 .csv 文件。");
       return;
     }
-
-    setFileName(file.name);
+    operation.current = true;
+    setBusy("正在读取工作簿…");
     setError(null);
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: "binary" });
-        workbookRef.current = workbook;
-
-        const sheets = workbook.SheetNames;
-        setSheetNames(sheets);
-
-        if (sheets.length > 0) {
-          const firstSheet = sheets[0];
-          setCurrentSheetName(firstSheet);
-          loadSheetData(workbook, firstSheet);
-        }
-      } catch (err: any) {
-        setError("解析时发生错误：" + err.message);
-      }
-    };
-    reader.readAsBinaryString(file);
+    try {
+      const result = await request({
+        type: "import",
+        buffer: await file.arrayBuffer(),
+        fileName: file.name,
+      });
+      setFileName(file.name);
+      setSheetNames(result.sheetNames!);
+      setView(result.view!);
+      setPrompt("");
+    } catch (error) {
+      reportError(error);
+    } finally {
+      operation.current = false;
+      setBusy("");
+    }
   };
 
-  // --- AI Processing with Payload Construction ---
-  const aiPayloadData = {
-    columns: displayColumns,
-    sampleRow: displayData[0] || {},
+  const changeView = async (command: WorkbookCommand) => {
+    if (operation.current) return;
+    operation.current = true;
+    setBusy("正在加载工作表…");
+    setError(null);
+    try {
+      const result = await request(command);
+      if (result.view) setView(result.view);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      operation.current = false;
+      setBusy("");
+    }
   };
 
   const handleProcess = async () => {
-    if (!prompt.trim()) return; // 移除了 displayData.length === 0 的拦截
-    setIsLoading(true);
+    if (!prompt.trim() || !view || operation.current) return;
+    operation.current = true;
+    const controller = new AbortController();
+    abort.current = controller;
+    setProcessing(true);
+    setBusy("AI 正在理解你的需求…");
     setError(null);
-
+    const timeout = setTimeout(() => controller.abort(), 120_000);
     try {
-      const res = await customFetch(
+      const response = await customFetch(
         "/api/excel_wb",
         {
           method: "POST",
-          body: JSON.stringify({
-            prompt,
-            columns: aiPayloadData.columns,
-            sample_row: aiPayloadData.sampleRow,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
         },
-        true
+        true,
       );
-      if (!res.ok) {
-        const errData = await res.json();
-        setError(errData.error || errData.message || "AI 处理失败");
-      }
-
-      const parsed = await res.json();
-
-      // Sandbox execution
-      const executionWrapper = new Function(
-        "data",
-        `${parsed.code}\n return transform(data);`
-      );
-      const dataCopy = JSON.parse(JSON.stringify(displayData));
-      const transformedData = executionWrapper(dataCopy);
-      if (!Array.isArray(transformedData))
-        throw new Error("处理结果格式异常，期望返回数组。");
-      // Auto-detect new columns
-      const keySet = new Set<string>();
-      (transformedData as any[]).forEach((row: any) =>
-        Object.keys(row).forEach((k) => keySet.add(k))
-      );
-      const newRecord: HistoryRecord = {
-        id: Date.now().toString(),
-        title: prompt,
+      const parsed = await response.json();
+      if (!response.ok)
+        throw new Error(parsed.error || parsed.message || "AI 处理失败。");
+      if (typeof parsed.code !== "string")
+        throw new Error("AI 未返回有效的处理逻辑，请重试。");
+      if (controller.signal.aborted) return;
+      clearTimeout(timeout);
+      setBusy("正在本地应用数据与样式…");
+      const result = await request({
+        type: "transform",
+        sheetName: view.sheetName,
+        historyId: view.activeHistoryId,
+        code: parsed.code,
+        title: prompt.trim(),
         explanation: parsed.explanation,
-        data: transformedData as any[],
-        columns: Array.from(keySet),
-        timestamp: new Date().toLocaleTimeString(),
-      };
-      setHistory((prev) => [...prev, newRecord]);
-      setActiveHistoryId(newRecord.id);
+      });
+      setView(result.view!);
       setPrompt("");
-      // 触发按钮动画而不自动弹开抽屉
-      setIsNewRecordAdded(true);
-      setTimeout(() => setIsNewRecordAdded(false), 2000);
-    } catch (err: any) {
-      setError("执行失败: " + (err.message || "未知错误"));
+    } catch (error) {
+      if (controller.signal.aborted)
+        setError("处理已取消或等待超时，已有数据和样式已保留。");
+      else reportError(error);
     } finally {
-      setIsLoading(false);
+      clearTimeout(timeout);
+      abort.current = null;
+      operation.current = false;
+      setProcessing(false);
+      setBusy("");
     }
   };
 
-  const handleDeleteHistory = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setHistory((prev) => {
-      const filtered = prev.filter((h) => h.id !== id);
-      if (activeHistoryId === id && filtered.length > 0) {
-        setActiveHistoryId(filtered[filtered.length - 1].id);
-      }
-      return filtered;
-    });
-  };
-
-  const handleDownload = () => {
-    // 即使为空也允许导出（可以导出一个包含新表头的空表）
+  const handleDownload = async () => {
+    if (operation.current) return;
+    operation.current = true;
+    setBusy("正在生成含样式的工作簿…");
+    setError(null);
     try {
-      const worksheet = XLSX.utils.json_to_sheet(
-        displayData.length > 0 ? displayData : []
+      const result = await request({ type: "export" });
+      const url = URL.createObjectURL(
+        new Blob([result.buffer!], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
       );
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-      const exportName = fileName
-        ? fileName.replace(/\.[^/.]+$/, "") + "_已处理"
-        : "数据导出";
-      XLSX.writeFile(workbook, `${exportName}.xlsx`);
-    } catch (err: any) {
-      setError("导出失败: " + err.message);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileName.replace(/\.[^/.]+$/, "")}_已处理.xlsx`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      operation.current = false;
+      setBusy("");
     }
   };
-
-  useEffect(() => {
-    return () => {
-      setError(null);
-    };
-  }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans p-4 md:p-8 md:pb-4 transition-colors">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
+    <main
+      className={`${styles.workbench} min-h-screen bg-[#f5f7fa] p-3 text-slate-800 dark:bg-slate-950 dark:text-slate-100 sm:p-6 xl:p-8`}
+    >
+      <div className="mx-auto max-w-[1800px] space-y-5">
         <WorkbenchHeader
-          hasHistory={history.length > 0}
+          hasHistory={Boolean(view)}
+          disabled={Boolean(busy)}
           onDownload={handleDownload}
         />
-
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-md shadow-sm">
-            <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-base text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p className="flex-1">{error}</p>
+            <button aria-label="关闭提示" onClick={() => setError(null)}>
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
-
-        {/* Local Import */}
-        {history.length === 0 ? (
-          <LocalImportArea onFileUpload={handleFileUpload} />
-        ) : (
-          /* Workspace */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Panel: Command */}
+        {view ? (
+          <div className="grid items-start gap-5 lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)]">
             <CommandPanel
               fileName={fileName}
-              displayDataLength={displayData.length}
+              sheetName={view.sheetName}
+              displayDataLength={view.snapshot.data.length}
               onCloseFile={() => {
-                setHistory([]);
+                if (operation.current) return;
+                dispose();
+                setView(null);
                 setSheetNames([]);
-                setCurrentSheetName("");
-                workbookRef.current = null;
+                setFileName("");
+                setHistoryOpen(false);
+                setError(null);
               }}
               prompt={prompt}
               setPrompt={setPrompt}
-              isLoading={isLoading}
+              busy={busy}
+              processing={processing}
               onProcess={handleProcess}
-              onShowPrivacy={() => setShowPrivacyModal(true)}
+              onCancel={() => {
+                abort.current?.abort();
+                void request({ type: "cancel" });
+              }}
+              onShowPrivacy={() => setPrivacyOpen(true)}
             />
-
-            {/* Right Panel: Data Table */}
             <DataPanel
-              activeRecord={activeRecord}
-              activeHistoryIndex={history.findIndex(
-                (h) => h.id === activeHistoryId
-              )}
-              historyCount={history.length}
-              isNewRecordAdded={isNewRecordAdded}
-              onOpenHistory={() => setIsHistoryDrawerOpen(true)}
+              view={view}
               sheetNames={sheetNames}
-              currentSheetName={currentSheetName}
-              onSheetChange={handleSheetChange}
+              busy={busy}
+              onOpenHistory={() => setHistoryOpen(true)}
+              onSheetChange={(sheetName) =>
+                void changeView({ type: "select", sheetName })
+              }
             />
           </div>
+        ) : (
+          <LocalImportArea onFileUpload={handleFileUpload} busy={busy} />
         )}
-
-        {/* --- Privacy Transparency Modal --- */}
         <PrivacyModal
-          isOpen={showPrivacyModal}
-          onClose={() => setShowPrivacyModal(false)}
-          aiPayloadData={aiPayloadData}
+          isOpen={privacyOpen}
+          onClose={() => setPrivacyOpen(false)}
+          aiPayloadData={payload}
         />
-
-        {/* --- History Drawer UI --- */}
         <HistoryDrawer
-          isOpen={isHistoryDrawerOpen}
-          onClose={() => setIsHistoryDrawerOpen(false)}
-          history={history}
-          activeHistoryId={activeHistoryId}
-          onSelectHistory={(id) => setActiveHistoryId(id)}
-          onDeleteHistory={handleDeleteHistory}
+          isOpen={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          history={view?.history || []}
+          activeHistoryId={view?.activeHistoryId || null}
+          disabled={Boolean(busy)}
+          onSelectHistory={(historyId) => {
+            if (view)
+              void changeView({
+                type: "select",
+                sheetName: view.sheetName,
+                historyId,
+              });
+          }}
+          onDeleteHistory={(historyId, event) => {
+            event.stopPropagation();
+            if (view)
+              void changeView({
+                type: "deleteHistory",
+                sheetName: view.sheetName,
+                historyId,
+              });
+          }}
         />
       </div>
-    </div>
+    </main>
   );
 }

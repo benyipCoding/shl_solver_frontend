@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   Cpu,
   AlertCircle,
-  ChevronDown,
-  Sparkles,
   History as HistoryIcon,
   HeartHandshake,
   X,
@@ -29,6 +27,7 @@ import { SHLSolverHistoryItem } from "@/interfaces/history";
 import { useAppDispatch } from "@/store/hooks";
 import { addImages, clearImages } from "@/store/features/shlSlice";
 import TestCaseUploader from "@/components/shl_solver/TestCaseUploader";
+import ModelSelector from "@/components/shl_solver/ModelSelector";
 
 const SHL_TASK_ID_STORAGE_KEY = "shl_task_id";
 const SHL_TASK_IMAGES_STORAGE_KEY = "shl_task_images";
@@ -260,7 +259,7 @@ const SHLSolverPage = () => {
 
     // 3. Set model if available (optional, just for UI consistency)
     if (item.model) {
-      const modelObj = models.find((m) => m.name === item.model);
+      const modelObj = models.find((m) => m.key === item.model || m.name === item.model);
       if (modelObj) setSelectedModel(modelObj.id);
     }
 
@@ -271,7 +270,7 @@ const SHLSolverPage = () => {
   useEffect(() => {
     fetchLLMs().then((data) => {
       if (data) {
-        setModels(data);
+        setModels(data.filter((model: Model) => model.cost_credits != null));
       }
     });
   }, []);
@@ -284,7 +283,7 @@ const SHLSolverPage = () => {
       if (savedModelId && models.some((m) => m.id === Number(savedModelId))) {
         setSelectedModel(Number(savedModelId));
       } else {
-        setSelectedModel(models[0].id); // 默认选择第一个模型
+        setSelectedModel((models.find((model) => model.is_default) || models[0]).id);
       }
     }
   }, [models]);
@@ -379,26 +378,12 @@ const SHLSolverPage = () => {
           {/* Right Side: Model Selector & Features */}
           <div className="flex items-center w-full md:w-auto justify-end gap-2 md:gap-3">
             {/* Model Selector */}
-            <div className="relative flex-1 md:flex-none md:w-60">
-              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                <Sparkles className="h-4 w-4 text-indigo-500" />
-              </div>
-              <select
-                value={String(selectedModel)}
-                onChange={(e) => setSelectedModel(Number(e.target.value))}
-                disabled={loading}
-                className="w-full appearance-none pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:focus:ring-blue-400"
-              >
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                <ChevronDown className="h-4 w-4 text-slate-400" />
-              </div>
-            </div>
+            <ModelSelector
+              models={models}
+              value={selectedModel}
+              onChange={setSelectedModel}
+              disabled={loading}
+            />
 
             {/* History Toggle Button */}
             <button
@@ -457,7 +442,7 @@ const SHLSolverPage = () => {
                 selectedModelName={
                   models
                     .find((m) => m.id === selectedModel)
-                    ?.name.split(" ")[2] || "AI"
+                    ?.name || "AI"
                 }
                 isHistoryView={isHistoryView || !!result}
               />
@@ -475,7 +460,7 @@ const SHLSolverPage = () => {
           </div>
 
           {/* Right Column: Result Display */}
-          <ResultDisplay result={result} />
+          <ResultDisplay result={result} models={models} />
         </div>
 
         {/* Global API Error Message */}

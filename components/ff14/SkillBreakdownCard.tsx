@@ -10,6 +10,7 @@ import type {
   StaticText,
 } from "@/interfaces/ff14";
 import { formatNumber } from "@/utils/ff14";
+import { LoadingNotice } from "./LoadingState";
 
 const skillHighlightStyles = {
   castHitMismatch: {
@@ -100,22 +101,23 @@ const SkillBreakdownCard = ({
     1
   );
   const pendingValueClassName = isTopComparisonLoading
-    ? "text-[#9fb9df] animate-pulse"
+    ? "text-[#9fb9df] motion-safe:animate-pulse"
     : "text-[#9fb9df]";
   const pendingMobileDeltaClassName = isTopComparisonLoading
-    ? "border-[rgba(126,173,249,0.32)] bg-[rgba(34,58,99,0.24)] text-[#d7e6ff] animate-pulse"
+    ? "border-[rgba(126,173,249,0.32)] bg-[rgba(34,58,99,0.24)] text-[#d7e6ff] motion-safe:animate-pulse"
     : "border-[rgba(126,173,249,0.32)] bg-[rgba(34,58,99,0.24)] text-[#d7e6ff]";
   const canEvaluateHighlights = hasTopComparisonData && !isTopComparisonLoading;
+  const pendingValue = isTopComparisonLoading ? "…" : "N/A";
 
   const formatBenchmarkCasts = (value: number | null) =>
-    value === null ? "N/A" : String(value);
+    value === null ? pendingValue : String(value);
   const formatBenchmarkHits = (value: number | null) =>
-    value === null ? "N/A" : String(value);
+    value === null ? pendingValue : String(value);
   const formatSignedCount = (value: number | null) =>
-    value === null ? "N/A" : value > 0 ? `+${value}` : String(value);
+    value === null ? pendingValue : value > 0 ? `+${value}` : String(value);
   const formatSignedRdps = (value: number | null) => {
     if (value === null) {
-      return "N/A";
+      return pendingValue;
     }
 
     const formatted = formatNumber(value);
@@ -392,13 +394,7 @@ const SkillBreakdownCard = ({
       </div>
 
       {isTopComparisonLoading ? (
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[rgba(126,173,249,0.38)] bg-[rgba(34,58,99,0.38)] px-3 py-1 text-[0.76rem] text-[#dce9ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-          <span
-            className="inline-flex h-2 w-2 rounded-full bg-[#80d9ff] animate-pulse"
-            aria-hidden
-          />
-          {topComparisonStatusTitle}
-        </div>
+        <LoadingNotice title={topComparisonStatusTitle} />
       ) : null}
 
       <div className={ff14Styles.skillPanel}>

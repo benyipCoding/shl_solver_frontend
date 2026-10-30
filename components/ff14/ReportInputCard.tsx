@@ -2,11 +2,13 @@ import { Link2 } from "lucide-react";
 
 import { ff14Styles } from "@/constants/ff14";
 import type { Locale, ParsedReport, StaticText } from "@/interfaces/ff14";
+import { LoadingBadge } from "./LoadingState";
 
 interface ReportInputCardProps {
   text: StaticText;
   locale: Locale;
   hasValidReport: boolean;
+  isLoading: boolean;
   reportUrl: string;
   parsedReport: ParsedReport | null;
   onToggleLocale: () => void;
@@ -17,6 +19,7 @@ const ReportInputCard = ({
   text,
   locale,
   hasValidReport,
+  isLoading,
   reportUrl,
   parsedReport,
   onToggleLocale,
@@ -67,13 +70,17 @@ const ReportInputCard = ({
             </span>
           </button>
 
-          <span
-            className={
-              hasValidReport ? ff14Styles.statusReady : ff14Styles.statusIdle
-            }
-          >
-            {hasValidReport ? text.statusReady : text.statusIdle}
-          </span>
+          {isLoading ? (
+            <LoadingBadge label={text.loadingLabel} />
+          ) : (
+            <span
+              className={
+                hasValidReport ? ff14Styles.statusReady : ff14Styles.statusIdle
+              }
+            >
+              {hasValidReport ? text.statusReady : text.statusIdle}
+            </span>
+          )}
         </div>
       </div>
 

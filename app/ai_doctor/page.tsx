@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
 import ModelSelector from "@/components/ai_doctor/ModelSelector";
+import type { Model } from "@/interfaces/shl_solver";
 import UploadArea from "@/components/ai_doctor/UploadArea";
 import { Activity } from "lucide-react";
 import FeatureModal from "@/components/ai_doctor/FeatureModal";
@@ -127,7 +128,7 @@ export default function Home() {
   useEffect(() => {
     fetchLLMs().then((data) => {
       if (data) {
-        setModels(data);
+        setModels(data.filter((model: Model) => model.provider === "gemini"));
       }
     });
   }, []);

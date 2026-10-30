@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import EmptyState from "@/components/ff14/EmptyState";
 import EncounterSummaryCard from "@/components/ff14/EncounterSummaryCard";
 import HeroSection from "@/components/ff14/HeroSection";
+import LoadingState from "@/components/ff14/LoadingState";
 import ReportInputCard from "@/components/ff14/ReportInputCard";
 import SkillBreakdownCard from "@/components/ff14/SkillBreakdownCard";
 import TopPlayersCard from "@/components/ff14/TopPlayersCard";
@@ -464,6 +465,7 @@ const FF14Analyzer = () => {
           text={text}
           locale={locale}
           hasValidReport={hasValidReport}
+          isLoading={summaryState === "loading" || (shouldShowDetailView && topPlayersState === "loading")}
           reportUrl={reportUrl}
           parsedReport={parsedReport}
           onToggleLocale={toggleLocale}
@@ -504,6 +506,13 @@ const FF14Analyzer = () => {
                         compareActorId={navigation.compareActorId}
                         onStepZoom={handleStepZoom}
                         onCompareActorChange={handleCompareActorChange}
+                      />
+                    ) : topPlayersState === "loading" ? (
+                      <LoadingState
+                        variant="timeline"
+                        title={topPlayersStatusTitle}
+                        description={text.loadingComparisonHint}
+                        label={text.loadingLabel}
                       />
                     ) : (
                       <aside className={ff14Styles.card}>
@@ -564,6 +573,12 @@ const FF14Analyzer = () => {
                   }}
                 />
               )
+            ) : summaryState === "loading" ? (
+              <LoadingState
+                title={summaryStatusTitle}
+                description={text.loadingSummaryHint}
+                label={text.loadingLabel}
+              />
             ) : (
               <section className={ff14Styles.card}>
                 <div className="grid gap-2">
@@ -587,7 +602,18 @@ const FF14Analyzer = () => {
 
 export default function FF14Page() {
   return (
-    <Suspense fallback={<main className={ff14Styles.page}><p role="status">正在加载战斗分析器…</p></main>}>
+    <Suspense fallback={
+      <main className={`${ff14Styles.page} ${headingFont.variable} ${bodyFont.variable}`}>
+        <div className={`${ff14Styles.container} py-6`}>
+          <HeroSection text={TEXT.zh} />
+          <LoadingState
+            title="正在加载战斗分析器…"
+            description={TEXT.zh.loadingSummaryHint}
+            label={TEXT.zh.loadingLabel}
+          />
+        </div>
+      </main>
+    }>
       <FF14Analyzer />
     </Suspense>
   );

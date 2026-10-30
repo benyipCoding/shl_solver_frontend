@@ -1,52 +1,60 @@
-import React from "react";
 import Link from "next/link";
-import { Sparkles, ShieldCheck, Download } from "lucide-react";
+import { ArrowDownToLine, ChevronLeft, FileSpreadsheet } from "lucide-react";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
+import styles from "./Workbench.module.css";
 
-interface WorkbenchHeaderProps {
-  hasHistory: boolean;
-  onDownload: () => void;
-}
-
-export const WorkbenchHeader: React.FC<WorkbenchHeaderProps> = ({
+export function WorkbenchHeader({
   hasHistory,
+  disabled,
   onDownload,
-}) => {
+}: {
+  hasHistory: boolean;
+  disabled: boolean;
+  onDownload: () => void;
+}) {
   return (
-    <header className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3 transition-colors">
-          <Link
-            href="/"
-            className="p-2 bg-emerald-600 text-white rounded-lg shadow-sm"
-          >
-            <Sparkles className="w-5 h-5" />
-          </Link>
-          Excel AI 数据工作台{" "}
-          <span className="text-xs font-normal px-2 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 rounded-full ml-2 hidden md:inline-flex items-center">
-            <ShieldCheck className="w-4 h-4 mr-1.5" />
-            纯本地处理
-          </span>
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm transition-colors">
-          无需上传服务器，保护核心商业数据。使用 AI
-          生成逻辑，本地瞬间完成数据清洗、处理或模拟生成。
-        </p>
+    <header className="flex flex-wrap items-center justify-between gap-4 pb-1">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Link
+          href="/"
+          aria-label="返回首页"
+          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Link>
+        <div className="hidden rounded-2xl bg-emerald-600 p-3 text-white shadow-sm sm:block">
+          <FileSpreadsheet className="h-6 w-6" />
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+              Excel AI 数据工作台
+            </h1>
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-base font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-400">
+              AI
+            </span>
+          </div>
+          <p className="mt-1 text-base text-slate-400">
+            从数据整理到样式设计，让每一张表更出色。
+          </p>
+        </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2 sm:gap-3">
         {hasHistory && (
           <button
+            disabled={disabled}
             onClick={onDownload}
-            className="flex items-center px-4 py-2 bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 text-white rounded-lg font-medium transition-colors shadow-sm"
+            title="导出所有工作表各自选中的版本，包含数据与样式"
+            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-base font-medium text-white transition hover:bg-slate-700 disabled:opacity-40 dark:bg-emerald-600 dark:hover:bg-emerald-700"
           >
-            <Download className="w-4 h-4 mr-2" />
-            保存当前视图
+            <ArrowDownToLine className="h-4 w-4" />
+            导出工作簿
           </button>
         )}
         <ThemeToggle />
-        <UserHeaderActions />
+        <UserHeaderActions creditLogClassName={styles.workbench} />
       </div>
     </header>
   );
-};
+}

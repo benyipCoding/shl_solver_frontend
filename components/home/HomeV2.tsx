@@ -3,17 +3,12 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
-  ArrowDown,
-  ArrowRight,
   ArrowUpRight,
-  AudioLines,
-  Command,
   Crosshair,
   Orbit,
   Pause,
   Play,
   Search,
-  Sparkles,
   X,
 } from "lucide-react";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
@@ -106,7 +101,6 @@ export default function HomeV2() {
   const [paused, setPaused] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const active = HOME_MODULES[activeNode];
   const filtered = HOME_MODULES.filter(
     (module) => category === "全部工具" || module.category === category,
   );
@@ -157,9 +151,6 @@ export default function HomeV2() {
             <a href="#tools" className={styles.navActive}>
               探索工具
             </a>
-            <a href="#philosophy">
-              关于空间 <ArrowUpRight size={12} />
-            </a>
           </nav>
           <div className={styles.headerActions}>
             <button
@@ -169,7 +160,7 @@ export default function HomeV2() {
               aria-label="搜索工具（Ctrl 或 Command 加 K）"
             >
               <Search size={15} />
-              <span>寻找你的工具</span>
+              <span>搜索工具</span>
               <kbd>⌘ K</kbd>
             </button>
             <UserHeaderActions creditLogClassName={styles.creditLogDialog} />
@@ -180,10 +171,7 @@ export default function HomeV2() {
       <main className={styles.main}>
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.heroCopy}>
-            <div className={styles.eyebrow}>
-              <span className={styles.statusDot} /> A SPACE FOR YOUR NEXT IDEA{" "}
-              <span className={styles.eyebrowLine} />
-            </div>
+            <p className={styles.heroEyebrow}>你的智能工作空间</p>
             <h1 id="hero-title">
               无限可能，
               <br />
@@ -191,47 +179,25 @@ export default function HomeV2() {
               <i aria-hidden="true">✳</i>
             </h1>
             <p className={styles.heroDescription}>
-              让好奇心，抵达更远的地方。
-              <br />
-              从一个灵感到一次突破，你的智能工具宇宙，由此展开。
+              <span className={styles.heroLead}>
+                把复杂留给工具，把可能留给你。
+              </span>
+              从逻辑推理、数据处理，到健康解读、战斗复盘与行情研究。
+              在这里，找到顺手的工具，让每一个想法更进一步。
             </p>
             <div className={styles.heroActions}>
               <a href="#tools" className={styles.primaryButton}>
                 探索工作空间 <ArrowUpRight size={19} />
               </a>
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={openSearch}
-              >
-                <Command size={16} /> 快速启动
-              </button>
-            </div>
-            <div className={styles.heroFootnote}>
-              <div className={styles.miniIcons}>
-                {HOME_MODULES.slice(0, 3).map((m) => (
-                  <span key={m.id} style={{ color: m.color }}>
-                    <m.icon size={15} />
-                  </span>
-                ))}
-              </div>
-              <span>
-                <b>05</b> 个独立模块 <i /> 一个无限延伸的空间
-              </span>
             </div>
           </div>
 
           <div className={styles.orbitStage}>
-            <div className={styles.stageCorner}>
-              <Crosshair size={13} /> INTELLIGENCE CORE{" "}
-              <span>{active.number} / 05</span>
-            </div>
             <div className={styles.orbitCanvas}>
               <OrbitCanvas paused={paused} />
             </div>
             <div className={styles.coreLabel} aria-hidden="true">
               <span>AI</span>
-              <small>CONNECTED IDEAS</small>
             </div>
             <div className={styles.orbitRing} aria-hidden="true" />
             {HOME_MODULES.map((module, index) => (
@@ -255,31 +221,8 @@ export default function HomeV2() {
                 </span>
               </Link>
             ))}
-            <div className={styles.orbitCaption}>
-              <span className={styles.statusDot} />
-              <span>{active.english}</span>
-              <span className={styles.captionIndex}>{active.number} / 05</span>
-            </div>
-            <div className={styles.orbitHint}>
-              触碰一个节点，开启新的可能 <ArrowUpRight size={12} />
-            </div>
           </div>
         </section>
-
-        <div className={styles.signalStrip}>
-          <span>
-            <AudioLines size={17} /> BUILT FOR THE CURIOUS.
-          </span>
-          <div>
-            <span>思考</span>
-            <i /> <span>创造</span>
-            <i /> <span>探索</span>
-            <i /> <span>突破</span>
-          </div>
-          <a href="#tools">
-            向下探索 <ArrowDown size={13} />
-          </a>
-        </div>
 
         <section
           id="tools"
@@ -287,20 +230,9 @@ export default function HomeV2() {
           aria-labelledby="tools-title"
         >
           <div className={styles.sectionTop}>
-            <div>
-              <p className={styles.sectionKicker}>
-                THE WORKSPACE <span>/ 01</span>
-              </p>
-              <h2 id="tools-title">
-                选择你的下一站<span>。</span>
-              </h2>
-              <p className={styles.sectionDescription}>
-                不同的目的地，同样值得探索。找到你此刻需要的超能力。
-              </p>
-            </div>
-            <span className={styles.moduleCount}>
-              <b>05</b> MODULES TO EXPLORE
-            </span>
+            <h2 id="tools-title">
+              工作空间<span>。</span>
+            </h2>
           </div>
           <div className={styles.toolsToolbar}>
             <div className={styles.filters} aria-label="工具分类">
@@ -340,7 +272,6 @@ export default function HomeV2() {
                   <span className={styles.cardIcon}>
                     <module.icon size={22} strokeWidth={1.5} />
                   </span>
-                  <span className={styles.cardCategory}>{module.category}</span>
                   <ArrowUpRight
                     className={styles.cardArrow}
                     size={20}
@@ -351,55 +282,17 @@ export default function HomeV2() {
                   <ModuleArtwork id={module.id} />
                 </div>
                 <div className={styles.cardContent}>
-                  <p className={styles.cardEnglish}>{module.english}</p>
                   <h3>{module.name}</h3>
-                  <p className={styles.cardDescription}>{module.description}</p>
-                </div>
-                <div className={styles.cardBottom}>
-                  <div>
-                    {module.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                  <span className={styles.cardLaunch}>
-                    进入模块 <ArrowRight size={14} />
-                  </span>
-                  <span className={styles.cardNumber}>{module.number}</span>
+                  <p className={styles.cardDescription}>{module.short}</p>
                 </div>
               </Link>
             ))}
           </div>
-          <div className={styles.workspaceNote}>
-            <span>
-              <Sparkles size={14} /> 好工具，让想法自由生长。
-            </span>
-            <span>
-              更多可能，正在路上 <span className={styles.noteDots}>···</span>
-            </span>
-          </div>
-        </section>
-
-        <section id="philosophy" className={styles.philosophy}>
-          <span className={styles.philosophyIcon}>
-            <Orbit size={38} strokeWidth={1} />
-          </span>
-          <div>
-            <p className={styles.sectionKicker}>
-              LESS FRICTION. MORE POSSIBILITY.
-            </p>
-            <h2>把复杂留给工具，把可能留给你。</h2>
-            <p>
-              一个入口，连接思考、数据、健康、游戏与交易。随时出发，自由探索。
-            </p>
-          </div>
-          <a href="#tools" aria-label="返回工具列表">
-            <ArrowUpRight size={27} strokeWidth={1} />
-          </a>
         </section>
 
         <footer className={styles.footer}>
           <Link href="/" className={styles.footerBrand}>
-            <Orbit size={18} /> AI HUB<span>一个不断生长的智能空间</span>
+            <Orbit size={18} /> AI HUB
           </Link>
           <div>
             <button
@@ -410,7 +303,6 @@ export default function HomeV2() {
               {paused ? <Play size={12} /> : <Pause size={12} />}
               {paused ? "开启动效" : "暂停动效"}
             </button>
-            <span>DESIGNED FOR POSSIBILITY ↗</span>
           </div>
         </footer>
       </main>

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import UserHeaderActions from "@/components/common/UserHeaderActions";
+import { TimeframeSelect } from "@/components/market-master/TimeframeSelect";
 import {
   SymbolFavoriteButton,
   SymbolSearchSelect,
@@ -265,20 +266,12 @@ export const TopBar = ({
             <div className="min-w-0 [&>div]:w-full [&_button]:h-11 [&_button]:rounded-xl [&_button]:border-slate-700/80 [&_button]:bg-slate-800/80 [&_button]:shadow-sm">
               <SymbolSearchSelect value={symbol} onChange={setSymbol} />
             </div>
-            <select
-              aria-label="K线周期"
+            <TimeframeSelect
               value={timeframe}
-              onChange={(event) => setTimeframe(event.target.value)}
-              className="h-11 w-full cursor-pointer rounded-xl border border-slate-700/80 bg-slate-800/80 px-3 text-center text-sm font-semibold text-slate-100 shadow-sm outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-            >
-              {timeframeOptions.map(
-                (option: { value: string; label: string }) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
+              onChange={setTimeframe}
+              options={timeframeOptions}
+              compact
+            />
             {canUseAutomaticDraw ? (
               <>
                 <button
@@ -499,18 +492,11 @@ export const TopBar = ({
 
           <div className="flex w-full shrink-0 items-center gap-2 lg:w-auto">
             <SymbolSearchSelect value={symbol} onChange={setSymbol} />
-            <select
-              aria-label="K线周期"
+            <TimeframeSelect
               value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
-              className="h-[50px] cursor-pointer rounded-md border border-gray-700 bg-gray-800 px-2 text-[15px] text-gray-200 outline-none transition-colors hover:bg-gray-700 sm:h-[42px]"
-            >
-              {timeframeOptions.map((option: any) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={setTimeframe}
+              options={timeframeOptions}
+            />
             <div className="hidden lg:block">
               <SymbolFavoriteButton symbol={symbol} />
             </div>

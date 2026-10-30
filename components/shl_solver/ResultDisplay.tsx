@@ -20,7 +20,6 @@ import {
   Clock,
 } from "lucide-react";
 import {
-  AnalysisResult,
   Complexity,
   ResultDisplayProps,
 } from "@/interfaces/shl_solver";
@@ -28,7 +27,7 @@ import toast from "react-hot-toast";
 import VisualDiff from "./VisualDiff";
 import { highlightCode } from "@/utils/helpers";
 
-const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
+const ResultDisplay: React.FC<ResultDisplayProps> = ({ result, models }) => {
   const [activeTab, setActiveTab] = useState<string>("solution"); // 'solution' or 'analysis'
   const [selectedLanguage, setSelectedLanguage] = useState<string>("python"); // 'python', 'java', 'javascript'
   const [isTranscriptionMode, setIsTranscriptionMode] =
@@ -42,7 +41,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
       codeStr = result.solutions[selectedLanguage];
     } else {
       // Fallback if the legacy structure is returned
-      codeStr = (result as any).code || "";
+      codeStr = result.code || "";
     }
 
     // 前端针对大模型经常不听话使用 sys.stdin 的额外处理
@@ -410,20 +409,18 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                     <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
                       算力消耗标准
                     </h4>
-                    <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
-                      Flash模型解题{" "}
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        10点
-                      </span>{" "}
-                      | Pro模型解题{" "}
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        30点
-                      </span>{" "}
-                      | 拍照纠错{" "}
-                      <span className="font-medium text-blue-600 dark:text-blue-400">
-                        5点
-                      </span>
-                    </p>
+                    <ul className="space-y-1 leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
+                      {models.map((model) => (
+                        <li key={model.id}>
+                          {model.name} 解题{" "}
+                          <span className="font-medium text-blue-600 dark:text-blue-400">
+                            {model.cost_credits}点
+                          </span>
+                          {model.is_default && "（默认）"}
+                        </li>
+                      ))}
+                      <li>拍照纠错 <span className="font-medium text-blue-600 dark:text-blue-400">5点</span>（Gemini 3.8 Flash）</li>
+                    </ul>
                   </div>
                 </div>
 
@@ -456,7 +453,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                       选择合适的模型
                     </h4>
                     <p className="leading-relaxed text-slate-500 dark:text-slate-400 text-xs md:text-sm">
-                      Pro模型逻辑更强，适合复杂题目，但分析耗时稍长，敬请耐心等待。
+                      默认使用 Gemini 3.8 Flash。您也可以选择其他 Gemini 或 OpenAI 模型，按所选模型扣除算力，分析耗时可能不同。
                     </p>
                   </div>
                 </div>

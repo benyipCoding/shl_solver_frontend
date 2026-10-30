@@ -372,6 +372,7 @@ const VisualDiff: React.FC<VisualDiffProps> = ({ referenceCode }) => {
         </span>
         的照片上传，AI
         将帮您快速找出拼写或缩进错误。支持上传多张照片以覆盖长代码。
+        <span className="block mt-1.5 text-xs">纠错 AI：Gemini 3.8 Flash · 5点/次</span>
         <span className="mt-1.5 text-amber-600 dark:text-amber-500 font-medium flex items-center">
           ⚠️
           注意：多张图片将按显示顺序进行拼接分析，请务必保证图片顺序与代码从上至下的逻辑一致。

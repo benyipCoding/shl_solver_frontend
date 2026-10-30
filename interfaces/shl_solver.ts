@@ -28,10 +28,14 @@ export interface Model {
   tag: string;
   key: string;
   enabled: boolean;
+  provider: "gemini" | "openai" | null;
+  cost_credits: number | null;
+  is_default: boolean;
 }
 
 export interface ResultDisplayProps {
   result: AnalysisResult | null;
+  models: Model[];
 }
 
 export interface VerificationErrorDetail {

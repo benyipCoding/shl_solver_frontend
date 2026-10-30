@@ -31,6 +31,9 @@ export interface StaticText {
   reportInputTitle: string;
   statusReady: string;
   statusIdle: string;
+  loadingLabel: string;
+  loadingSummaryHint: string;
+  loadingComparisonHint: string;
   switchAria: string;
   reportUrlLabel: string;
   reportUrlPlaceholder: string;

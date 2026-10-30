@@ -298,6 +298,7 @@ export const actionTypeOptions: ActionType[] = [
   "DAILY_REFILL",
   "USE_FLASH_MODEL",
   "USE_PRO_MODEL",
+  "USE_OPENAI_MODEL",
   "USE_VISION_DIFF",
   "TOP_UP",
   "ADMIN_DEDUCT",

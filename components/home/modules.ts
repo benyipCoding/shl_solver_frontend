@@ -18,7 +18,7 @@ export const HOME_MODULES = [
     color: "#c3f57b",
     description:
       "读懂每一次波动。真实 K 线回放、策略复盘与模拟交易，让判断在实践中进化。",
-    short: "在市场的波动中，找到自己的节奏。",
+    short: "行情复盘与模拟交易",
     tags: ["行情复盘", "模拟交易", "策略回测"],
   },
   {
@@ -32,7 +32,7 @@ export const HOME_MODULES = [
     color: "#b5a6f5",
     description:
       "从复杂题目中找到清晰路径。多题型分析，让每一个推理步骤都有迹可循。",
-    short: "复杂的逻辑，也可以清晰可见。",
+    short: "拆解题目，理清解题思路",
     tags: ["逻辑推理", "题型分析"],
   },
   {
@@ -46,7 +46,7 @@ export const HOME_MODULES = [
     color: "#80d9c4",
     description:
       "把繁琐的数据交给 AI。上传表格，用自然语言完成筛选、分析与处理。",
-    short: "让数据开口，让效率发生。",
+    short: "对话式表格分析与处理",
     tags: ["智能表格", "自然语言"],
   },
   {
@@ -59,7 +59,7 @@ export const HOME_MODULES = [
     icon: HeartPulse,
     color: "#88b9f3",
     description: "让化验单更容易理解。上传报告，获取通俗的指标解读与健康信息。",
-    short: "把复杂指标，变成看得懂的信息。",
+    short: "看懂化验单中的健康指标",
     tags: ["报告解读", "健康信息"],
   },
   {
@@ -73,7 +73,7 @@ export const HOME_MODULES = [
     color: "#edbc85",
     description:
       "每一场战斗，都值得更好的复盘。接入 FF Logs，洞察输出、技能与团队表现。",
-    short: "从战斗记录，发现下一次突破。",
+    short: "复盘战斗表现，找到提升空间",
     tags: ["FF Logs", "战斗复盘"],
   },
 ] as const;

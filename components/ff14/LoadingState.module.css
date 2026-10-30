@@ -1,0 +1,91 @@
+.card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(119, 191, 255, 0.36);
+  background: radial-gradient(ellipse at 8% 0%, rgba(45, 126, 200, 0.16), transparent 60%),
+    linear-gradient(155deg, #101e33, #0b1322 75%);
+}
+
+.card::before {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 42%;
+  height: 2px;
+  content: "";
+  background: linear-gradient(90deg, transparent, #7bdcff, transparent);
+  box-shadow: 0 0 18px rgba(105, 207, 255, 0.5);
+  animation: scan 3s ease-in-out infinite;
+}
+
+.header { display: flex; align-items: center; gap: 22px; padding: 10px 4px 28px; }
+.copy { min-width: 0; }
+.copy h2 { margin: 8px 0; color: #eef7ff; font-size: clamp(1rem, 2vw, 1.22rem); font-weight: 600; line-height: 1.5; }
+.copy p { margin: 0; color: #9eb6d5; font-size: 0.84rem; line-height: 1.7; }
+.eyebrow { display: inline-flex; align-items: center; gap: 7px; color: #85d9f5; font-size: 0.69rem; letter-spacing: 0.1em; }
+.statusDot { width: 5px; height: 5px; border-radius: 50%; background: #88e3ff; box-shadow: 0 0 9px #63c9f0; }
+.signal { position: relative; display: grid; flex: 0 0 72px; width: 72px; height: 72px; place-items: center; color: #abe9ff; border-radius: 50%; background: radial-gradient(circle, rgba(84, 181, 240, 0.18), transparent 70%); }
+.orbit, .innerOrbit { position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(122, 199, 250, 0.14); }
+.orbit { border-top: 2px solid #91e3ff; border-right-color: rgba(145, 227, 255, 0.5); box-shadow: 0 0 22px rgba(84, 181, 240, 0.08); animation: spin 1.8s linear infinite; }
+.innerOrbit { inset: 9px; border-bottom-color: #569dd9; animation: spin 3s linear infinite reverse; }
+
+.skeleton { position: relative; overflow: hidden; border: 1px solid rgba(139, 182, 255, 0.12); border-radius: 14px; background: rgba(4, 11, 22, 0.26); }
+.skeleton::after { position: absolute; inset: 0; content: ""; pointer-events: none; background: linear-gradient(105deg, transparent 25%, rgba(147, 211, 255, 0.07) 47%, transparent 65%); animation: shimmer 2.6s ease-in-out infinite; }
+.skeletonHeading { display: flex; justify-content: space-between; align-items: center; height: 40px; padding: 0 16px; background: rgba(79, 120, 171, 0.07); border-bottom: 1px solid rgba(139, 182, 255, 0.1); }
+.skeletonHeading .line:first-child { width: 92px; }
+.skeletonHeading .line:last-child { width: 55px; }
+.line, .subline { display: block; height: 8px; border-radius: 4px; background: rgba(133, 168, 208, 0.2); }
+.subline { width: 42%; height: 5px; margin-top: 8px; background: rgba(133, 168, 208, 0.1); }
+.identity { min-width: 0; }
+.rows { display: grid; gap: 2px; padding: 8px 16px; }
+.row { display: grid; grid-template-columns: 30px minmax(65px, 145px) 1fr 50px; align-items: center; gap: 14px; height: 43px; }
+.avatar { display: block; width: 29px; height: 29px; border: 1px solid rgba(111, 183, 234, 0.14); border-radius: 8px; background: linear-gradient(135deg, rgba(111, 183, 234, 0.17), rgba(92, 133, 192, 0.06)); }
+.barTrack { height: 12px; border-radius: 4px; background: rgba(85, 130, 183, 0.05); }
+.bar { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(79, 161, 214, 0.22), rgba(101, 188, 219, 0.1)); }
+.value { width: 38px; justify-self: end; }
+.lanes { padding: 10px 16px; }
+.lane { display: flex; align-items: center; gap: 22px; min-height: 58px; }
+.trackIdentity { display: flex; align-items: center; gap: 10px; flex: 0 0 150px; }
+.trackIdentity .line { width: 85px; }
+.track { position: relative; flex: 1; height: 58px; border-bottom: 1px solid rgba(139, 182, 255, 0.08); background: repeating-linear-gradient(90deg, rgba(139, 182, 255, 0.08) 0 1px, transparent 1px 10%); }
+.event { position: absolute; width: 15px; height: 17px; border: 1px solid rgba(122, 198, 235, 0.15); border-radius: 3px; background: rgba(106, 179, 222, 0.2); }
+
+.badge { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid rgba(110, 201, 242, 0.4); border-radius: 999px; background: rgba(32, 105, 143, 0.2); color: #a3e7ff; font-size: 0.75rem; white-space: nowrap; }
+.spinner { flex-shrink: 0; animation: spin 1.2s linear infinite; }
+.notice { position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 13px 16px; border: 1px solid rgba(116, 194, 244, 0.28); border-radius: 12px; background: linear-gradient(110deg, rgba(33, 86, 131, 0.32), rgba(22, 42, 70, 0.3)); color: #c9edff; font-size: 0.82rem; line-height: 1.65; }
+.notice::after { position: absolute; bottom: 0; left: 0; width: 42%; height: 1px; content: ""; background: linear-gradient(90deg, transparent, #7bdcff, transparent); animation: scan 3s ease-in-out infinite; }
+.noticeIcon { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: rgba(101, 189, 238, 0.1); color: #8fddff; }
+.dots { display: flex; flex-shrink: 0; gap: 4px; margin-left: auto; padding-left: 8px; }
+.dots i { width: 4px; height: 4px; border-radius: 50%; background: #85d9f5; animation: breathe 1.4s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.18s; }
+.dots i:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes breathe { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+
+@media (max-width: 760px) {
+  .header { gap: 14px; padding: 12px 4px 22px; align-items: flex-start; }
+  .signal { flex-basis: 52px; width: 52px; height: 52px; margin-top: 5px; }
+  .signal svg { width: 20px; }
+  .innerOrbit { inset: 7px; }
+  .copy h2 { font-size: 0.97rem; margin: 6px 0; }
+  .copy p { font-size: 0.77rem; }
+  .rows { padding: 8px 12px; }
+  .row { grid-template-columns: 26px minmax(55px, 80px) 1fr; gap: 10px; height: 46px; }
+  .avatar { width: 26px; height: 26px; }
+  .value { display: none; }
+  .lanes { padding: 6px 12px; }
+  .lane { gap: 12px; }
+  .trackIdentity { flex-basis: 54px; }
+  .trackIdentity .avatar { display: none; }
+  .trackIdentity .line { width: 48px; }
+  .event { width: 10px; height: 14px; }
+  .notice { gap: 10px; padding: 11px 12px; font-size: 0.76rem; }
+  .dots { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card::before, .skeleton::after, .notice::after, .orbit, .innerOrbit, .spinner, .dots i { animation: none; }
+  .skeleton::after { display: none; }
+}

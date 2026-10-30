@@ -1,0 +1,11 @@
+.workbench {
+  /* Shared account controls and their portal use the same 16px minimum. */
+  --text-xs: 16px;
+  --text-sm: 16px;
+  --text-base: 16px;
+  --text-xs--line-height: 1.5;
+  --text-sm--line-height: 1.5;
+  --text-base--line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.5;
+}

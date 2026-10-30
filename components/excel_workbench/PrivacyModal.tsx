@@ -1,62 +1,51 @@
-import React from "react";
+import { useEffect, useRef } from "react";
 import { ShieldCheck, X } from "lucide-react";
+import type { TransformRequest } from "@/interfaces/excel_workbench";
 
-interface PrivacyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  aiPayloadData: any;
-}
-
-export const PrivacyModal: React.FC<PrivacyModalProps> = ({
+export function PrivacyModal({
   isOpen,
   onClose,
   aiPayloadData,
-}) => {
-  if (!isOpen) return null;
-
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  aiPayloadData: TransformRequest;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (isOpen) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [isOpen]);
   return (
-    <div
-      className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-opacity"
-      onClick={onClose}
+    <dialog
+      ref={dialog}
+      onCancel={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      className="fixed inset-0 m-auto max-h-[85vh] w-[min(640px,92vw)] overflow-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-700 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
     >
-      <div
-        className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-          <h3 className="text-emerald-400 font-bold flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4" /> 严格隐私模式验证
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-700"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-6 text-slate-300 text-sm">
-          <p className="mb-4">
-            我们郑重承诺不会发送您的整个文件。为了让 AI
-            理解您的数据结构以编写处理逻辑，
-            <span className="text-white font-bold bg-emerald-900/50 px-2 py-0.5 rounded ml-1">
-              仅有以下极少量结构数据
-            </span>{" "}
-            会被作为上下文发送：
-          </p>
-          <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto border border-slate-700 shadow-inner">
-            <pre className="text-xs leading-relaxed text-emerald-100 font-mono">
-              {JSON.stringify(aiPayloadData, null, 2)}
-            </pre>
-          </div>
-          <div className="mt-5 flex items-start gap-2 text-slate-400 bg-slate-700/20 p-3 rounded-lg">
-            <span className="text-xl">💡</span>
-            <p className="text-xs leading-relaxed">
-              表格中的所有其余数据均完全在您设备的本地内存中处理。即使您在此刻断开计算机的网络连接，只要
-              AI 代码已返回，庞大的数据处理依然可以瞬间完成。
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-between border-b border-slate-100 p-5 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          <ShieldCheck className="h-5 w-5 text-emerald-500" />
+          发送给 AI 的内容
+        </h2>
+        <button aria-label="关闭隐私说明" onClick={onClose}>
+          <X className="h-5 w-5 text-slate-400" />
+        </button>
       </div>
-    </div>
+      <div className="space-y-4 p-5 text-base leading-6">
+        <p>
+          AI
+          会收到你的指令、当前工作表列名和首行示例。首行可能包含真实业务信息，请在发送前确认内容。
+        </p>
+        <pre className="max-h-80 overflow-auto rounded-xl bg-slate-50 p-4 text-base dark:bg-slate-950">
+          {JSON.stringify(aiPayloadData, null, 2)}
+        </pre>
+        <p className="text-base text-slate-400">
+          完整工作簿不会上传。返回的处理逻辑在浏览器后台线程运行，数据与样式保存在本次页面会话中；关闭或刷新前请导出工作簿。
+        </p>
+      </div>
+    </dialog>
   );
-};
+}
