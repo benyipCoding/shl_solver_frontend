@@ -1,6 +1,14 @@
 "use client";
 
-import { Edit2, LoaderCircle, NotebookText, Plus, X } from "lucide-react";
+import ModalFrame from "./ModalFrame";
+import {
+  Minus,
+  Edit2,
+  LoaderCircle,
+  NotebookText,
+  Plus,
+  X,
+} from "lucide-react";
 import {
   AdminDetailState,
   AdminUserDetail,
@@ -25,6 +33,7 @@ interface AdminDetailDrawerProps {
   onClose: () => void;
   onEditUser: (user: AdminUserSummary | AdminUserDetail) => void;
   onRechargeWallet: (wallet: AdminWalletSummary) => void;
+  onDeductWallet?: (wallet: AdminWalletSummary) => void;
 }
 
 const DetailItem = ({
@@ -37,12 +46,10 @@ const DetailItem = ({
   mono?: boolean;
 }) => {
   return (
-    <div className="rounded-2xl border border-slate-200/70 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-        {label}
-      </p>
+    <div className="rounded-xl border border-slate-200/70 bg-slate-50/90 p-4 dark:border-slate-800 dark:bg-slate-950/60">
+      <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
       <p
-        className={`mt-2 text-sm text-slate-700 dark:text-slate-100 ${
+        className={`mt-2 wrap-anywhere text-sm text-slate-700 dark:text-slate-100 ${
           mono ? "font-mono text-[13px]" : "font-medium"
         }`}
       >
@@ -57,48 +64,44 @@ export default function AdminDetailDrawer({
   onClose,
   onEditUser,
   onRechargeWallet,
+  onDeductWallet,
 }: AdminDetailDrawerProps) {
   if (!state.tab) {
     return null;
   }
 
   return (
-    <div
-      className="fixed inset-0 z-70 bg-slate-950/35 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <aside
-        className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto border-l border-white/70 bg-white/95 p-5 shadow-[0_24px_100px_-38px_rgba(15,23,42,0.5)] backdrop-blur md:p-6 dark:border-slate-800 dark:bg-slate-900/95"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalFrame open={!!state.tab} onClose={onClose} label="记录详情" drawer>
+      <aside className="min-h-full p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               <NotebookText className="h-3.5 w-3.5" />
               明细面板
             </div>
-            <h3 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-white">
+            <h3 className="mt-3 wrap-anywhere text-xl font-semibold text-slate-900 dark:text-white">
               {state.tab === "users" && "用户详情"}
               {state.tab === "wallets" && "钱包详情"}
               {state.tab === "creditLogs" && "消费记录详情"}
               {state.tab === "tokenRecords" && "Token 记录详情"}
             </h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              选中列表数据后按需拉取详情接口，方便快速核对后台状态。
+            <p className="mt-1 wrap-anywhere text-sm text-slate-500 dark:text-slate-400">
+              查看账号资料与相关记录。
             </p>
           </div>
 
           <button
             type="button"
+            aria-label="关闭详情"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {state.loading && (
-          <div className="mt-10 flex min-h-80 items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-slate-50/90 dark:border-slate-700 dark:bg-slate-950/50">
+          <div className="mt-10 flex min-h-80 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/90 dark:border-slate-700 dark:bg-slate-950/50">
             <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-300">
               <LoaderCircle className="h-5 w-5 animate-spin" />
               正在拉取详情数据...
@@ -107,7 +110,7 @@ export default function AdminDetailDrawer({
         )}
 
         {!state.loading && !state.data && (
-          <div className="mt-10 rounded-[28px] border border-dashed border-slate-200 bg-slate-50/90 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
+          <div className="mt-10 rounded-xl border border-dashed border-slate-200 bg-slate-50/90 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
             当前没有可展示的详情数据。
           </div>
         )}
@@ -122,13 +125,13 @@ export default function AdminDetailDrawer({
 
             return (
               <div className="mt-6 space-y-5">
-                <div className="rounded-[28px] border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-white">
+                      <p className="wrap-anywhere text-xl font-semibold text-slate-900 dark:text-white">
                         {user.username}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 wrap-anywhere text-sm text-slate-500 dark:text-slate-400">
                         {user.email}
                       </p>
                     </div>
@@ -150,7 +153,7 @@ export default function AdminDetailDrawer({
                     <button
                       type="button"
                       onClick={() => onEditUser(user)}
-                      className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-sky-500 dark:text-slate-950 dark:hover:bg-sky-400"
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-sky-500 dark:text-slate-950 dark:hover:bg-sky-400"
                     >
                       <Edit2 className="h-4 w-4" />
                       编辑用户
@@ -206,24 +209,35 @@ export default function AdminDetailDrawer({
 
             return (
               <div className="mt-6 space-y-5">
-                <div className="rounded-[28px] border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-white">
+                      <p className="wrap-anywhere text-xl font-semibold text-slate-900 dark:text-white">
                         {wallet.username}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 wrap-anywhere text-sm text-slate-500 dark:text-slate-400">
                         {wallet.email}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onRechargeWallet(wallet)}
-                      className="inline-flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
-                    >
-                      <Plus className="h-4 w-4" />
-                      充值钱包
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onRechargeWallet(wallet)}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
+                      >
+                        <Plus className="h-4 w-4" />
+                        充值钱包
+                      </button>
+                      <button
+                        type="button"
+                        disabled={wallet.total_credits <= 0}
+                        onClick={() => onDeductWallet?.(wallet)}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border border-rose-200 px-4 text-sm text-rose-600 disabled:opacity-40 dark:border-rose-800 dark:text-rose-300"
+                      >
+                        <Minus size={16} />
+                        扣减算力
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -274,13 +288,13 @@ export default function AdminDetailDrawer({
 
             return (
               <div className="mt-6 space-y-5">
-                <div className="rounded-[28px] border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-white">
+                      <p className="wrap-anywhere text-xl font-semibold text-slate-900 dark:text-white">
                         流水 #{log.id}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 wrap-anywhere text-sm text-slate-500 dark:text-slate-400">
                         {log.username || "未知用户"} / {log.email || "-"}
                       </p>
                     </div>
@@ -295,6 +309,13 @@ export default function AdminDetailDrawer({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <DetailItem label="用户 ID" value={String(log.user_id)} />
+                  <DetailItem
+                    label="操作人 ID"
+                    value={
+                      log.operator_user_id ? String(log.operator_user_id) : "—"
+                    }
+                  />
+                  <DetailItem label="调整原因" value={log.reason || "—"} />
                   <DetailItem
                     label="点数类型"
                     value={formatCreditTypeLabel(log.credit_type)}
@@ -328,13 +349,13 @@ export default function AdminDetailDrawer({
 
             return (
               <div className="mt-6 space-y-5">
-                <div className="rounded-[28px] border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="rounded-xl border border-slate-200/70 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-2xl font-semibold text-slate-900 dark:text-white">
+                      <p className="wrap-anywhere text-xl font-semibold text-slate-900 dark:text-white">
                         Token 记录 #{record.id}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 wrap-anywhere text-sm text-slate-500 dark:text-slate-400">
                         {record.username || "未知用户"} / {record.email || "-"}
                       </p>
                     </div>
@@ -366,6 +387,6 @@ export default function AdminDetailDrawer({
             );
           })()}
       </aside>
-    </div>
+    </ModalFrame>
   );
 }

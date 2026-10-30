@@ -1,74 +1,104 @@
 "use client";
 
-import Link from "next/link";
+import Link from "../CmsLink";
 import { usePathname } from "next/navigation";
 import {
-  Users,
-  Wallet,
-  Database,
-  ShieldCheck,
-  Home,
+  ArrowUpRight,
+  LayoutDashboard,
   LayoutTemplate,
+  ShieldCheck,
+  X,
 } from "lucide-react";
-import { CMS_TABS } from "@/components/cms/config";
+import { CMS_TABS } from "../config";
 
-export default function Sidebar({ className }: { className?: string }) {
+export const CMS_NAV = [
+  { href: "/cms", label: "工作概览", icon: LayoutDashboard },
+  ...CMS_TABS.map((tab, index) => ({
+    ...tab,
+    href: `/cms/${["users", "wallets", "credit-logs", "token-records"][index]}`,
+  })),
+  { href: "/cms/homepage", label: "首页版本", icon: LayoutTemplate },
+];
+
+export default function Sidebar({
+  mobile = false,
+  onNavigate,
+}: {
+  mobile?: boolean;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
-
-  const navItems = [
-    { href: "/cms", label: "概览看板", icon: Home },
-    { href: "/cms/homepage", label: "首页版本管理", icon: LayoutTemplate },
-    { href: "/cms/users", label: CMS_TABS[0].label, icon: Users },
-    { href: "/cms/wallets", label: CMS_TABS[1].label, icon: Wallet },
-    { href: "/cms/credit-logs", label: CMS_TABS[2].label, icon: Database },
-    { href: "/cms/token-records", label: CMS_TABS[3].label, icon: Database },
-  ];
-
   return (
     <aside
-      className={`w-64 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 ${className ?? "hidden md:flex"}`}
+      className={`${mobile ? "flex w-full" : "sticky top-0 hidden w-60 xl:w-64 lg:flex"} h-dvh shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900`}
     >
-      <div className="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
-        <ShieldCheck className="h-6 w-6 text-sky-500 mr-3" />
-        <span className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-sm">
-          Super Admin
+      <div className="flex h-20 shrink-0 items-center gap-3 px-6">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-800 text-white dark:bg-teal-600">
+          <ShieldCheck size={22} />
         </span>
-      </div>
-
-      <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-        <div className="mb-4 px-2">
-          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-            数据管理
+        <div>
+          <p className="font-semibold tracking-tight">AI Hub</p>
+          <p className="mt-0.5 text-[11px] tracking-[.18em] text-slate-400">
+            管理控制台
           </p>
         </div>
-
-        {navItems.map((item) => {
-          const isActive =
+        {mobile && (
+          <button
+            aria-label="关闭菜单"
+            onClick={onNavigate}
+            className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <X size={20} />
+          </button>
+        )}
+      </div>
+      <nav
+        aria-label="后台导航"
+        className="flex-1 space-y-1 overflow-y-auto px-4 py-6"
+      >
+        <p className="mb-3 px-3 text-[11px] font-medium tracking-widest text-slate-400">
+          工作空间
+        </p>
+        {CMS_NAV.map((item, index) => {
+          const active =
             pathname === item.href ||
-            (item.href !== "/cms" && pathname.startsWith(`${item.href}/`));
+            (item.href !== "/cms" && pathname.startsWith(item.href + "/"));
           return (
-            <Link
+            <div
               key={item.href}
-              href={item.href}
-              className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                isActive
-                  ? "bg-slate-900 text-white shadow-md dark:bg-sky-500 dark:text-slate-950"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              }`}
+              className={
+                index === 5
+                  ? "mt-7 border-t border-slate-100 pt-5 dark:border-slate-800"
+                  : ""
+              }
             >
-              <item.icon className="h-5 w-5 mr-3" />
-              <span className="font-medium text-sm">{item.label}</span>
-            </Link>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={`flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors ${active ? "bg-teal-50 text-teal-800 dark:bg-teal-500/10 dark:text-teal-300" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"}`}
+              >
+                <item.icon size={19} strokeWidth={active ? 2 : 1.7} />
+                {item.label}
+                {active && (
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-teal-600 dark:bg-teal-400" />
+                )}
+              </Link>
+            </div>
           );
         })}
       </nav>
-
-      <div className="p-4 border-t border-slate-200 dark:border-slate-800">
-        <div className="bg-sky-50 dark:bg-sky-500/10 p-4 rounded-2xl border border-sky-100 dark:border-sky-500/20">
-          <p className="text-xs text-sky-800 dark:text-sky-300 leading-relaxed text-center">
-            欢迎来到超级管理后台，您拥有所有系统数据的最高读写权限。
-          </p>
-        </div>
+      <div className="border-t border-slate-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] dark:border-slate-800">
+        <Link
+          href="/"
+          className="flex min-h-11 items-center justify-between rounded-lg px-3 text-sm text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          打开前台
+          <ArrowUpRight size={16} />
+        </Link>
+        <p className="mt-3 px-3 text-[11px] text-slate-400">
+          AI Hub · 运营管理
+        </p>
       </div>
     </aside>
   );

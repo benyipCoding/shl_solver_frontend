@@ -1,0 +1,20 @@
+/* Keep the content width stable when switching between short and long lists. */
+html:has([data-cms-shell]) {
+  scrollbar-gutter: stable;
+}
+
+[data-cms-shell] :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-teal-600);
+  outline-offset: 3px;
+}
+
+.cms-loading-notice {
+  visibility: hidden;
+  animation: cms-show-loading 0s 300ms forwards;
+}
+
+@keyframes cms-show-loading {
+  to {
+    visibility: visible;
+  }
+}

@@ -12,13 +12,14 @@ import {
   ApiResponse,
   CmsFetcher,
   CreditLogFilters,
+  CreditType,
   TokenRecordFilters,
   UserFilters,
   WalletFilters,
 } from "@/interfaces/cms";
 
 const buildQueryString = (
-  params: Record<string, string | number | boolean | undefined>
+  params: Record<string, string | number | boolean | undefined>,
 ) => {
   const searchParams = new URLSearchParams();
 
@@ -35,7 +36,7 @@ const buildQueryString = (
 };
 
 const toBooleanQuery = (value: UserFilters["isActive"]) => {
-  if (value === "all") {
+  if (value === "all" || value === undefined) {
     return undefined;
   }
 
@@ -54,7 +55,7 @@ const requestApi = async <T>(
   fetcher: CmsFetcher,
   input: RequestInfo | URL,
   init?: RequestInit,
-  needNavigate: boolean = false
+  needNavigate: boolean = false,
 ) => {
   const response = await fetcher(input, init, needNavigate);
   const payload = (await response
@@ -64,6 +65,9 @@ const requestApi = async <T>(
   if (!response.ok) {
     const errorMessage =
       payload?.message ||
+      (payload && "detail" in payload && typeof payload.detail === "string"
+        ? payload.detail
+        : "") ||
       (payload && typeof payload === "object" && "error" in payload
         ? String(payload.error)
         : `请求失败 (${response.status})`);
@@ -90,7 +94,7 @@ export const listAdminUsers = async (
   fetcher: CmsFetcher,
   page: number,
   pageSize: number,
-  filters: UserFilters
+  filters: UserFilters,
 ) => {
   const query = buildQueryString({
     page,
@@ -105,26 +109,26 @@ export const listAdminUsers = async (
     fetcher,
     `/api/admin/users${query}`,
     undefined,
-    true
+    true,
   );
 };
 
 export const getAdminUserDetail = async (
   fetcher: CmsFetcher,
-  userId: number
+  userId: number,
 ) => {
   return requestApi<AdminUserDetail>(
     fetcher,
     `/api/admin/users/${userId}`,
     undefined,
-    true
+    true,
   );
 };
 
 export const updateAdminUser = async (
   fetcher: CmsFetcher,
   userId: number,
-  payload: AdminUserUpdateRequest
+  payload: AdminUserUpdateRequest,
 ) => {
   return requestApi<AdminUserDetail>(
     fetcher,
@@ -136,7 +140,7 @@ export const updateAdminUser = async (
       },
       body: JSON.stringify(payload),
     },
-    true
+    true,
   );
 };
 
@@ -144,7 +148,7 @@ export const listAdminWallets = async (
   fetcher: CmsFetcher,
   page: number,
   pageSize: number,
-  filters: WalletFilters
+  filters: WalletFilters,
 ) => {
   const query = buildQueryString({
     page,
@@ -157,26 +161,26 @@ export const listAdminWallets = async (
     fetcher,
     `/api/admin/wallets${query}`,
     undefined,
-    true
+    true,
   );
 };
 
 export const getAdminWalletDetail = async (
   fetcher: CmsFetcher,
-  userId: number
+  userId: number,
 ) => {
   return requestApi<AdminWalletSummary>(
     fetcher,
     `/api/admin/wallets/${userId}`,
     undefined,
-    true
+    true,
   );
 };
 
 export const rechargeAdminWallet = async (
   fetcher: CmsFetcher,
   userId: number,
-  amount: number
+  amount: number,
 ) => {
   return requestApi<AdminWalletRechargeResponse>(
     fetcher,
@@ -188,7 +192,7 @@ export const rechargeAdminWallet = async (
       },
       body: JSON.stringify({ amount }),
     },
-    true
+    true,
   );
 };
 
@@ -196,7 +200,7 @@ export const listAdminCreditLogs = async (
   fetcher: CmsFetcher,
   page: number,
   pageSize: number,
-  filters: CreditLogFilters
+  filters: CreditLogFilters,
 ) => {
   const query = buildQueryString({
     page,
@@ -213,19 +217,43 @@ export const listAdminCreditLogs = async (
     fetcher,
     `/api/admin/credit-logs${query}`,
     undefined,
-    true
+    true,
   );
 };
 
+export const deductAdminWallet = async (
+  fetcher: CmsFetcher,
+  userId: number,
+  amount: number,
+  creditType: CreditType,
+  reason: string,
+) =>
+  requestApi<{
+    user_id: number;
+    deducted_points: number;
+    balance_after: number;
+    free_credits: number;
+    paid_credits: number;
+  }>(
+    fetcher,
+    `/api/admin/wallets/${userId}/deduct`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, credit_type: creditType, reason }),
+    },
+    true,
+  );
+
 export const getAdminCreditLogDetail = async (
   fetcher: CmsFetcher,
-  logId: number
+  logId: number,
 ) => {
   return requestApi<AdminCreditLogItem>(
     fetcher,
     `/api/admin/credit-logs/${logId}`,
     undefined,
-    true
+    true,
   );
 };
 
@@ -233,7 +261,7 @@ export const listAdminTokenRecords = async (
   fetcher: CmsFetcher,
   page: number,
   pageSize: number,
-  filters: TokenRecordFilters
+  filters: TokenRecordFilters,
 ) => {
   const query = buildQueryString({
     page,
@@ -249,19 +277,19 @@ export const listAdminTokenRecords = async (
     fetcher,
     `/api/admin/token-records${query}`,
     undefined,
-    true
+    true,
   );
 };
 
 export const getAdminTokenRecordDetail = async (
   fetcher: CmsFetcher,
-  recordId: number
+  recordId: number,
 ) => {
   return requestApi<AdminTokenRecordItem>(
     fetcher,
     `/api/admin/token-records/${recordId}`,
     undefined,
-    true
+    true,
   );
 };
 
@@ -272,4 +300,5 @@ export const actionTypeOptions: ActionType[] = [
   "USE_PRO_MODEL",
   "USE_VISION_DIFF",
   "TOP_UP",
+  "ADMIN_DEDUCT",
 ];

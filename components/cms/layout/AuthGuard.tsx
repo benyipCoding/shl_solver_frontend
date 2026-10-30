@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/context/FetchContext";
 import { getAdminMe } from "@/components/cms/api";
-import { AdminSessionUser } from "@/interfaces/cms";
+import CmsDataProvider from "../CmsDataProvider";
 
 type AccessState = "checking" | "granted" | "denied";
 
@@ -16,20 +16,22 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { customFetch } = useFetch();
 
   const [accessState, setAccessState] = useState<AccessState>("checking");
+  const [verifiedUserId, setVerifiedUserId] = useState<number | null>(null);
+  const userId = user?.id;
   const [accessMessage, setAccessMessage] = useState<string | null>(null);
 
-  const redirectToAuth = () => {
+  const redirectToAuth = useCallback(() => {
     // 根据您的要求，在 CMS 页面未登录或登出时，将 callbackUrl 指向主页 '/'
     // 避免普通账户登录后直接跳回 /cms 导致鉴权失败循环。
     const params = new URLSearchParams();
     params.set("callbackUrl", "/");
     router.replace(`/auth?${params.toString()}`);
-  };
+  }, [router]);
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (!user) {
+    if (!userId) {
       redirectToAuth();
       return;
     }
@@ -48,6 +50,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         }
 
         setAccessMessage(null);
+        setVerifiedUserId(userId);
         setAccessState("granted");
       } catch (error: unknown) {
         if (!active) return;
@@ -73,10 +76,21 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [customFetch, isLoading, router, user]);
+  }, [customFetch, isLoading, router, userId, redirectToAuth]);
 
-  if (isLoading || accessState === "checking") {
-    return null;
+  if (
+    isLoading ||
+    accessState === "checking" ||
+    (accessState === "granted" && verifiedUserId !== userId)
+  ) {
+    return (
+      <div
+        className="flex min-h-dvh items-center justify-center bg-slate-50 text-sm text-slate-500 dark:bg-slate-950"
+        role="status"
+      >
+        正在验证管理权限…
+      </div>
+    );
   }
 
   if (accessState === "denied") {
@@ -111,5 +125,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return user ? (
+    <CmsDataProvider key={user.id}>{children}</CmsDataProvider>
+  ) : null;
 }

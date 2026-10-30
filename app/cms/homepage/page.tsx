@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import { useCmsResource, useCmsStore } from "@/components/cms/CmsDataProvider";
 import { useFetch } from "@/context/FetchContext";
 import {
   HOME_VERSIONS,
@@ -27,49 +28,33 @@ import {
 
 export default function HomepageManagement() {
   const { customFetch } = useFetch();
-  const [config, setConfig] = useState<HomepageConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const store = useCmsStore();
+  const {
+    data: config,
+    loading,
+    error: loadError,
+  } = useCmsResource<HomepageConfig>("homepage");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [publishError, setError] = useState("");
+  const error = publishError || loadError;
   const [success, setSuccess] = useState("");
   const [selected, setSelected] = useState<HomepageVersion>(2);
   const dialog = useRef<HTMLDialogElement>(null);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setConfig(await getAdminHomepage(customFetch));
-    } catch (cause) {
-      setConfig(null);
-      setError(cause instanceof Error ? cause.message : "无法加载首页版本");
-    } finally {
-      setLoading(false);
-    }
-  }, [customFetch]);
+  const reload = useCallback(
+    (force = true) =>
+      store.load(
+        "homepage",
+        "config",
+        () => getAdminHomepage(customFetch),
+        force,
+      ),
+    [store, customFetch],
+  );
 
   useEffect(() => {
-    let active = true;
-    getAdminHomepage(customFetch)
-      .then((value) => {
-        if (active) {
-          setConfig(value);
-          setError("");
-        }
-      })
-      .catch((cause) => {
-        if (active) {
-          setConfig(null);
-          setError(cause instanceof Error ? cause.message : "无法加载首页版本");
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [customFetch]);
+    void reload(false);
+  }, [reload]);
 
   const publish = async () => {
     if (!config || saving) return;
@@ -82,7 +67,7 @@ export default function HomepageManagement() {
         selected,
         config.revision,
       );
-      setConfig(updated);
+      await store.load("homepage", "config", async () => updated, true);
       setSuccess(
         `第 ${updated.active_version} 版已启用。访客下次打开或刷新首页时将看到此版本。`,
       );
@@ -90,9 +75,9 @@ export default function HomepageManagement() {
       setError(cause instanceof Error ? cause.message : "发布失败，请重试");
       // Reconcile after conflicts or ambiguous network failures before another publish.
       try {
-        setConfig(await getAdminHomepage(customFetch));
+        await reload();
       } catch {
-        setConfig(null);
+        // Keep the previous version visible; the server checks revision on publish.
       }
     } finally {
       setSaving(false);
@@ -143,7 +128,7 @@ export default function HomepageManagement() {
         </div>
         <button
           type="button"
-          onClick={reload}
+          onClick={() => void reload()}
           disabled={loading || saving}
           className="rounded-lg p-2 text-slate-500 hover:bg-sky-100 disabled:opacity-40 dark:hover:bg-sky-500/10"
           aria-label="刷新线上版本"
@@ -159,7 +144,7 @@ export default function HomepageManagement() {
           {error}
           <button
             type="button"
-            onClick={reload}
+            onClick={() => void reload()}
             disabled={loading || saving}
             className="ml-4 underline disabled:opacity-40"
           >

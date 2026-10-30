@@ -69,6 +69,7 @@ export const formatActionTypeLabel = (value: ActionType) => {
     USE_PRO_MODEL: "Pro 模型消耗",
     USE_VISION_DIFF: "视觉对比消耗",
     TOP_UP: "后台充值",
+    ADMIN_DEDUCT: "管理员扣减",
   };
 
   return labels[value] || value;

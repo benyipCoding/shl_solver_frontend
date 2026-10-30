@@ -1,184 +1,229 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Users, Wallet, Database, Search, ShieldCheck } from "lucide-react";
+import Link from "@/components/cms/CmsLink";
+import { useCallback, useEffect } from "react";
+import {
+  ArrowUpRight,
+  LayoutDashboard,
+  LayoutTemplate,
+  RefreshCw,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 import { useFetch } from "@/context/FetchContext";
-import { CMS_TABS } from "@/components/cms/config";
+import { useAuth } from "@/context/AuthContext";
+import {
+  CMS_TABS,
+  DEFAULT_USER_FILTERS,
+  DEFAULT_WALLET_FILTERS,
+  DEFAULT_CREDIT_LOG_FILTERS,
+  DEFAULT_TOKEN_RECORD_FILTERS,
+} from "@/components/cms/config";
 import {
   listAdminUsers,
   listAdminWallets,
   listAdminCreditLogs,
   listAdminTokenRecords,
 } from "@/components/cms/api";
+import { useCmsResource, useCmsStore } from "@/components/cms/CmsDataProvider";
+import PageHeading from "@/components/cms/PageHeading";
 import { formatNumber } from "@/components/cms/format";
 
-const MetricCard = ({
-  label,
-  value,
-  loading,
-  icon: Icon,
-  href,
-  colorClass,
-}: {
-  label: string;
-  value: string;
-  loading: boolean;
-  icon: any;
-  href: string;
-  colorClass: string;
-}) => (
-  <Link href={href} className="group block">
-    <div
-      className={`p-6 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden`}
-    >
-      <div
-        className={`absolute top-0 right-0 p-4 opacity-5 translate-x-2 -translate-y-2 group-hover:scale-110 transition-transform duration-500`}
-      >
-        <Icon className="w-24 h-24" />
-      </div>
-      <div className="flex items-center gap-4">
-        <div
-          className={`h-14 w-14 rounded-2xl flex items-center justify-center ${colorClass}`}
-        >
-          <Icon className="w-6 h-6" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            {label}
-          </p>
-          {loading ? (
-            <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 animate-pulse rounded mt-1" />
-          ) : (
-            <p className="text-3xl font-bold text-slate-900 dark:text-white mt-1">
-              {value}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  </Link>
-);
+type Stats = {
+  users: number;
+  wallets: number;
+  creditLogs: number;
+  tokenRecords: number;
+};
+const paths = ["users", "wallets", "credit-logs", "token-records"];
+const metricLabels = ["注册用户", "已开通钱包", "算力流水", "模型调用记录"];
 
 export default function CMSOverview() {
   const { customFetch } = useFetch();
-
-  const [stats, setStats] = useState({
-    users: 0,
-    wallets: 0,
-    logs: 0,
-    tokens: 0,
-  });
-  const [loading, setLoading] = useState(true);
-
+  const { user } = useAuth();
+  const store = useCmsStore();
+  const { data, loading, error } = useCmsResource<Stats>("overview");
+  const reload = useCallback(
+    (force = false) =>
+      store.load(
+        "overview",
+        "totals",
+        async () => {
+          const [users, wallets, logs, tokens] = await Promise.all([
+            listAdminUsers(customFetch, 1, 1, DEFAULT_USER_FILTERS),
+            listAdminWallets(customFetch, 1, 1, {
+              ...DEFAULT_WALLET_FILTERS,
+              onlyWithWallet: true,
+            }),
+            listAdminCreditLogs(customFetch, 1, 1, DEFAULT_CREDIT_LOG_FILTERS),
+            listAdminTokenRecords(
+              customFetch,
+              1,
+              1,
+              DEFAULT_TOKEN_RECORD_FILTERS,
+            ),
+          ]);
+          return {
+            users: users.pagination.total,
+            wallets: wallets.pagination.total,
+            creditLogs: logs.pagination.total,
+            tokenRecords: tokens.pagination.total,
+          };
+        },
+        force,
+      ),
+    [customFetch, store],
+  );
   useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      try {
-        const [u, w, l, t] = await Promise.all([
-          listAdminUsers(customFetch, 1, 1, {} as any),
-          listAdminWallets(customFetch, 1, 1, {} as any),
-          listAdminCreditLogs(customFetch, 1, 1, {} as any),
-          listAdminTokenRecords(customFetch, 1, 1, {} as any),
-        ]);
-        setStats({
-          users: u.pagination.total,
-          wallets: w.pagination.total,
-          logs: l.pagination.total,
-          tokens: t.pagination.total,
-        });
-      } catch (error) {
-        console.error("Failed to fetch CMS stats", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    void fetchStats();
-  }, [customFetch]);
+    void reload();
+  }, [reload]);
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200 mb-4">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Super Admin Console
+    <div className="space-y-7">
+      <PageHeading
+        title="工作概览"
+        description="用户、算力与内容，都在这里有序管理。"
+        icon={LayoutDashboard}
+      >
+        <button
+          onClick={() => void reload(true)}
+          disabled={loading}
+          className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+          <RefreshCw
+            size={15}
+            className={loading ? "motion-safe:animate-spin" : ""}
+          />
+          刷新概览
+        </button>
+      </PageHeading>
+      <div className="relative overflow-hidden rounded-2xl bg-teal-900 p-6 text-white sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="max-w-xl">
+            <p className="mb-3 flex items-center gap-2 text-xs tracking-wider text-teal-200">
+              <ShieldCheck size={14} />
+              管理员工作空间
+            </p>
+            <h2 className="wrap-anywhere text-xl font-medium sm:text-2xl">
+              欢迎回来，{user?.username || "管理员"}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-teal-100/75">
+              从账号维护到算力调整，快速处理日常运营。
+              <br className="hidden sm:block" />
+              每一次算力变动，都有记录可查。
+            </p>
+          </div>
+          <Link
+            href="/cms/wallets"
+            className="inline-flex h-11 items-center gap-3 rounded-xl bg-white px-4 text-sm font-medium text-teal-900 hover:bg-teal-50"
+          >
+            <Wallet size={16} />
+            管理算力
+            <ArrowUpRight size={16} />
+          </Link>
         </div>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-          后台数据概览
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400">
-          目前系统中的各个核心模块数据总计，如需详细管理，请从左侧导航栏进
-          入各个子系统。
-        </p>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <MetricCard
-          label="系统用户总数"
-          value={formatNumber(stats.users)}
-          loading={loading}
-          icon={Users}
-          href="/cms/users"
-          colorClass="bg-sky-100 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400"
-        />
-        <MetricCard
-          label="创建钱包总数"
-          value={formatNumber(stats.wallets)}
-          loading={loading}
-          icon={Wallet}
-          href="/cms/wallets"
-          colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-        />
-        <MetricCard
-          label="算力流水总量"
-          value={formatNumber(stats.logs)}
-          loading={loading}
-          icon={Database}
-          href="/cms/credit-logs"
-          colorClass="bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400"
-        />
-        <MetricCard
-          label="API 调用日志"
-          value={formatNumber(stats.tokens)}
-          loading={loading}
-          icon={Search}
-          href="/cms/token-records"
-          colorClass="bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400"
-        />
+      {error && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          <span>
+            {data ? "刷新失败，显示上次统计。" : "统计暂时不可用。"}
+            {error}
+          </span>
+          <button
+            disabled={loading}
+            onClick={() => void reload(true)}
+            className="min-h-10 underline underline-offset-4"
+          >
+            重试
+          </button>
+        </div>
+      )}
+      <div
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4 sm:gap-4"
+        aria-busy={loading}
+      >
+        {CMS_TABS.map((tab, index) => (
+          <Link
+            key={tab.id}
+            href={`/cms/${paths[index]}`}
+            className="group min-w-0 rounded-2xl border border-slate-200 bg-white p-4 transition-colors hover:border-teal-300 sm:p-5 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <tab.icon size={19} className="text-slate-400" />
+              <ArrowUpRight
+                size={14}
+                className="text-slate-300 group-hover:text-teal-600"
+              />
+            </div>
+            <p className="text-xs text-slate-500 sm:text-sm">
+              {metricLabels[index]}
+            </p>
+            <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
+              {data ? formatNumber(data[tab.id]) : "—"}
+            </p>
+            <p className="mt-3 text-[11px] text-slate-400">
+              {loading ? "正在更新…" : "查看全部记录"}
+            </p>
+          </Link>
+        ))}
       </div>
-
-      <div className="mt-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
-        <Link href="/cms/homepage" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-5 text-sky-900 transition hover:bg-sky-100 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20">
-          <div><h2 className="font-semibold">首页版本管理</h2><p className="mt-1 text-sm opacity-75">预览经典门户与轨道控制台，选择全站启用的首页。</p></div>
-          <span className="text-sm font-medium">管理版本 →</span>
-        </Link>
-        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6">
-          快捷导航
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {CMS_TABS.map((tab, idx) => {
-            const keys = ["users", "wallets", "credit-logs", "token-records"];
-            return (
+      <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-semibold">常用管理</h2>
+            <span className="text-xs text-slate-400">日常运营</span>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {CMS_TABS.map((tab, index) => (
               <Link
                 key={tab.id}
-                href={`/cms/${keys[idx]}`}
-                className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-sky-300 dark:hover:border-sky-700/50 hover:bg-sky-50/50 dark:hover:bg-sky-900/10 transition-all"
+                href={`/cms/${paths[index]}`}
+                className="group flex items-center gap-3 py-5"
               >
-                <div className="mt-1 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg text-slate-600 dark:text-slate-300">
-                  <tab.icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                    {tab.label}
-                  </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500 group-hover:bg-teal-50 group-hover:text-teal-700 dark:bg-slate-800 dark:group-hover:bg-teal-900 dark:group-hover:text-teal-200">
+                  <tab.icon size={18} />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-medium">{tab.label}</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
                     {tab.description}
                   </p>
                 </div>
+                <ArrowUpRight
+                  size={16}
+                  className="ml-auto shrink-0 text-slate-300 group-hover:text-teal-600"
+                />
               </Link>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        </section>
+        <section className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <LayoutTemplate
+            size={24}
+            strokeWidth={1.5}
+            className="mb-6 text-teal-700 dark:text-teal-400"
+          />
+          <p className="text-xs tracking-widest text-slate-400">内容与展示</p>
+          <h2 className="mt-2 text-xl font-semibold">让首页保持新鲜</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-500 dark:text-slate-400">
+            预览不同首页风格，再选择对访客展示的版本。保留已有版本，随时切换。
+          </p>
+          <Link
+            href="/cms/homepage"
+            className="mt-6 flex min-h-12 items-center justify-between rounded-xl bg-slate-50 px-4 text-sm font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-800 dark:bg-slate-800 dark:text-slate-200"
+          >
+            管理首页版本
+            <ArrowUpRight size={16} />
+          </Link>
+          <div className="mt-auto pt-7 text-xs leading-6 text-slate-400">
+            运营提示
+            <br />
+            调整用户算力后，可在「算力流水」核对变动来源与余额。
+          </div>
+        </section>
       </div>
     </div>
   );

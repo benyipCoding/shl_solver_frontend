@@ -11,25 +11,25 @@ export const CMS_TABS = [
   {
     id: "users",
     label: "用户管理",
-    description: "账号状态、角色权限与钱包汇总",
+    description: "管理账号资料、启用状态与访问权限。",
     icon: Users,
   },
   {
     id: "wallets",
     label: "钱包管理",
-    description: "免费点数、付费点数与充值操作",
+    description: "查看用户算力余额，管理充值与人工扣减。",
     icon: Wallet,
   },
   {
     id: "creditLogs",
-    label: "消费记录",
-    description: "算力流水、动作来源与余额变化",
+    label: "算力流水",
+    description: "追溯每一笔算力变动、操作来源和余额。",
     icon: ScrollText,
   },
   {
     id: "tokenRecords",
     label: "Token 记录",
-    description: "模型调用量、来源路径与访问痕迹",
+    description: "查询模型用量、请求来源与调用时间。",
     icon: Activity,
   },
 ] as const;

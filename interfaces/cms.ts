@@ -10,7 +10,8 @@ export type ActionType =
   | "USE_FLASH_MODEL"
   | "USE_PRO_MODEL"
   | "USE_VISION_DIFF"
-  | "TOP_UP";
+  | "TOP_UP"
+  | "ADMIN_DEDUCT";
 
 export interface ApiResponse<T> {
   code: number;
@@ -93,6 +94,8 @@ export interface AdminCreditLogItem {
   credit_type: CreditType;
   action_type: ActionType;
   balance_after: number;
+  operator_user_id?: number | null;
+  reason?: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

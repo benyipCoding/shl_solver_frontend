@@ -1489,32 +1489,7 @@ export const loadEncounterTopComparison = async (
   };
 };
 
-export const parseFflogsReport = (input: string): ParsedReport | null => {
-  const value = input.trim();
-  if (!value) {
-    return null;
-  }
-
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (host !== "fflogs.com" && !host.endsWith(".fflogs.com")) {
-      return null;
-    }
-
-    const pathMatch = url.pathname.match(/^\/reports\/([A-Za-z0-9]+)/);
-    const reportId = pathMatch?.[1];
-    const fightId = url.searchParams.get("fight") ?? undefined;
-
-    if (!reportId || !fightId) {
-      return null;
-    }
-
-    return { reportId, fightId };
-  } catch {
-    return null;
-  }
-};
+export { parseFflogsReport } from "@/utils/ff14-navigation";
 
 const buildTopPlayers = (job: Job): TopPlayer[] => {
   const baseline = Math.round((JOB_BASE_RDPS[job] || 17000) * 1.1);

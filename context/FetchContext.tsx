@@ -10,7 +10,6 @@ import React, {
 } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
 
 interface FetchContextType {
   customFetch: (
@@ -25,7 +24,6 @@ const FetchContext = createContext<FetchContextType | undefined>(undefined);
 export const FetchProvider = ({ children }: { children: ReactNode }) => {
   const { user, setUser } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
   const userRef = useRef(user);
   const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
@@ -88,7 +86,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
 
           if (needNavigate) {
             const params = new URLSearchParams();
-            if (pathname) {
+            if (typeof window !== "undefined") {
               params.set("callbackUrl", `${window.location.pathname}${window.location.search}${window.location.hash}`);
             }
             router.push(`/auth?${params.toString()}`);
@@ -105,7 +103,7 @@ export const FetchProvider = ({ children }: { children: ReactNode }) => {
         throw error;
       }
     },
-    [pathname, refreshSession, router, setUser]
+    [refreshSession, router, setUser]
   );
 
   return (

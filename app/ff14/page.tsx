@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { Suspense, startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import EmptyState from "@/components/ff14/EmptyState";
 import EncounterSummaryCard from "@/components/ff14/EncounterSummaryCard";
@@ -12,14 +12,14 @@ import { bodyFont, ff14Styles, headingFont, TEXT } from "@/constants/ff14";
 import type {
   CharacterDetail,
   CharacterSummary,
-  Locale,
   TopJobComparison,
 } from "@/interfaces/ff14";
 import {
   loadEncounterData,
   loadEncounterTopComparison,
-  parseFflogsReport,
 } from "@/utils/ff14";
+import { useFF14Navigation } from "@/hooks/useFF14Navigation";
+import { getFflogsReportUrl, parseFflogsReport, TIMELINE_ZOOM_LEVELS } from "@/utils/ff14-navigation";
 
 type EncounterRequestState = {
   reportKey: string | null;
@@ -36,17 +36,21 @@ type TopComparisonRequestState = {
   loadingKeys: Record<string, boolean>;
 };
 
-type ActivePanel = "summary" | "detail";
-
-const FF14Page = () => {
-  const [reportUrl, setReportUrl] = useState("");
-  const [locale, setLocale] = useState<Locale>("zh");
-  const [activePanel, setActivePanel] = useState<ActivePanel>("summary");
-  const [detailViewReportKey, setDetailViewReportKey] = useState<string | null>(
-    null
+const FF14Analyzer = () => {
+  const { navigation, navigate } = useFF14Navigation();
+  const { locale, playerId: selectedCharacterId, showSummaryValues: showMobileSummaryValues } = navigation;
+  const reportId = navigation.report?.reportId;
+  const fightId = navigation.report?.fightId;
+  // View-only URL changes must not restart the report's in-flight requests.
+  const parsedReport = useMemo(
+    () => reportId && fightId ? { reportId, fightId } : null,
+    [reportId, fightId]
   );
-  const [selectedCharacterId, setSelectedCharacterId] = useState<string>("");
-  const [showMobileSummaryValues, setShowMobileSummaryValues] = useState(false);
+  const canonicalReportUrl = getFflogsReportUrl(parsedReport);
+  const [reportInput, setReportInput] = useState({ value: "", reportUrl: "" });
+  const reportUrl = reportInput.reportUrl === canonicalReportUrl
+    ? reportInput.value
+    : canonicalReportUrl;
   const [encounterRequest, setEncounterRequest] =
     useState<EncounterRequestState>({
       reportKey: null,
@@ -66,7 +70,6 @@ const FF14Page = () => {
   const text = TEXT[locale];
   const backToHomeLabel = locale === "zh" ? "返回主页" : "Back to home";
 
-  const parsedReport = useMemo(() => parseFflogsReport(reportUrl), [reportUrl]);
   const hasValidReport = Boolean(parsedReport);
   const reportKey = parsedReport
     ? `${parsedReport.reportId}:${parsedReport.fightId}`
@@ -107,9 +110,12 @@ const FF14Page = () => {
       return "";
     }
 
-    return sortedSummary.some((item) => item.id === selectedCharacterId)
-      ? selectedCharacterId
-      : (sortedSummary[0]?.id ?? "");
+    if (selectedCharacterId) {
+      return sortedSummary.some((item) => item.id === selectedCharacterId)
+        ? selectedCharacterId
+        : "";
+    }
+    return sortedSummary[0]?.id ?? "";
   }, [selectedCharacterId, sortedSummary]);
 
   const detailRequestKey =
@@ -124,7 +130,6 @@ const FF14Page = () => {
 
     return (
       sortedSummary.find((item) => item.id === activeSelectedCharacterId) ??
-      sortedSummary[0] ??
       null
     );
   }, [activeSelectedCharacterId, sortedSummary]);
@@ -407,22 +412,35 @@ const FF14Page = () => {
   }, [locale, topPlayersState]);
 
   const toggleLocale = () => {
-    setLocale((prev) => (prev === "zh" ? "en" : "zh"));
+    navigate((current) => ({ locale: current.locale === "zh" ? "en" : "zh" }));
+  };
+
+  const handleReportUrlChange = (value: string) => {
+    const report = parseFflogsReport(value);
+    setReportInput({ value, reportUrl: getFflogsReportUrl(report) });
+    navigate({ report });
   };
 
   const handleSelectCharacter = (characterId: string) => {
-    setSelectedCharacterId(characterId);
-    setDetailViewReportKey(reportKey);
-    setActivePanel("detail");
+    navigate({ playerId: characterId });
   };
 
   const handleBackToSummary = () => {
-    setActivePanel("summary");
+    navigate({ playerId: "" });
   };
 
+  const handleCompareActorChange = useCallback((compareActorId: string) => {
+    navigate({ compareActorId });
+  }, [navigate]);
+
+  const handleStepZoom = useCallback((direction: -1 | 1, continuous = false) => {
+    navigate((current) => ({
+      zoomIndex: Math.min(Math.max(current.zoomIndex + direction, 0), TIMELINE_ZOOM_LEVELS.length - 1),
+    }), continuous ? "replace" : "push");
+  }, [navigate]);
+
   const shouldShowDetailView =
-    activePanel === "detail" &&
-    detailViewReportKey === reportKey &&
+    Boolean(selectedCharacterId) &&
     Boolean(selectedCharacter);
 
   return (
@@ -449,8 +467,16 @@ const FF14Page = () => {
           reportUrl={reportUrl}
           parsedReport={parsedReport}
           onToggleLocale={toggleLocale}
-          onReportUrlChange={setReportUrl}
+          onReportUrlChange={handleReportUrlChange}
         />
+
+        {summaryState === "loaded" && selectedCharacterId && !selectedCharacter ? (
+          <p role="status" className="px-5 text-sm text-[#b9cdea]">
+            {locale === "zh"
+              ? "分享链接中的玩家不在当前战斗中，已显示团队汇总。"
+              : "The linked player is not in this fight. Showing the team summary."}
+          </p>
+        ) : null}
 
         {hasValidReport ? (
           <>
@@ -470,9 +496,14 @@ const FF14Page = () => {
                     {selectedDetailWithTopComparison &&
                     topPlayersState === "loaded" ? (
                       <TopPlayersCard
+                        key={detailRequestKey}
                         text={text}
                         selectedCharacter={selectedCharacter}
                         topComparison={cachedTopComparison!}
+                        zoomIndex={navigation.zoomIndex}
+                        compareActorId={navigation.compareActorId}
+                        onStepZoom={handleStepZoom}
+                        onCompareActorChange={handleCompareActorChange}
                       />
                     ) : (
                       <aside className={ff14Styles.card}>
@@ -529,7 +560,7 @@ const FF14Page = () => {
                   raidTotals={raidTotals}
                   onSelectCharacter={handleSelectCharacter}
                   onToggleMobileSummaryValues={() => {
-                    setShowMobileSummaryValues((prev) => !prev);
+                    navigate((current) => ({ showSummaryValues: !current.showSummaryValues }));
                   }}
                 />
               )
@@ -554,4 +585,10 @@ const FF14Page = () => {
   );
 };
 
-export default FF14Page;
+export default function FF14Page() {
+  return (
+    <Suspense fallback={<main className={ff14Styles.page}><p role="status">正在加载战斗分析器…</p></main>}>
+      <FF14Analyzer />
+    </Suspense>
+  );
+}

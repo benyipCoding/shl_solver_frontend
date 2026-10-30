@@ -12,11 +12,16 @@ import type {
   TopJobComparison,
 } from "@/interfaces/ff14";
 import { formatNumber } from "@/utils/ff14";
+import { TIMELINE_ZOOM_LEVELS as ZOOM_LEVELS } from "@/utils/ff14-navigation";
 
 interface TopPlayersCardProps {
   text: StaticText;
   selectedCharacter: CharacterSummary;
   topComparison: TopJobComparison;
+  zoomIndex: number;
+  compareActorId: string;
+  onStepZoom: (direction: -1 | 1, continuous?: boolean) => void;
+  onCompareActorChange: (actorId: string) => void;
 }
 
 type TimelineTooltipState = {
@@ -40,7 +45,6 @@ type TimelineDragState = {
   startScrollLeft: number;
 };
 
-const ZOOM_LEVELS = [4, 6, 8, 10, 14, 20, 30, 40, 60] as const;
 const EVENT_COLORS = [
   "#7ed7ff",
   "#ffbe7a",
@@ -61,12 +65,6 @@ const TOOLTIP_POINTER_OFFSET_X = 10;
 const TOOLTIP_POINTER_OFFSET_Y = 8;
 const TOOLTIP_ELEMENT_OFFSET_Y = 8;
 const CAST_TAIL_MIN_WIDTH = 10;
-
-const clampZoomIndex = (value: number) =>
-  Math.min(Math.max(value, 0), ZOOM_LEVELS.length - 1);
-
-const getNextZoomIndex = (currentIndex: number, direction: -1 | 1) =>
-  clampZoomIndex(currentIndex + direction);
 
 const formatTimelineTime = (valueMs: number) => {
   const totalSeconds = Math.max(Math.floor(valueMs / 1000), 0);
@@ -256,10 +254,11 @@ const TopPlayersCard = ({
   text,
   selectedCharacter,
   topComparison,
+  zoomIndex,
+  compareActorId,
+  onStepZoom: stepZoom,
+  onCompareActorChange,
 }: TopPlayersCardProps) => {
-  const [zoomIndex, setZoomIndex] = useState(7);
-  const [desktopCompareActorId, setDesktopCompareActorId] = useState("");
-  const [mobileCompareActorId, setMobileCompareActorId] = useState("");
   const [timelineGuide, setTimelineGuide] = useState<TimelineGuideState | null>(
     null
   );
@@ -289,18 +288,18 @@ const TopPlayersCard = ({
   const activeDesktopCompareTrack = useMemo(
     () =>
       referenceTimelineTracks.find(
-        (track) => track.actorId === desktopCompareActorId
+        (track) => track.actorId === compareActorId
       ) ?? null,
-    [desktopCompareActorId, referenceTimelineTracks]
+    [compareActorId, referenceTimelineTracks]
   );
   const activeMobileCompareTrack = useMemo(
     () =>
       referenceTimelineTracks.find(
-        (track) => track.actorId === mobileCompareActorId
+        (track) => track.actorId === compareActorId
       ) ??
       referenceTimelineTracks[0] ??
       null,
-    [mobileCompareActorId, referenceTimelineTracks]
+    [compareActorId, referenceTimelineTracks]
   );
   const desktopCompareTracks = useMemo(
     () =>
@@ -348,10 +347,6 @@ const TopPlayersCard = ({
   );
   const accentColor = jobColorMap[selectedCharacter.job] ?? "#8bc5ff";
 
-  const stepZoom = useCallback((direction: -1 | 1) => {
-    setZoomIndex((prev) => getNextZoomIndex(prev, direction));
-  }, []);
-
   useEffect(() => {
     if (!hasTimelineEvents) {
       return;
@@ -364,7 +359,7 @@ const TopPlayersCard = ({
 
       wheelEvent.preventDefault();
 
-      stepZoom(wheelEvent.deltaY < 0 ? 1 : -1);
+      stepZoom(wheelEvent.deltaY < 0 ? 1 : -1, true);
     };
 
     const timelineContainers = [
@@ -426,16 +421,16 @@ const TopPlayersCard = ({
     (actorId: string) => {
       clearTooltip();
       clearTimelineGuide();
-      setDesktopCompareActorId(actorId);
+      onCompareActorChange(actorId);
     },
-    [clearTimelineGuide, clearTooltip]
+    [clearTimelineGuide, clearTooltip, onCompareActorChange]
   );
 
   const closeDesktopCompare = useCallback(() => {
     clearTooltip();
     clearTimelineGuide();
-    setDesktopCompareActorId("");
-  }, [clearTimelineGuide, clearTooltip]);
+    onCompareActorChange("");
+  }, [clearTimelineGuide, clearTooltip, onCompareActorChange]);
 
   useEffect(() => {
     if (!hasTimelineEvents) {
@@ -898,6 +893,7 @@ const TopPlayersCard = ({
                   <button
                     key={`desktop-select-${track.actorId}`}
                     type="button"
+                    aria-pressed={isActive}
                     className={`min-w-36 rounded-2xl border px-3 py-2 text-left transition-colors ${
                       isActive
                         ? "border-[rgba(144,191,255,0.6)] bg-[rgba(48,79,136,0.28)] text-[#edf4ff]"
@@ -1039,12 +1035,13 @@ const TopPlayersCard = ({
                   <button
                     key={`mobile-select-${track.actorId}`}
                     type="button"
+                    aria-pressed={isActive}
                     className={`min-w-33 rounded-2xl border px-3 py-2 text-left transition-colors ${
                       isActive
                         ? "border-[rgba(144,191,255,0.6)] bg-[rgba(48,79,136,0.28)] text-[#edf4ff]"
                         : "border-[rgba(126,173,249,0.24)] bg-[rgba(16,26,44,0.44)] text-[#9fb9df]"
                     }`}
-                    onClick={() => setMobileCompareActorId(track.actorId)}
+                    onClick={() => onCompareActorChange(track.actorId)}
                   >
                     <span className="block truncate text-[0.8rem] font-semibold">
                       {track.name}

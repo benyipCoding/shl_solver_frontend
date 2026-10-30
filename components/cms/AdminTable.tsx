@@ -1,7 +1,16 @@
 "use client";
 
-import { Eye, PencilLine, Plus, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Inbox,
+  PencilLine,
+} from "lucide-react";
+import type {
   AdminCreditLogItem,
   AdminTabId,
   AdminTokenRecordItem,
@@ -18,8 +27,7 @@ import {
   getActiveStatus,
   getAmountTone,
   getUserRole,
-  truncateText,
-} from "@/components/cms/format";
+} from "./format";
 
 interface AdminTableProps {
   activeTab: AdminTabId;
@@ -34,715 +42,345 @@ interface AdminTableProps {
   onSelectRow: (id: number) => void;
   onEditUser?: (user: AdminUserSummary) => void;
   onRechargeWallet?: (wallet: AdminWalletSummary) => void;
+  onDeductWallet?: (wallet: AdminWalletSummary) => void;
   onPageChange: (page: number) => void;
   onRetry: () => void;
 }
+interface Row {
+  id: number;
+  name: string;
+  email: string | null;
+  userId: number;
+  fields: { label: string; value: ReactNode }[];
+  actions?: ReactNode;
+}
+const actionClass =
+  "inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition-colors hover:border-teal-300 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-teal-300";
+const number = (value: number) => (
+  <span className="font-medium tabular-nums">{formatNumber(value)}</span>
+);
+const badge = (value: { label: string; className: string }) => (
+  <span
+    className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${value.className}`}
+  >
+    {value.label}
+  </span>
+);
 
-const tableHeadClassName =
-  "whitespace-nowrap px-5 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400";
-
-const tableCellClassName =
-  "px-5 py-4 text-sm text-slate-700 dark:text-slate-100";
-
-const actionButtonClassName =
-  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800";
-
-const stopPropagation = (event: React.MouseEvent<HTMLButtonElement>) => {
-  event.stopPropagation();
-};
-
-const PaginationBar = ({
-  pagination,
-  onPageChange,
-}: {
-  pagination: PaginationMeta;
-  onPageChange: (page: number) => void;
-}) => {
-  return (
-    <div className="flex flex-col gap-3 border-t border-slate-200/80 px-5 py-4 text-sm text-slate-500 md:flex-row md:items-center md:justify-between dark:border-slate-800 dark:text-slate-400">
-      <p>
-        第 {pagination.page} / {pagination.total_pages} 页，共{" "}
-        {formatNumber(pagination.total)} 条记录
-      </p>
-      <div className="flex items-center gap-2">
+export default function AdminTable(props: AdminTableProps) {
+  const {
+    activeTab,
+    pagination,
+    loading,
+    error,
+    selectedDetailId,
+    onSelectRow,
+    onPageChange,
+    onRetry,
+  } = props;
+  let rows: Row[] = [];
+  if (activeTab === "users")
+    rows = (props.users ?? []).map((user) => ({
+      id: user.id,
+      userId: user.id,
+      name: user.username,
+      email: user.email,
+      fields: [
+        {
+          label: "状态 / 角色",
+          value: (
+            <div className="flex flex-wrap gap-1.5">
+              {badge(getActiveStatus(user.is_active))}
+              {badge(getUserRole(user))}
+            </div>
+          ),
+        },
+        { label: "算力余额", value: number(user.wallet_total_credits) },
+        { label: "累计 Token", value: number(user.total_token_count) },
+        { label: "注册时间", value: formatDateTime(user.created_at) },
+      ],
+      actions: (
         <button
-          type="button"
-          onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
-          disabled={pagination.page <= 1}
-          className="rounded-xl border border-slate-200 px-3 py-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
+          className={actionClass}
+          onClick={() => props.onEditUser?.(user)}
         >
-          上一页
+          <PencilLine size={14} />
+          编辑
         </button>
-        <button
-          type="button"
-          onClick={() =>
-            onPageChange(Math.min(pagination.total_pages, pagination.page + 1))
-          }
-          disabled={pagination.page >= pagination.total_pages}
-          className="rounded-xl border border-slate-200 px-3 py-2 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
-        >
-          下一页
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const LoadingState = () => {
-  return (
-    <div className="space-y-3 p-5">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <div
-          key={index}
-          className="h-20 animate-pulse rounded-3xl bg-slate-100 dark:bg-slate-800"
-        />
-      ))}
-    </div>
-  );
-};
-
-const ErrorState = ({
-  error,
-  onRetry,
-}: {
-  error: string;
-  onRetry: () => void;
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <div className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-        拉取失败
-      </div>
-      <p className="max-w-lg text-sm text-slate-500 dark:text-slate-400">
-        {error}
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-sky-500 dark:text-slate-950 dark:hover:bg-sky-400"
+      ),
+    }));
+  if (activeTab === "wallets")
+    rows = (props.wallets ?? []).map((wallet) => ({
+      id: wallet.user_id,
+      userId: wallet.user_id,
+      name: wallet.username,
+      email: wallet.email,
+      fields: [
+        { label: "免费算力", value: number(wallet.free_credits) },
+        { label: "付费算力", value: number(wallet.paid_credits) },
+        {
+          label: "总余额",
+          value: (
+            <span className="text-teal-700 dark:text-teal-300">
+              {number(wallet.total_credits)}
+            </span>
+          ),
+        },
+        { label: "最近重置", value: formatDate(wallet.last_reset_date) },
+      ],
+      actions: (
+        <>
+          <button
+            className={actionClass}
+            onClick={() => props.onRechargeWallet?.(wallet)}
+          >
+            <ArrowUpRight size={14} />
+            充值
+          </button>
+          <button
+            className={`${actionClass} hover:border-rose-300 hover:text-rose-600`}
+            onClick={() => props.onDeductWallet?.(wallet)}
+            disabled={wallet.total_credits <= 0}
+          >
+            <ArrowDownLeft size={14} />
+            扣减
+          </button>
+        </>
+      ),
+    }));
+  if (activeTab === "creditLogs")
+    rows = (props.creditLogs ?? []).map((log) => ({
+      id: log.id,
+      userId: log.user_id,
+      name: log.username || `用户 #${log.user_id}`,
+      email: log.email,
+      fields: [
+        {
+          label: "变动算力",
+          value: (
+            <span
+              className={`font-semibold tabular-nums ${getAmountTone(log.amount)}`}
+            >
+              {log.amount > 0 ? "+" : ""}
+              {formatNumber(log.amount)}
+            </span>
+          ),
+        },
+        { label: "算力类型", value: formatCreditTypeLabel(log.credit_type) },
+        { label: "变动来源", value: formatActionTypeLabel(log.action_type) },
+        { label: "变动后余额", value: number(log.balance_after) },
+        { label: "时间", value: formatDateTime(log.created_at) },
+      ],
+    }));
+  if (activeTab === "tokenRecords")
+    rows = (props.tokenRecords ?? []).map((record) => ({
+      id: record.id,
+      userId: record.user_id,
+      name: record.username || `用户 #${record.user_id}`,
+      email: record.email,
+      fields: [
+        { label: "模型", value: record.model || "—" },
+        {
+          label: "请求路径",
+          value: (
+            <span
+              className="block max-w-56 truncate font-mono text-xs"
+              title={record.request_path ?? undefined}
+            >
+              {record.request_path || "—"}
+            </span>
+          ),
+        },
+        { label: "Token 数", value: number(record.token_count) },
+        {
+          label: "来源 IP",
+          value: <span className="font-mono text-xs">{record.ip}</span>,
+        },
+        { label: "调用时间", value: formatDateTime(record.created_at) },
+      ],
+    }));
+  const identity = (row: Row) => (
+    <div className="flex min-w-0 items-center gap-3">
+      <span
+        aria-hidden
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300"
       >
-        <RefreshCw className="h-4 w-4" />
-        重新获取
+        {row.name.slice(0, 1).toUpperCase()}
+      </span>
+      <div className="min-w-0">
+        <button
+          onClick={() => onSelectRow(row.id)}
+          className="block max-w-full truncate text-left text-sm font-semibold text-slate-800 hover:text-teal-700 dark:text-slate-100"
+        >
+          {row.name}
+        </button>
+        <p
+          className="mt-1 max-w-60 truncate text-xs text-slate-400"
+          title={row.email ?? undefined}
+        >
+          {row.email || `ID ${row.userId}`}
+        </p>
+      </div>
+    </div>
+  );
+  const actions = (row: Row) => (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {row.actions}
+      <button
+        aria-label={`查看 ${row.name} 的详情`}
+        onClick={() => onSelectRow(row.id)}
+        className={actionClass}
+      >
+        <Eye size={14} />
+        <span className="xl:hidden">详情</span>
       </button>
     </div>
   );
-};
-
-const EmptyState = ({ label }: { label: string }) => {
-  return (
-    <div className="px-6 py-16 text-center text-sm text-slate-500 dark:text-slate-400">
-      当前筛选条件下没有 {label} 数据。
-    </div>
-  );
-};
-
-export default function AdminTable({
-  activeTab,
-  users,
-  wallets,
-  creditLogs,
-  tokenRecords,
-  pagination,
-  loading,
-  error,
-  selectedDetailId,
-  onSelectRow,
-  onEditUser,
-  onRechargeWallet,
-  onPageChange,
-  onRetry,
-}: AdminTableProps) {
-  const hasPagination = pagination.total_pages > 1 || pagination.total > 0;
-
-  const renderContent = () => {
-    if (loading) {
-      return <LoadingState />;
-    }
-
-    if (error) {
-      return <ErrorState error={error} onRetry={onRetry} />;
-    }
-
-    if (activeTab === "users" && (!users || users.length === 0)) {
-      return <EmptyState label="用户" />;
-    }
-
-    if (activeTab === "wallets" && (!wallets || wallets.length === 0)) {
-      return <EmptyState label="钱包" />;
-    }
-
-    if (
-      activeTab === "creditLogs" &&
-      (!creditLogs || creditLogs.length === 0)
-    ) {
-      return <EmptyState label="消费记录" />;
-    }
-
-    if (
-      activeTab === "tokenRecords" &&
-      (!tokenRecords || tokenRecords.length === 0)
-    ) {
-      return <EmptyState label="Token 记录" />;
-    }
-
-    return (
-      <>
-        <div className="grid gap-3 p-4 md:hidden">
-          {activeTab === "users" &&
-            users?.map((user) => {
-              const role = getUserRole(user);
-              const status = getActiveStatus(user.is_active);
-
-              return (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => onSelectRow(user.id)}
-                  className={`rounded-3xl border p-4 text-left transition ${
-                    selectedDetailId === user.id
-                      ? "border-sky-300 bg-sky-50/80 shadow-sm dark:border-sky-500/40 dark:bg-sky-500/10"
-                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">
-                        {user.username}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                        {user.email}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          stopPropagation(event);
-                          onEditUser?.(user);
-                        }}
-                        className={actionButtonClassName}
-                      >
-                        <PencilLine className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          stopPropagation(event);
-                          onSelectRow(user.id);
-                        }}
-                        className={actionButtonClassName}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-medium ${status.className}`}
-                    >
-                      {status.label}
-                    </span>
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-medium ${role.className}`}
-                    >
-                      {role.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
-                    <div>
-                      <p>钱包总额</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(user.wallet_total_credits)}
-                      </p>
-                    </div>
-                    <div>
-                      <p>累计 Token</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(user.total_token_count)}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-
-          {activeTab === "wallets" &&
-            wallets?.map((wallet) => (
-              <button
-                key={wallet.user_id}
-                type="button"
-                onClick={() => onSelectRow(wallet.user_id)}
-                className={`rounded-3xl border p-4 text-left transition ${
-                  selectedDetailId === wallet.user_id
-                    ? "border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10"
-                    : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">
-                      {wallet.username}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {wallet.email}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        stopPropagation(event);
-                        onRechargeWallet?.(wallet);
-                      }}
-                      className={actionButtonClassName}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        stopPropagation(event);
-                        onSelectRow(wallet.user_id);
-                      }}
-                      className={actionButtonClassName}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <div>
-                    <p>免费</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      {formatNumber(wallet.free_credits)}
-                    </p>
-                  </div>
-                  <div>
-                    <p>付费</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      {formatNumber(wallet.paid_credits)}
-                    </p>
-                  </div>
-                  <div>
-                    <p>总额</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      {formatNumber(wallet.total_credits)}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
-
-          {activeTab === "creditLogs" &&
-            creditLogs?.map((log) => (
-              <button
-                key={log.id}
-                type="button"
-                onClick={() => onSelectRow(log.id)}
-                className={`rounded-3xl border p-4 text-left transition ${
-                  selectedDetailId === log.id
-                    ? "border-amber-300 bg-amber-50/80 shadow-sm dark:border-amber-500/40 dark:bg-amber-500/10"
-                    : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">
-                      {log.username || `用户 #${log.user_id}`}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {formatActionTypeLabel(log.action_type)}
-                    </p>
-                  </div>
-                  <div className="text-xs text-slate-400 dark:text-slate-500 text-right shrink-0 pt-1">
-                    {formatDateTime(log.created_at)}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <div>
-                    <p>变动额度</p>
-                    <p
-                      className={`mt-1 font-semibold ${getAmountTone(log.amount)}`}
-                    >
-                      {log.amount > 0 ? "+" : ""}
-                      {formatNumber(log.amount)}
-                    </p>
-                  </div>
-                  <div>
-                    <p>变动后余额</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      {formatNumber(log.balance_after)}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
-
-          {activeTab === "tokenRecords" &&
-            tokenRecords?.map((record) => (
-              <button
-                key={record.id}
-                type="button"
-                onClick={() => onSelectRow(record.id)}
-                className={`rounded-3xl border p-4 text-left transition ${
-                  selectedDetailId === record.id
-                    ? "border-violet-300 bg-violet-50/80 shadow-sm dark:border-violet-500/40 dark:bg-violet-500/10"
-                    : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/60"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">
-                      {record.username || `用户 #${record.user_id}`}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {record.model || "未记录模型"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      stopPropagation(event);
-                      onSelectRow(record.id);
-                    }}
-                    className={actionButtonClassName}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-500 dark:text-slate-400">
-                  <div>
-                    <p>Token 数</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      {formatNumber(record.token_count)}
-                    </p>
-                  </div>
-                  <div>
-                    <p>来源 IP</p>
-                    <p className="mt-1 font-mono text-[13px] text-slate-900 dark:text-white">
-                      {record.ip}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
-        </div>
-
-        <div className="hidden overflow-x-auto md:block">
-          {activeTab === "users" && (
-            <table className="min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className={tableHeadClassName}>用户</th>
-                  <th className={tableHeadClassName}>状态 / 角色</th>
-                  <th className={tableHeadClassName}>钱包总额</th>
-                  <th className={tableHeadClassName}>累计 Token</th>
-                  <th className={tableHeadClassName}>创建时间</th>
-                  <th className={`${tableHeadClassName} text-right`}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users?.map((user) => {
-                  const role = getUserRole(user);
-                  const status = getActiveStatus(user.is_active);
-
-                  return (
-                    <tr
-                      key={user.id}
-                      onClick={() => onSelectRow(user.id)}
-                      className={`cursor-pointer transition ${
-                        selectedDetailId === user.id
-                          ? "bg-sky-50/80 dark:bg-sky-500/10"
-                          : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                      }`}
-                    >
-                      <td className={tableCellClassName}>
-                        <p className="font-medium text-slate-900 dark:text-white">
-                          {user.username}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {user.email}
-                        </p>
-                      </td>
-                      <td className={tableCellClassName}>
-                        <div className="flex flex-wrap gap-2">
-                          <span
-                            className={`rounded-full border px-3 py-1 text-xs font-medium ${status.className}`}
-                          >
-                            {status.label}
-                          </span>
-                          <span
-                            className={`rounded-full border px-3 py-1 text-xs font-medium ${role.className}`}
-                          >
-                            {role.label}
-                          </span>
-                        </div>
-                      </td>
-                      <td className={tableCellClassName}>
-                        {formatNumber(user.wallet_total_credits)}
-                      </td>
-                      <td className={tableCellClassName}>
-                        {formatNumber(user.total_token_count)}
-                      </td>
-                      <td className={tableCellClassName}>
-                        {formatDateTime(user.created_at)}
-                      </td>
-                      <td className={`${tableCellClassName} text-right`}>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              stopPropagation(event);
-                              onEditUser?.(user);
-                            }}
-                            className={actionButtonClassName}
-                          >
-                            <PencilLine className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              stopPropagation(event);
-                              onSelectRow(user.id);
-                            }}
-                            className={actionButtonClassName}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-
-          {activeTab === "wallets" && (
-            <table className="min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className={tableHeadClassName}>用户</th>
-                  <th className={tableHeadClassName}>免费点数</th>
-                  <th className={tableHeadClassName}>付费点数</th>
-                  <th className={tableHeadClassName}>钱包总额</th>
-                  <th className={tableHeadClassName}>最近重置</th>
-                  <th className={`${tableHeadClassName} text-right`}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {wallets?.map((wallet) => (
-                  <tr
-                    key={wallet.user_id}
-                    onClick={() => onSelectRow(wallet.user_id)}
-                    className={`cursor-pointer transition ${
-                      selectedDetailId === wallet.user_id
-                        ? "bg-emerald-50/80 dark:bg-emerald-500/10"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                    }`}
-                  >
-                    <td className={tableCellClassName}>
-                      <p className="font-medium text-slate-900 dark:text-white">
-                        {wallet.username}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {wallet.email}
-                      </p>
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatNumber(wallet.free_credits)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatNumber(wallet.paid_credits)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatNumber(wallet.total_credits)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatDate(wallet.last_reset_date)}
-                    </td>
-                    <td className={`${tableCellClassName} text-right`}>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            stopPropagation(event);
-                            onRechargeWallet?.(wallet);
-                          }}
-                          className={actionButtonClassName}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            stopPropagation(event);
-                            onSelectRow(wallet.user_id);
-                          }}
-                          className={actionButtonClassName}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {activeTab === "creditLogs" && (
-            <table className="min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className={tableHeadClassName}>用户</th>
-                  <th className={tableHeadClassName}>变动额度</th>
-                  <th className={tableHeadClassName}>点数类型</th>
-                  <th className={tableHeadClassName}>动作类型</th>
-                  <th className={tableHeadClassName}>余额</th>
-                  <th className={tableHeadClassName}>时间</th>
-                  <th className={`${tableHeadClassName} text-right`}>查看</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditLogs?.map((log) => (
-                  <tr
-                    key={log.id}
-                    onClick={() => onSelectRow(log.id)}
-                    className={`cursor-pointer transition ${
-                      selectedDetailId === log.id
-                        ? "bg-amber-50/80 dark:bg-amber-500/10"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                    }`}
-                  >
-                    <td className={tableCellClassName}>
-                      <p className="font-medium text-slate-900 dark:text-white">
-                        {log.username || `用户 #${log.user_id}`}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {log.email || "-"}
-                      </p>
-                    </td>
-                    <td
-                      className={`${tableCellClassName} font-semibold ${getAmountTone(log.amount)}`}
-                    >
-                      {log.amount > 0 ? "+" : ""}
-                      {formatNumber(log.amount)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatCreditTypeLabel(log.credit_type)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatActionTypeLabel(log.action_type)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatNumber(log.balance_after)}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatDateTime(log.created_at)}
-                    </td>
-                    <td className={`${tableCellClassName} text-right`}>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          stopPropagation(event);
-                          onSelectRow(log.id);
-                        }}
-                        className={actionButtonClassName}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {activeTab === "tokenRecords" && (
-            <table className="min-w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  <th className={tableHeadClassName}>用户</th>
-                  <th className={tableHeadClassName}>模型</th>
-                  <th className={tableHeadClassName}>请求路径</th>
-                  <th className={tableHeadClassName}>Token 数</th>
-                  <th className={tableHeadClassName}>来源 IP</th>
-                  <th className={tableHeadClassName}>时间</th>
-                  <th className={`${tableHeadClassName} text-right`}>查看</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tokenRecords?.map((record) => (
-                  <tr
-                    key={record.id}
-                    onClick={() => onSelectRow(record.id)}
-                    className={`cursor-pointer transition ${
-                      selectedDetailId === record.id
-                        ? "bg-violet-50/80 dark:bg-violet-500/10"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
-                    }`}
-                  >
-                    <td className={tableCellClassName}>
-                      <p className="font-medium text-slate-900 dark:text-white">
-                        {record.username || `用户 #${record.user_id}`}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {record.email || "-"}
-                      </p>
-                    </td>
-                    <td className={tableCellClassName}>
-                      {record.model || "-"}
-                    </td>
-                    <td className={tableCellClassName}>
-                      <span className="font-mono text-[13px]">
-                        {truncateText(record.request_path, 40)}
-                      </span>
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatNumber(record.token_count)}
-                    </td>
-                    <td
-                      className={`${tableCellClassName} font-mono text-[13px]`}
-                    >
-                      {record.ip}
-                    </td>
-                    <td className={tableCellClassName}>
-                      {formatDateTime(record.created_at)}
-                    </td>
-                    <td className={`${tableCellClassName} text-right`}>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          stopPropagation(event);
-                          onSelectRow(record.id);
-                        }}
-                        className={actionButtonClassName}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </>
-    );
-  };
 
   return (
-    <section className="overflow-hidden rounded-[28px] border border-white/70 bg-white/90 shadow-[0_24px_80px_-38px_rgba(15,23,42,0.32)] backdrop-blur dark:border-slate-800 dark:bg-slate-900/75">
-      {renderContent()}
-      {hasPagination && !loading && !error && (
-        <PaginationBar pagination={pagination} onPageChange={onPageChange} />
+    <section
+      aria-label="查询结果"
+      aria-busy={loading}
+      className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+    >
+      <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-slate-800">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          查询结果
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {pagination.total ? formatNumber(pagination.total) : "—"}
+          </span>
+        </div>
+        <span className="text-xs text-slate-400">
+          点击用户或详情查看完整信息
+        </span>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          <span>
+            {rows.length ? "更新失败，当前显示上次结果。" : ""}
+            {error}
+          </span>
+          <button
+            onClick={onRetry}
+            disabled={loading}
+            className="min-h-10 shrink-0 font-semibold underline underline-offset-4"
+          >
+            重新加载
+          </button>
+        </div>
       )}
+      {!rows.length ? (
+        <div className="min-h-80">
+          <div className="flex min-h-80 flex-col items-center justify-center gap-3 px-5 text-center">
+            <Inbox size={32} strokeWidth={1.2} className="text-slate-300" />
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+              {error ? "暂时无法加载数据" : "没有找到匹配的记录"}
+            </p>
+            <p className="text-xs text-slate-400">
+              {error ? "请稍后重新加载" : "试试其他关键词，或重置筛选条件"}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="divide-y divide-slate-100 md:hidden dark:divide-slate-800">
+            {rows.map((row) => (
+              <article
+                key={row.id}
+                className={`min-w-0 p-4 ${selectedDetailId === row.id ? "bg-teal-50/50 dark:bg-teal-500/5" : ""}`}
+              >
+                {identity(row)}
+                <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
+                  {row.fields.map((field) => (
+                    <div key={field.label} className="min-w-0">
+                      <dt className="text-xs text-slate-400">{field.label}</dt>
+                      <dd className="mt-1.5 wrap-anywhere text-sm text-slate-700 dark:text-slate-200">
+                        {field.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  {actions(row)}
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50/80 dark:bg-slate-950/30">
+                <tr>
+                  {[
+                    "用户",
+                    ...rows[0].fields.map((field) => field.label),
+                    "操作",
+                  ].map((label) => (
+                    <th
+                      key={label}
+                      scope="col"
+                      className="whitespace-nowrap px-5 py-3 text-xs font-medium text-slate-500 last:text-right"
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={
+                      selectedDetailId === row.id
+                        ? "bg-teal-50/50 dark:bg-teal-500/5"
+                        : "hover:bg-slate-50/70 dark:hover:bg-slate-800/30"
+                    }
+                  >
+                    <td className="px-5 py-4">{identity(row)}</td>
+                    {row.fields.map((field) => (
+                      <td
+                        key={field.label}
+                        className="whitespace-nowrap px-5 py-4 text-slate-600 dark:text-slate-300"
+                      >
+                        {field.value}
+                      </td>
+                    ))}
+                    <td className="px-5 py-4">{actions(row)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500 sm:px-5 dark:border-slate-800">
+        <p>
+          共 {formatNumber(pagination.total)} 条 · 第 {pagination.page} /{" "}
+          {Math.max(1, pagination.total_pages)} 页
+        </p>
+        <div className="flex gap-2">
+          <button
+            aria-label="上一页"
+            disabled={loading || pagination.page <= 1}
+            onClick={() => onPageChange(pagination.page - 1)}
+            className={actionClass}
+          >
+            <ChevronLeft size={16} />
+            上一页
+          </button>
+          <button
+            aria-label="下一页"
+            disabled={loading || pagination.page >= pagination.total_pages}
+            onClick={() => onPageChange(pagination.page + 1)}
+            className={actionClass}
+          >
+            下一页
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
