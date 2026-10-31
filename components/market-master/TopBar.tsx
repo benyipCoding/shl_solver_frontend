@@ -152,12 +152,12 @@ export const TopBar = ({
     useState(false);
   const continueBacktestButtonRef = useRef<HTMLButtonElement>(null);
   const canEnterBacktest =
-    dataMode === "history" && !isDataLoading && !dataError && totalCandles >= minBacktestCandles;
+    dataMode === "history" && !isDataLoading && !isHistoryLoading && !dataError && totalCandles >= minBacktestCandles;
   const isBacktestToggleDisabled = !canEnterBacktest;
 
   let backtestButtonLabel = "开启逐K回测";
-  let backtestButtonTitle = `开启逐K回测模式：将从随机合法时间点开始（初始约 ${initialVisibleCount} 根上下文，前方至少保留 ${minForwardCandles} 根可播放）`;
-  if (isDataLoading) {
+  let backtestButtonTitle = `从各周期共同可用的区间随机开始：起点前分钟/小时周期至少 5000 根，D1/W1 至少 200 根；当前周期至少保留 ${minForwardCandles} 根后续 K 线可播放`;
+  if (isDataLoading || isHistoryLoading) {
     backtestButtonLabel = "行情加载中，暂不可开启回测";
     backtestButtonTitle =
       "当前品种/周期的 K 线仍在加载，请等待完成后再开启逐K回测";
@@ -169,7 +169,7 @@ export const TopBar = ({
     backtestButtonTitle = `当前品种/周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
   }
 
-  const compactBacktestButtonLabel = isDataLoading
+  const compactBacktestButtonLabel = isDataLoading || isHistoryLoading
     ? "行情加载中"
     : dataError || totalCandles === 0
       ? "暂不可回测"

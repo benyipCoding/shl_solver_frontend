@@ -111,8 +111,6 @@ import {
   loadPersistedIndicatorConfig,
   persistLastTimeframe,
   persistIndicatorConfig,
-  pickRandomBacktestStartIndex,
-  computeBacktestKlineWindow,
   resolveLastTimeframe,
   type InstrumentContext,
 } from "@/components/market-master/market-config";
@@ -120,7 +118,6 @@ import {
   KLINE_FORWARD_PREFETCH_BARS,
   KLINE_HISTORY_EDGE_BARS,
   KLINE_PAGE_SIZE,
-  estimateUnixAtIndex,
   fetchKlinePage,
   fetchRealtimeKlinePage,
   mergeCandleData,
@@ -133,6 +130,7 @@ import {
   type KlinePageMeta,
   type NormalizedCandle,
 } from "@/components/market-master/market-data";
+import { prepareRandomBacktestStart } from "./backtest-start";
 import {
   captureTimeframeViewportAnchor,
   resolveTimeframeViewportRange,
@@ -751,6 +749,7 @@ export function MarketMasterPage() {
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const timeframeRef = useRef(timeframe);
   const [isBacktestMode, setIsBacktestMode] = useState(false);
+  const [isPreparingBacktest, setIsPreparingBacktest] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyLoadKind, setHistoryLoadKind] = useState<
@@ -2824,6 +2823,8 @@ export function MarketMasterPage() {
       if (wasBacktestModeRef.current) return;
 
       let cancelled = false;
+      let preparing = false;
+      const controller = new AbortController();
       const enterBacktest = async () => {
         const replayDetail = replayDetailRef.current;
         if (replayDetail) {
@@ -2901,109 +2902,55 @@ export function MarketMasterPage() {
           return;
         }
 
-        const total =
-          totalCandlesRef.current || fullDataRef.current.length;
-        const randomStart = pickRandomBacktestStartIndex(total);
-        if (randomStart == null) {
+        preparing = true;
+        setIsPreparingBacktest(true);
+        historyLoadingRef.current = true;
+        setIsHistoryLoading(true);
+        setHistoryLoadKind("window");
+        setIsPlaying(false);
+        try {
+          const { page, data, currentIndex: localCurrent } = await prepareRandomBacktestStart(
+            (params) => fetchKlinePage(
+              (input, init) => customFetch(input, { ...init, signal: controller.signal }),
+              { symbol, ...params }
+            ),
+            timeframe,
+            KLINE_PAGE_SIZE
+          );
+          if (cancelled || !isBacktestModeRef.current) return;
+
+          wasBacktestModeRef.current = true;
+          backtestCompletionRequestedRef.current = false;
+          isReplayModeRef.current = false;
+          setIsReplayMode(false);
+          clientSessionIdRef.current =
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `session-${Date.now()}`;
+          resetBacktestAccount();
+          disableAutomaticDrawings();
+          applyCandlePage(page, data, {
+            shouldReplace: true,
+            shouldFitContent: true,
+            currentIndex: localCurrent,
+          });
+        } catch (error: any) {
+          if (cancelled) return;
+          controller.abort();
+          toast.error(error?.message || "定位回测起点失败");
+          wasBacktestModeRef.current = false;
+          clientSessionIdRef.current = null;
+          pendingSessionStartRef.current = null;
           setIsBacktestMode(false);
           return;
-        }
-
-        const windowSpec = computeBacktestKlineWindow(
-          total,
-          randomStart,
-          KLINE_PAGE_SIZE
-        );
-        const loadedStart = loadedOffsetRef.current;
-        const loadedEnd = loadedStart + fullDataRef.current.length;
-        const neededEnd = Math.min(
-          total,
-          windowSpec.offset + windowSpec.outputsize
-        );
-        const coversWindow =
-          loadedStart <= windowSpec.offset && loadedEnd >= neededEnd;
-
-        wasBacktestModeRef.current = true;
-        backtestCompletionRequestedRef.current = false;
-        isReplayModeRef.current = false;
-        setIsReplayMode(false);
-        clientSessionIdRef.current =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `session-${Date.now()}`;
-        setIsPlaying(false);
-        resetBacktestAccount();
-        disableAutomaticDrawings();
-
-        if (!coversWindow) {
-          historyLoadingRef.current = true;
-          setIsHistoryLoading(true);
-          setHistoryLoadKind("window");
-          try {
-            const earliestUnix = earliestUnixRef.current;
-            const latestUnix = latestUnixRef.current;
-            const aroundTime =
-              earliestUnix != null && latestUnix != null
-                ? estimateUnixAtIndex(
-                    earliestUnix,
-                    latestUnix,
-                    total,
-                    randomStart - 1
-                  )
-                : undefined;
-            const page = await fetchSymbolPage({
-              outputsize: windowSpec.outputsize,
-              aroundTime,
-              beforeCount: Math.max(
-                0,
-                randomStart - 1 - windowSpec.offset
-              ),
-            });
-            if (cancelled || !isBacktestModeRef.current) return;
-            const data = normalizeCandles(page.rawCandles);
-            if (!data.length) {
-              throw new Error("无法加载回测窗口 K 线");
-            }
-            const aroundUnix =
-              typeof aroundTime === "number"
-                ? aroundTime
-                : toUnixSeconds(aroundTime);
-            let focusIdx = findCandleIndexByTime(data, aroundUnix);
-            if (focusIdx < 0) {
-              focusIdx = Math.min(
-                Math.max(windowSpec.localCurrentIndex - 1, 0),
-                data.length - 1
-              );
-            }
-            const localCurrent = Math.max(
-              INITIAL_VISIBLE_COUNT,
-              Math.min(focusIdx + 1, Math.max(data.length - MIN_FORWARD_CANDLES, 1))
-            );
-            applyCandlePage(page, data, {
-              shouldReplace: true,
-              shouldFitContent: true,
-              currentIndex: localCurrent,
-            });
-          } catch (error: any) {
-            if (cancelled) return;
-            toast.error(error?.message || "定位回测起点失败");
-            wasBacktestModeRef.current = false;
-            clientSessionIdRef.current = null;
-            pendingSessionStartRef.current = null;
-            setIsBacktestMode(false);
-            return;
-          } finally {
-            if (!cancelled) {
-              historyLoadingRef.current = false;
-              setIsHistoryLoading(false);
-              setHistoryLoadKind(null);
-            }
+        } finally {
+          if (!cancelled) {
+            preparing = false;
+            setIsPreparingBacktest(false);
+            historyLoadingRef.current = false;
+            setIsHistoryLoading(false);
+            setHistoryLoadKind(null);
           }
-        } else {
-          const localCurrent = randomStart - loadedOffsetRef.current;
-          currentIndexRef.current = localCurrent;
-          setCurrentIndex(localCurrent);
-          syncDisplayedData(fullDataRef.current, localCurrent, true, true);
         }
 
         if (cancelled || !isBacktestModeRef.current) return;
@@ -3040,6 +2987,13 @@ export function MarketMasterPage() {
       void enterBacktest();
       return () => {
         cancelled = true;
+        controller.abort();
+        if (preparing) {
+          setIsPreparingBacktest(false);
+          historyLoadingRef.current = false;
+          setIsHistoryLoading(false);
+          setHistoryLoadKind(null);
+        }
       };
     }
 
@@ -3092,6 +3046,7 @@ export function MarketMasterPage() {
     applyReplayWindow,
     disableAutomaticDrawings,
     clearClosedTradeMarkers,
+    customFetch,
     fetchSymbolPage,
     isBacktestMode,
     isDataLoading,
@@ -4858,11 +4813,13 @@ export function MarketMasterPage() {
   }, [handleNextCandle, isAutomaticTradingEnabled, syncDisplayedData, syncTradeMarkers, updateAutomaticSegmentsAfterCandle]);
 
   const handleStepPlayback = useCallback(() => {
+    if (!wasBacktestModeRef.current) return;
     if (automaticRunRef.current) return;
     if (isAutomaticTradingEnabled) void handleRunAutomaticTrading(automaticTradingConfigRef.current.stepCandles);
     else handleNextCandle();
   }, [isAutomaticTradingEnabled, handleRunAutomaticTrading, handleNextCandle]);
   const handlePlaybackChange = useCallback((next: boolean | ((playing: boolean) => boolean)) => {
+    if (!wasBacktestModeRef.current) return;
     if (restartingBacktestRef.current) return;
     if (automaticRunRef.current) { automaticRunRef.current.cancelled = true; automaticRunRef.current.controller.abort(); return; }
     const playing = typeof next === "function" ? next(isPlaying) : next;
@@ -4974,6 +4931,7 @@ export function MarketMasterPage() {
   }, [isPlaying, handleNextCandle]);
 
   const handlePlaceOrder = (type, entryCandle = getActiveCandle(fullDataRef.current, currentIndexRef.current), barIndex = currentIndexRef.current - 1, automaticEvent?: AutomaticPenEvent) => {
+    if (isBacktestModeRef.current && !wasBacktestModeRef.current) return;
     // Realtime orders are submitted only by the broker terminal with broker
     // quantity rules and explicit bid/ask. Never fall through to simulation.
     if (dataModeRef.current === "realtime") return;
@@ -5069,7 +5027,7 @@ export function MarketMasterPage() {
     setSimPendingOrders(next);
   };
   const canTradeSimPending = () =>
-    dataModeRef.current === "history" && isBacktestModeRef.current && !isReplayModeRef.current;
+    dataModeRef.current === "history" && isBacktestModeRef.current && wasBacktestModeRef.current && !isReplayModeRef.current;
 
   const placeSimPendingOrder = (draft: {
     type: "Buy" | "Sell"; price: number; units: number; sl: number | null; tp: number | null;
@@ -5195,7 +5153,7 @@ export function MarketMasterPage() {
 
   const canPlacePending = dataMode === "realtime"
     ? broker.ready
-    : dataMode === "history" && isBacktestMode && !isReplayMode && !isDataLoading && !dataError;
+    : dataMode === "history" && isBacktestMode && !isReplayMode && !isDataLoading && !isPreparingBacktest && !dataError;
   // Kind preview: buys compare with the ask, sells with the bid in realtime.
   const pendingMarketPrice = (side: "Buy" | "Sell") => {
     if (dataMode === "realtime") {
@@ -6568,7 +6526,7 @@ export function MarketMasterPage() {
         onToggleAutomaticTrading={handleToggleAutomaticTrading}
         isPlaying={isPlaying}
         setIsPlaying={handlePlaybackChange}
-        isDataLoading={isDataLoading}
+        isDataLoading={isDataLoading || isPreparingBacktest}
         isHistoryLoading={isHistoryLoading}
         dataError={dataError}
         onSyncLatest={handleSyncLatestKline}
@@ -6611,7 +6569,7 @@ export function MarketMasterPage() {
         isAutomaticTradingEnabled={isAutomaticTradingEnabled}
         bottomPanelHeight={bottomPanelHeight}
         canPlaceOrder={
-          (isBacktestMode || realtimeReady) && !isReplayMode && !isDataLoading && !dataError
+          (isBacktestMode || realtimeReady) && !isReplayMode && !isDataLoading && !isPreparingBacktest && !dataError
         }
         isReplayMode={isReplayMode}
         candleTooltip={candleTooltip}
@@ -6632,7 +6590,7 @@ export function MarketMasterPage() {
         hideCandleTooltip={hideCandleTooltip}
         indConfig={indConfig}
         isBottomPanelOpen={isBottomPanelOpen}
-        isDataLoading={isDataLoading}
+        isDataLoading={isDataLoading || isPreparingBacktest}
         isRestoringViewport={isRestoringViewport}
         pendingOrders={dataMode === "history" ? pendingOrders : undefined}
         onPlacePending={dataMode === "history" ? placePendingFromTerminal : undefined}

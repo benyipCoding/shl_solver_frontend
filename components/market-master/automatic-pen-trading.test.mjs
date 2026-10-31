@@ -400,6 +400,7 @@ function pageHarness(data, index, initialTrades = [], penMode = "simple") {
     currentIndexRef: { current: index }, isDataLoadingRef: { current: false },
     fullDataRef: { current: data }, loadedOffsetRef: { current: 5000 }, totalCandlesRef: { current: 0 },
     replayEndCurrentIndexRef: { current: 0 }, isReplayModeRef: { current: false }, isBacktestModeRef: { current: true },
+    wasBacktestModeRef: { current: true },
     seriesRef: { current: { update: () => {} } }, volumeSeriesRef: { current: null },
     updateAutomaticPensAfterCandle() {}, updateAutomaticSegmentsAfterCandle() {}, toVolumePoint() {},
     indConfig: { emas: [], bollinger: { enabled: false }, macd: { enabled: false }, volume: {} },
@@ -914,6 +915,7 @@ test("backtest controls stay in historical mode and automatic trading requires a
     "next/navigation": { usePathname: () => "/market-master", useRouter: () => ({}) },
     "@/context/AuthContext": { useAuth: () => ({ user, isLoading: false }) },
     "@/components/common/UserHeaderActions": { default: Empty },
+    "@/components/market-master/TimeframeSelect": { TimeframeSelect: Empty },
     "@/components/market-master/SymbolSearchSelect": { SymbolFavoriteButton: Empty, SymbolSearchSelect: Empty },
     "@/components/market-master/ChartLocatePopover": {
       ChartLocatePopover: ({ disabled }) => React.createElement("button", { "aria-label": "定位K线", disabled }),

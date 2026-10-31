@@ -171,10 +171,14 @@ export const CANDLE_TOOLTIP_OHLC_LABELS = [
   { key: "close", label: "Close" },
 ] as const;
 
-export const pickRandomBacktestStartIndex = (totalCount: number) => {
+export const pickRandomBacktestStartIndex = (
+  totalCount: number,
+  bounds?: { minIndex: number; maxIndex: number }
+) => {
   if (totalCount < MIN_BACKTEST_CANDLES) return null;
-  const minIndex = INITIAL_VISIBLE_COUNT;
-  const maxIndex = totalCount - MIN_FORWARD_CANDLES;
+  const minIndex = Math.max(INITIAL_VISIBLE_COUNT, bounds?.minIndex ?? 0);
+  const maxIndex = Math.min(totalCount - MIN_FORWARD_CANDLES, bounds?.maxIndex ?? totalCount);
+  if (minIndex > maxIndex) return null;
   return minIndex + Math.floor(Math.random() * (maxIndex - minIndex + 1));
 };
 
