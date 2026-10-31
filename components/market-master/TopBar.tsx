@@ -976,6 +976,8 @@ export const TopBar = ({
           {isSuperuser && (
             <Link
               href="/market-master/sync-status"
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex items-center gap-1.5 rounded-md bg-gray-700 px-2 py-1.5 text-xs font-semibold text-gray-300 transition-colors hover:bg-gray-600 hover:text-white"
               title="历史数据采集控制台：管理定时采集与采集队列"
             >
