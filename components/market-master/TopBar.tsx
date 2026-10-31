@@ -166,7 +166,7 @@ export const TopBar = ({
     backtestButtonTitle = dataError || "暂无可用 K 线数据，无法开启逐K回测";
   } else if (totalCandles < minBacktestCandles) {
     backtestButtonLabel = "历史不足，无法开启回测";
-    backtestButtonTitle = `当前品种/周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
+    backtestButtonTitle = `当前 ${symbol} / ${timeframe} 周期仅有 ${totalCandles.toLocaleString()} 根 K 线，逐K回测至少需要 ${minBacktestCandles.toLocaleString()} 根（初始可见 ${initialVisibleCount} + 可往前播放 ${minForwardCandles}）。请切换周期或标的后再试。`;
   }
 
   const compactBacktestButtonLabel = isDataLoading || isHistoryLoading

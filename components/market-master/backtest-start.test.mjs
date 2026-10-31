@@ -150,6 +150,40 @@ test("insufficient or missing periods prevent startup instead of silently weaken
   await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), /m15.*重试/);
 });
 
+test("all insufficient periods report their actual counts and deficits in menu order", async () => {
+  const feeds = defaultFeeds();
+  feeds["5min"].total = 3200;
+  feeds["15min"].total = 5000;
+  feeds["1week"].total = 150;
+  const source = api(feeds);
+  // The first item completes last; diagnostics must not depend on network order.
+  const fetch = async (params) => {
+    if (params.interval === "5min") await new Promise((resolve) => setImmediate(resolve));
+    return source.fetch(params);
+  };
+  await assert.rejects(prepare(fetch, "D1", 20000), (error) => {
+    assert.match(error.message, /m5 历史不足：现有 3200 根.*还缺 1801 根/);
+    assert.match(error.message, /m15 历史不足：现有 5000 根.*还缺 1 根/);
+    assert.match(error.message, /W1 历史不足：现有 150 根.*还缺 51 根/);
+    assert.ok(error.message.indexOf("m5") < error.message.indexOf("m15"));
+    assert.ok(error.message.indexOf("m15") < error.message.indexOf("W1"));
+    assert.equal(source.calls.length, requirements.length);
+    return true;
+  });
+});
+
+test("a failed check is reported alongside shortages without inventing a missing-bar count", async () => {
+  const feeds = defaultFeeds();
+  feeds["5min"].total = 3000;
+  delete feeds["1week"];
+  await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), (error) => {
+    assert.match(error.message, /m5 历史不足/);
+    assert.match(error.message, /W1 历史数据检查失败/);
+    assert.doesNotMatch(error.message, /W1 历史不足/);
+    return true;
+  });
+});
+
 test("D1 uses 200 preceding bars and missing weekly data prevents starting", async () => {
   const feeds = defaultFeeds();
   feeds["1day"] = feed(start2009, DAY, { total: 4500, daily: true, session: 21 * 3600 });
@@ -188,7 +222,39 @@ test("the latest weekly bar also limits the common upper boundary using its char
 test("disjoint histories have no common start", async () => {
   const feeds = defaultFeeds();
   feeds["30min"] = feed(start1994, 1800, { total: 6000 });
-  await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), /共同回测区间/);
+  await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), (error) => {
+    assert.match(error.message, /共同回测区间/);
+    assert.match(error.message, /最早起点受 m5 限制/);
+    assert.match(error.message, /最晚时间受 m30 限制/);
+    assert.ok(error.message.includes(new Date(feeds["5min"].time(5000) * 1000).toISOString().slice(0, 10)));
+    assert.ok(error.message.includes(new Date(feeds["30min"].time(5999) * 1000).toISOString().slice(0, 10)));
+    assert.match(error.message, /UTC/);
+    return true;
+  });
+});
+
+test("all periods tied for a limiting boundary are named", async () => {
+  const feeds = defaultFeeds();
+  feeds["15min"] = feed(start1994, 900, { total: 11999 });
+  feeds["30min"] = feed(start1994, 1800, { total: 6000 });
+  await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), /最晚时间受 m15、m30 限制/);
+});
+
+test("a late weekly start explains the resulting daily forward-bar shortage", async () => {
+  const feeds = defaultFeeds();
+  feeds["1week"] = feed(unix("2020-01-06T00:00:00Z"), 7 * DAY, {
+    total: 350, weekends: false, daily: true,
+  });
+  const firstDaily = lowerBound(feeds["1day"], threshold(feeds["1week"], 200));
+  const available = feeds["1day"].total - firstDaily - 1;
+  assert.ok(available < 2000);
+  await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), (error) => {
+    assert.match(error.message, /D1 后续 K 线不足/);
+    assert.match(error.message, /最早起点受 W1 限制/);
+    assert.ok(error.message.includes(`D1 最多剩 ${available} 根可播放`));
+    assert.ok(error.message.includes(`还缺 ${2000 - available} 根`));
+    return true;
+  });
 });
 
 test("loading a changed or incomplete final window fails instead of clamping outside the allowed range", async () => {
@@ -207,6 +273,15 @@ test("abort propagates so an abandoned startup cannot become a different random 
   const abort = new Error("cancelled");
   abort.name = "AbortError";
   await assert.rejects(prepare(async () => { throw abort; }, "D1", 20000), (error) => error === abort);
+});
+
+test("abort remains immediate even while other checks are still pending", { timeout: 1000 }, async () => {
+  const abort = new Error("cancelled");
+  abort.name = "AbortError";
+  await assert.rejects(prepare(async ({ interval }) => {
+    if (interval === "1week") throw abort;
+    return new Promise(() => {});
+  }, "D1", 20000), (error) => error === abort);
 });
 
 test("weekly charts use the common range and retain the existing future-bar requirement", async () => {
@@ -249,7 +324,7 @@ function entryHarness(prepareStart) {
     fetchKlinePage: (fetch, params) => fetch("/history", params),
     customFetch: async (_url, init) => { context.signal = init.signal; return {}; },
     resetBacktestAccount: () => changes.push(["reset"]), disableAutomaticDrawings() {},
-    toast: { error: (message) => changes.push(["error", message]) },
+    toast: { error: (message, options) => changes.push(["error", message, options]) },
     applyCandlePage: (page, data, options) => {
       changes.push(["apply"]);
       context.fullDataRef.current = data;
@@ -289,6 +364,9 @@ test("failed validation exits startup without resetting the chart or creating a 
   await flush();
   assert.ok(h.changes.some(([kind, value]) => kind === "IsBacktestMode" && value === false));
   assert.ok(h.changes.some(([kind, value]) => kind === "error" && value === "m5 历史不足"));
+  const options = h.changes.find(([kind]) => kind === "error")[2];
+  assert.ok(options.duration >= 10000);
+  assert.equal(options.style.whiteSpace, "pre-line");
   assert.equal(h.changes.some(([kind]) => kind === "apply" || kind === "reset"), false);
   assert.equal(h.context.wasBacktestModeRef.current, false);
   assert.equal(h.context.historyLoadingRef.current, false);

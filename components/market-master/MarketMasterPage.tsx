@@ -2937,7 +2937,10 @@ export function MarketMasterPage() {
         } catch (error: any) {
           if (cancelled) return;
           controller.abort();
-          toast.error(error?.message || "定位回测起点失败");
+          toast.error(error?.message || "定位回测起点失败", {
+            duration: 12000,
+            style: { maxWidth: 560, whiteSpace: "pre-line" },
+          });
           wasBacktestModeRef.current = false;
           clientSessionIdRef.current = null;
           pendingSessionStartRef.current = null;
