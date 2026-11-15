@@ -14,7 +14,7 @@ export type ChartLocateOptions = {
   /** Selectable date range (UTC, `YYYY-MM-DD`); undefined = unbounded. */
   minDate?: string;
   maxDate?: string;
-  /** Bar times of day in minutes; empty for D1 and longer timeframes. */
+  /** UTC opening times found in the loaded bars, in minutes after midnight. */
   minutesOfDay: number[];
   /** Time at the centre of the chart, used as the initial selection. */
   initialTime: number;
@@ -45,7 +45,7 @@ export function ChartLocatePopover({ disabled = false, getOptions, onJumpToLates
   const byHour = useMemo(() => groupMinutesByHour(options?.minutesOfDay ?? []), [options]);
   const hours = useMemo(() => [...byHour.keys()], [byHour]);
   const minutes = byHour.get(hour) ?? [0];
-  const intraday = hours.length > 0;
+  const hasOpenTimes = hours.length > 0;
 
   const openPanel = () => {
     const next = getOptions();
@@ -109,7 +109,7 @@ export function ChartLocatePopover({ disabled = false, getOptions, onJumpToLates
     }
   };
 
-  const target = utcDateTimeToUnix(date, intraday ? hour * 60 + minute : 0);
+  const target = utcDateTimeToUnix(date, hasOpenTimes ? hour * 60 + minute : 0);
 
   return (
     <>
@@ -161,7 +161,7 @@ export function ChartLocatePopover({ disabled = false, getOptions, onJumpToLates
               onChange={(event) => { if (event.target.value) setDate(event.target.value); }}
               className={`${selectClass} w-full cursor-pointer [color-scheme:dark]`}
             />
-            {intraday && (
+            {hasOpenTimes && (
               <div className="flex items-center gap-2">
                 <select
                   aria-label="小时"

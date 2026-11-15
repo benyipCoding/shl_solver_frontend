@@ -58,10 +58,7 @@ export async function prepareRandomBacktestStart(
     if (!candle || page.offset !== historyBars) {
       return { issue: `${requirement.timeframe} K 线缺失或位置异常，无法确认起点前的 ${historyBars} 根历史，请检查该周期数据。` };
     }
-    const latestUnix = Date.parse(page.latest ?? "") / 1000;
-    // Daily/weekly chart timestamps are UTC dates; metadata keeps the session time.
-    const latestTime = interval === "1day" || interval === "1week"
-      ? Math.floor(latestUnix / 86400) * 86400 : latestUnix;
+    const latestTime = Date.parse(page.latest ?? "") / 1000;
     if (!Number.isFinite(latestTime) || latestTime < candle.time) {
       return { issue: `无法确认 ${requirement.timeframe} 的历史数据范围，请稍后重试。` };
     }
@@ -95,8 +92,6 @@ export async function prepareRandomBacktestStart(
     }
   };
   // Use real neighboring bars, not interpolation between first/last timestamps.
-  // Include two newer bars: D1/W1's raw session time can be after the anchor even
-  // though its chart timestamp (midnight) is before it. The next bar is needed.
   const [firstPage, lastPage] = await Promise.all([earliestTime, latestTime].map((aroundTime) =>
     fetchCurrentPage({ interval, aroundTime, beforeCount: 1, outputsize: 3 })
   ));

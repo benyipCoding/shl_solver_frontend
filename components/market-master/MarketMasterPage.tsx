@@ -148,6 +148,7 @@ import { BacktestHistoryModal } from "@/components/market-master/BacktestHistory
 import { BacktestShareLinkHandler } from "@/components/market-master/BacktestShareLinkHandler";
 import {
   findCandleIndexByTime,
+  replayBarOpen,
   applyReplayTradeEvents,
   resolveReplayTimeline,
   sortReplayEvents,
@@ -1374,10 +1375,15 @@ export function MarketMasterPage() {
       if (!isReplayModeRef.current) return;
       const remaining: any[] = [];
       const due: any[] = [];
+      const detail = replayDetailRef.current;
+      const recordedTimeframe = detail?.timeframe || getTimeframeByInterval(detail?.interval);
       replayEventsRef.current.forEach((event) => {
-        const eventTime = toUnixSeconds(event.bar_time);
-        if (eventTime != null && eventTime <= barTimeUnix) due.push(event);
-        else remaining.push(event);
+        const recorded = toUnixSeconds(event.bar_time);
+        const eventTime = recordedTimeframe === timeframeRef.current
+          ? replayBarOpen(fullDataRef.current, recorded, recordedTimeframe) : recorded;
+        if (eventTime != null && eventTime <= barTimeUnix) {
+          due.push(eventTime === recorded ? event : { ...event, bar_time: eventTime });
+        } else remaining.push(event);
       });
       replayEventsRef.current = remaining;
       if (!due.length) return;
@@ -2056,7 +2062,7 @@ export function MarketMasterPage() {
       }
 
       if (isReplayModeRef.current && replayNeedsMoreFutureRef.current) {
-        const cursorUnix = replayCursorUnixRef.current;
+        const cursorUnix = replayBarOpen(data, replayCursorUnixRef.current, timeframeRef.current);
         const lastTime = data[data.length - 1]?.time;
         const exact =
           cursorUnix == null
@@ -2739,13 +2745,13 @@ export function MarketMasterPage() {
     (detail: any, options?: { announce?: boolean; restarted?: boolean }) => {
       const data = fullDataRef.current;
       const timeline = resolveReplayTimeline(detail);
-      let startBarIndex = findCandleIndexByTime(data, timeline.startUnix);
+      let startBarIndex = findCandleIndexByTime(data, replayBarOpen(data, timeline.startUnix, timeframeRef.current));
       if (startBarIndex < 0) return false;
       if (timeline.startBeforeFirstEvent && startBarIndex > 0) {
         startBarIndex -= 1;
       }
 
-      const cursorUnix = timeline.endUnix ?? timeline.startUnix;
+      const cursorUnix = replayBarOpen(data, timeline.endUnix ?? timeline.startUnix, timeframeRef.current);
       const lastTime = data[data.length - 1]?.time;
       const exactCursor =
         cursorUnix == null
@@ -3290,8 +3296,7 @@ export function MarketMasterPage() {
         textColor: "#9ca3af",
       },
       localization: {
-        timeFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        timeFormatter: formatChartTimeLabel,
       },
       grid: {
         vertLines: { color: "#1f2937" },
@@ -3303,8 +3308,8 @@ export function MarketMasterPage() {
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
       timeScale: {
-        tickMarkFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        tickMarkFormatter: formatChartTimeLabel,
+        tickMarkMaxCharacterLength: 16,
       },
       rightPriceScale: { autoScale: isRightPriceAutoScaleEnabled, minimumWidth: 80 },
     });
@@ -4213,8 +4218,7 @@ export function MarketMasterPage() {
         textColor: "#9ca3af",
       },
       localization: {
-        timeFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        timeFormatter: formatChartTimeLabel,
       },
       grid: {
         vertLines: { color: "#1f2937" },
@@ -4227,8 +4231,8 @@ export function MarketMasterPage() {
       timeScale: {
         visible: true,
         borderColor: "#374151",
-        tickMarkFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        tickMarkFormatter: formatChartTimeLabel,
+        tickMarkMaxCharacterLength: 16,
       },
       rightPriceScale: { borderColor: "#374151", minimumWidth: 80 },
     });
@@ -4423,8 +4427,7 @@ export function MarketMasterPage() {
         textColor: "#9ca3af",
       },
       localization: {
-        timeFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        timeFormatter: formatChartTimeLabel,
       },
       grid: {
         vertLines: { color: "#1f2937" },
@@ -4436,8 +4439,8 @@ export function MarketMasterPage() {
       height: container.clientHeight,
       timeScale: {
         borderColor: "#374151",
-        tickMarkFormatter: (time: Time) =>
-          formatChartTimeLabel(time, timeframeRef.current),
+        tickMarkFormatter: formatChartTimeLabel,
+        tickMarkMaxCharacterLength: 16,
       },
       rightPriceScale: {
         borderColor: "#374151",
@@ -5371,7 +5374,7 @@ export function MarketMasterPage() {
     return {
       minDate: earliest == null ? undefined : new Date(earliest * 1000).toISOString().slice(0, 10),
       maxDate: new Date(latest * 1000).toISOString().slice(0, 10),
-      minutesOfDay: timeframeSeconds(timeframeRef.current) < 86400 ? barMinutesOfDay(data, count) : [],
+      minutesOfDay: barMinutesOfDay(data, count),
       initialTime: data[centerIndex].time,
       latestLabel: backtest ? "跳到回测当前进度" : realtime ? "跳到最新实时K线" : "跳到最新K线",
     };

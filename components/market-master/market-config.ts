@@ -137,19 +137,6 @@ export type IndicatorConfig = {
   liquidity: LiquidityConfig;
 };
 
-const INTRADAY_TIMEFRAMES = new Set([
-  "m1",
-  "m5",
-  "m15",
-  "m30",
-  "H1",
-  "H2",
-  "H3",
-  "H4",
-  "H6",
-  "H8",
-]);
-
 const SYMBOL_PROFILE_OVERRIDES: Record<string, InstrumentProfile> = {
   "BTC/USD": { priceDecimals: 2, inputStep: "1", sl: 1500, tp: 3000 },
   US30: { priceDecimals: 2, inputStep: "1", sl: 300, tp: 600 },
@@ -229,17 +216,13 @@ const toUtcDate = (timeValue: Time | number) => {
   return null;
 };
 
-export const formatChartTimeLabel = (timeValue: Time, timeframe: string) => {
+export const formatChartTimeLabel = (timeValue: Time) => {
   const utcDate = toUtcDate(timeValue);
   if (!utcDate) return "";
 
   const dateLabel = `${utcDate.getUTCFullYear()}/${padTimePart(
     utcDate.getUTCMonth() + 1
   )}/${padTimePart(utcDate.getUTCDate())}`;
-
-  if (!INTRADAY_TIMEFRAMES.has(timeframe)) {
-    return dateLabel;
-  }
 
   return `${dateLabel} ${padTimePart(utcDate.getUTCHours())}:${padTimePart(
     utcDate.getUTCMinutes()

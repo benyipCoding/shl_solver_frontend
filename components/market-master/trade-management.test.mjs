@@ -29,7 +29,17 @@ const {
   tradeRiskInputToPrice,
   formatTradeRiskInput,
 } = loadModule("./trade-management");
-const { applyReplayTradeEvents } = loadModule("./backtest-replay");
+const { applyReplayTradeEvents, replayBarOpen } = loadModule("./backtest-replay");
+
+test("legacy calendar replay dates select their own session even when yesterday's open is nearer", () => {
+  const midnight = Date.parse("2019-09-26T00:00:00Z") / 1000;
+  const open = midnight + 21 * 3600;
+  const data = [{ time: open - 86400 }, { time: open }];
+  assert.equal(replayBarOpen(data, midnight, "D1"), open);
+  assert.equal(replayBarOpen(data, open, "D1"), open);
+  assert.equal(replayBarOpen(data, midnight, "H1"), midnight);
+  assert.equal(replayBarOpen(data, midnight + 86400, "W1"), midnight + 86400);
+});
 const { createBacktestPersistClient } = loadModule("./backtest-persistence");
 const { TradeConnectionPrimitive } = loadModule("./trade-connection");
 const trade = {

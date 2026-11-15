@@ -55,6 +55,20 @@ export const toUnixSeconds = (value: unknown): number | null => {
   return Math.floor(parsed / 1000);
 };
 
+// Older D1/W1 replays stored UTC dates at midnight. Match the candle on
+// that date before a nearest-time lookup can select the previous session.
+export function replayBarOpen(data: readonly { time: number }[], time: number | null, timeframe: string) {
+  if (time == null || time % 86400 !== 0 || (timeframe !== "D1" && timeframe !== "W1")) return time;
+  let lo = 0, hi = data.length;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (data[mid].time < time) lo = mid + 1;
+    else hi = mid;
+  }
+  const open = data[lo]?.time;
+  return open != null && open < time + 86400 ? open : time;
+}
+
 export const findCandleIndexByTime = (
   data: Array<{ time?: number }> = [],
   unixSeconds: number | null,

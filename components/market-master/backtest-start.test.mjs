@@ -31,7 +31,7 @@ function feed(start, step, options = {}) {
   const time = (index) => start + (options.weekends === false ? index * step
     : Math.floor(index * step / (5 * DAY)) * 7 * DAY + index * step % (5 * DAY)) + (options.session ?? 0);
   const total = options.total ?? Math.floor((end - start) * 5 / 7 / step);
-  return { time, total, daily: options.daily ?? false };
+  return { time, total };
 }
 const lowerBound = (source, time) => {
   let left = 0, right = source.total;
@@ -47,14 +47,14 @@ function defaultFeeds() {
   for (const item of requirements) {
     if (item.interval === "1week") {
       feeds[item.interval] = feed(start1994, 7 * DAY, {
-        total: Math.floor((end - start1994) / (7 * DAY)), weekends: false, daily: true, session: 21 * 3600,
+        total: Math.floor((end - start1994) / (7 * DAY)), weekends: false, session: 21 * 3600,
       });
       continue;
     }
     const match = /^(\d+)(min|h|day)$/.exec(item.interval);
     const step = Number(match[1]) * { min: 60, h: 3600, day: DAY }[match[2]];
     feeds[item.interval] = feed(item.interval === "5min" ? start2009 : start1994, step, {
-      daily: item.interval === "1day", session: item.interval === "1day" ? 21 * 3600 : 0,
+      session: item.interval === "1day" ? 21 * 3600 : 0,
     });
   }
   return feeds;
@@ -82,7 +82,7 @@ function api(feeds = defaultFeeds(), intercept) {
     const rawCandles = Array.from({ length: last - first }, (_, index) => {
       const time = source.time(first + index);
       const datetime = new Date(time * 1000).toISOString();
-      return { datetime: source.daily ? datetime.slice(0, 10) : datetime, open: 10, high: 12, low: 9, close: 11 };
+      return { datetime, open: 10, high: 12, low: 9, close: 11 };
     }).reverse();
     const page = { rawCandles, offset, total: source.total, latest: new Date(source.time(source.total - 1) * 1000).toISOString() };
     return intercept?.(params, page) ?? page;
@@ -90,7 +90,6 @@ function api(feeds = defaultFeeds(), intercept) {
   return { fetch, calls, feeds };
 }
 const timeOf = (result) => result.data[result.currentIndex - 1].time;
-const threshold = (source, count) => source.daily ? Math.floor(source.time(count) / DAY) * DAY : source.time(count);
 
 test("XAU-style D1 history from 1994 is bounded by m5 from 2009, checking every history timeframe", async () => {
   random = 0;
@@ -100,7 +99,7 @@ test("XAU-style D1 history from 1994 is bounded by m5 from 2009, checking every 
   assert.ok(timeOf(result) >= m5Start);
   assert.ok(timeOf(result) < m5Start + 3 * DAY);
   for (const item of requirements) {
-    assert.ok(timeOf(result) >= threshold(source.feeds[item.interval], item.historyBars), item.timeframe);
+    assert.ok(timeOf(result) >= source.feeds[item.interval].time(item.historyBars), item.timeframe);
   }
   assert.equal(source.calls.some(({ interval }) => interval === "1min"), false);
   assert.equal(source.calls.filter(({ offset, outputsize }) => offset === 5000 && outputsize === 1).length, 9);
@@ -186,11 +185,11 @@ test("a failed check is reported alongside shortages without inventing a missing
 
 test("D1 uses 200 preceding bars and missing weekly data prevents starting", async () => {
   const feeds = defaultFeeds();
-  feeds["1day"] = feed(start2009, DAY, { total: 4500, daily: true, session: 21 * 3600 });
+  feeds["1day"] = feed(start2009, DAY, { total: 4500, session: 21 * 3600 });
   random = 0;
   const source = api(feeds);
   const result = await prepare(source.fetch, "m5", 20000);
-  assert.ok(timeOf(result) >= threshold(feeds["1day"], 200));
+  assert.ok(timeOf(result) >= feeds["1day"].time(200));
   assert.equal(source.calls.some(({ interval }) => interval === "1week"), true);
   feeds["1day"].total = 200;
   await assert.rejects(prepare(api(feeds).fetch, "m5", 20000), /D1.*200/);
@@ -203,20 +202,20 @@ test("W1's 200-bar warmup can set the common lower boundary", async () => {
   random = 0;
   const feeds = defaultFeeds();
   feeds["1week"] = feed(unix("2015-01-05T00:00:00Z"), 7 * DAY, {
-    total: 600, weekends: false, daily: true, session: 21 * 3600,
+    total: 600, weekends: false, session: 21 * 3600,
   });
   const result = await prepare(api(feeds).fetch, "m5", 20000);
-  assert.equal(timeOf(result), threshold(feeds["1week"], 200));
+  assert.equal(timeOf(result), feeds["1week"].time(200));
   feeds["1week"].total = 200;
   await assert.rejects(prepare(api(feeds).fetch, "m5", 20000), /W1.*200/);
 });
 
-test("the latest weekly bar also limits the common upper boundary using its chart date", async () => {
+test("the latest weekly bar limits the common upper boundary at its exact session open", async () => {
   random = 0.999999999;
   const feeds = defaultFeeds();
   feeds["1week"].total = 1100;
   const result = await prepare(api(feeds).fetch, "m5", 20000);
-  assert.equal(timeOf(result), threshold(feeds["1week"], 1099));
+  assert.equal(timeOf(result), feeds["1week"].time(1099));
 });
 
 test("disjoint histories have no common start", async () => {
@@ -243,9 +242,9 @@ test("all periods tied for a limiting boundary are named", async () => {
 test("a late weekly start explains the resulting daily forward-bar shortage", async () => {
   const feeds = defaultFeeds();
   feeds["1week"] = feed(unix("2020-01-06T00:00:00Z"), 7 * DAY, {
-    total: 350, weekends: false, daily: true,
+    total: 350, weekends: false,
   });
-  const firstDaily = lowerBound(feeds["1day"], threshold(feeds["1week"], 200));
+  const firstDaily = lowerBound(feeds["1day"], feeds["1week"].time(200));
   const available = feeds["1day"].total - firstDaily - 1;
   assert.ok(available < 2000);
   await assert.rejects(prepare(api(feeds).fetch, "D1", 20000), (error) => {
@@ -288,7 +287,7 @@ test("weekly charts use the common range and retain the existing future-bar requ
   random = 0;
   const feeds = defaultFeeds();
   // Synthetic long weekly history preserves the existing 2000-forward-bars rule.
-  feeds["1week"] = feed(unix("1950-01-02T00:00:00Z"), 7 * DAY, { total: 6000, weekends: false, daily: true });
+  feeds["1week"] = feed(unix("1950-01-02T00:00:00Z"), 7 * DAY, { total: 6000, weekends: false });
   const result = await prepare(api(feeds).fetch, "W1", 20000);
   assert.ok(timeOf(result) >= feeds["5min"].time(5000));
   assert.ok(timeOf(result) < feeds["5min"].time(5000) + 7 * DAY);
