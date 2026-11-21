@@ -26,6 +26,13 @@ const capture = (data, logical, extra = {}) => captureTimeframeViewportAnchor({
   sourceSymbol: "XAU/USD", sourceTimeframe: "D1", sourceBarSeconds: DAY, ...extra,
 });
 
+test("backtest follows the last revealed candle only when it was on screen", () => {
+  const data = bars(JUN_15, DAY, 500);
+  const opts = { count: 201, followVisibleTail: true };
+  assert.equal(capture(data, { from: 70, to: 205 }, opts).anchorTime, data[200].time + DAY - 1);
+  assert.equal(capture(data, { from: 70, to: 190 }, opts).anchorTime, data[130].time + DAY / 2);
+});
+
 test("D1 -> H4 keeps the date at the centre of the chart and the candle width", () => {
   const d1 = bars(JUN_15 - 400 * DAY, DAY, 500); // newest bar is far right of the view
   const center = d1.findIndex((bar) => bar.time === JUN_15);

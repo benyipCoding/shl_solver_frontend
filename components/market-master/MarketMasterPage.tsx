@@ -168,6 +168,7 @@ import {
 } from "./pending-orders";
 import { BrokerPendingOrderDialog } from "./BrokerPendingOrderDialog";
 import { TradeConnectionPrimitive } from "./trade-connection";
+import { backtestBarEnd, backtestCountBefore, backtestSwitchCount } from "./backtest-timeframe";
 import { LiquidityZonesPrimitive } from "./liquidity-zones-primitive";
 import { calculateLiquidityZones } from "./liquidity-zones";
 import { SessionBreaksPrimitive } from "./session-breaks-primitive";
@@ -204,10 +205,11 @@ const REALTIME_ANCHOR_MAX_PAGES = 6;
 
 type PreservedBacktestTimeframeChange = {
   sourceSymbol: string;
-  cursorTime: number | null;
-  sourceCurrentIndex: number;
-  replayStartTime: number | null;
-  replayEndTime: number | null;
+  sourceTimeframe: string;
+  cursorOpen: number;
+  cursorEnd: number;
+  replayStartEnd: number | null;
+  replayEnd: number | null;
 };
 
 const timeframeSeconds = (timeframe: string) => {
@@ -217,17 +219,6 @@ const timeframeSeconds = (timeframe: string) => {
   const amount = Number(match[1]);
   const unitSeconds = { min: 60, h: 3600, day: 86400, week: 604800 }[match[2]];
   return amount * unitSeconds;
-};
-
-const findCandleAtOrBefore = (candles: any[] = [], targetTime: number | null) => {
-  if (!candles.length) return null;
-  if (targetTime == null || !Number.isFinite(Number(targetTime))) return candles[0].time;
-  let candidate = candles[0].time;
-  for (const candle of candles) {
-    if (candle.time > targetTime) break;
-    candidate = candle.time;
-  }
-  return candidate;
 };
 
 const getTradeMarkerColor = (trade: any, markPrice = 0) => {
@@ -874,6 +865,10 @@ export function MarketMasterPage() {
   const [isRestoringViewport, setIsRestoringViewport] = useState(false);
   const isRestoringViewportRef = useRef(false);
   const pendingBacktestTimeframeChangeRef = useRef<PreservedBacktestTimeframeChange | null>(null);
+  // A finer chart can end before the session boundary during a market closure.
+  // Keep that progress if the user switches again without stepping a candle.
+  const alignedBacktestCursorRef = useRef<{ open: number; end: number } | null>(null);
+  const switchedReplayEndRef = useRef<number | null>(null);
   const preserveVisibleRangeRef = useRef(false);
   const olderHistoryPromiseRef = useRef<{ session: number; promise: Promise<OlderHistoryResult> } | null>(null);
   const loadOlderHistoryRef = useRef<() => Promise<OlderHistoryResult>>(async () => "skipped");
@@ -2062,13 +2057,21 @@ export function MarketMasterPage() {
       }
 
       if (isReplayModeRef.current && replayNeedsMoreFutureRef.current) {
+        const end = switchedReplayEndRef.current;
         const cursorUnix = replayBarOpen(data, replayCursorUnixRef.current, timeframeRef.current);
         const lastTime = data[data.length - 1]?.time;
         const exact =
           cursorUnix == null
             ? -1
             : data.findIndex((candle) => candle.time === cursorUnix);
-        if (exact >= 0) {
+        if (end != null) {
+          const endCurrent = backtestCountBefore(data, end);
+          const awaiting = endCurrent === data.length && nextOffset + data.length < nextTotal;
+          replayNeedsMoreFutureRef.current = awaiting;
+          setReplayAwaitingFuture(awaiting);
+          replayEndCurrentIndexRef.current = endCurrent;
+          setReplayBounds((prev) => ({ ...prev, endCurrent }));
+        } else if (exact >= 0) {
           replayNeedsMoreFutureRef.current = false;
           setReplayAwaitingFuture(false);
           const endCurrent = Math.min(exact + 1, data.length);
@@ -2420,10 +2423,13 @@ export function MarketMasterPage() {
       isBacktestModeRef.current && dataModeRef.current === "history"
       ? pendingBacktestTimeframeChange
       : null;
-    // Consume the one-shot handoff before awaiting the request. A later
-    // timeframe change will capture a fresh range from the current chart.
+    // Keep the original backtest boundary until a switch succeeds: a second
+    // selection while loading must not reinterpret source bars as the target.
     pendingTimeframeViewportRef.current = null;
-    pendingBacktestTimeframeChangeRef.current = null;
+    if (!preservedBacktest) {
+      pendingBacktestTimeframeChangeRef.current = null;
+      alignedBacktestCursorRef.current = null;
+    }
     inFlightViewportAnchorRef.current = preservedViewport;
     realtimeBootstrapViewportRef.current = dataMode === "realtime" ? preservedViewport : null;
     realtimeAwaitingSnapshotRef.current = dataMode === "realtime";
@@ -2545,14 +2551,8 @@ export function MarketMasterPage() {
       }
 
       try {
-        // When a backtest is kept across a timeframe switch, the active
-        // candle is the continuity anchor.  Using only the visible range
-        // center is unsafe: the chart can report a stale/expanded range while
-        // its series is being replaced, which may request a completely
-        // unrelated historical page.  That leaves the cursor outside the
-        // page and the old fallback then reveals just one candle.
-        // Otherwise the anchor is the time at the centre of the viewport.
-        const pageAnchorTime = preservedBacktest?.cursorTime ?? preservedViewport?.anchorTime ?? null;
+        // Fetch around completed backtest progress, independent of chart pan.
+        const pageAnchorTime = preservedBacktest?.cursorEnd ?? preservedViewport?.anchorTime ?? null;
         const minimumBacktestBeforeCount = preservedBacktest
           ? Math.min(INITIAL_VISIBLE_COUNT - 1, KLINE_PAGE_SIZE - 1)
           : 0;
@@ -2578,9 +2578,8 @@ export function MarketMasterPage() {
 
         if (cancelled || session !== dataSessionRef.current) return;
 
-        const resolvedBacktestCursor = preservedBacktest?.cursorTime == null
-          ? null
-          : findCandleAtOrBefore(newData, preservedBacktest.cursorTime);
+        const preservedCurrentIndex = preservedBacktest
+          ? backtestSwitchCount(newData, timeframeSeconds(timeframe), preservedBacktest) : undefined;
 
         // Drawings keep their timestamps; snap them onto this timeframe's bars.
         if (
@@ -2593,23 +2592,6 @@ export function MarketMasterPage() {
           setLines([...stateRef.current.lines]);
         }
 
-        const preservedCursorIndex = preservedBacktest?.cursorTime == null
-          ? -1
-          : resolvedBacktestCursor == null
-            ? -1
-            : newData.findIndex((candle) => candle.time === resolvedBacktestCursor);
-        const preservedCurrentIndex = preservedBacktest
-          ? preservedCursorIndex >= 0
-            ? preservedCursorIndex + 1
-            : Math.min(
-                newData.length,
-                Math.max(
-                  minimumBacktestBeforeCount + 1,
-                  preservedBacktest.sourceCurrentIndex || 0
-                )
-              )
-          : undefined;
-
         applyLoadedMarketData(loadedPage, newData, {
           isInitialPage: true,
           currentIndex: preservedCurrentIndex,
@@ -2618,6 +2600,10 @@ export function MarketMasterPage() {
         });
         inFlightViewportAnchorRef.current = null;
         if (preservedBacktest) {
+          pendingBacktestTimeframeChangeRef.current = null;
+          alignedBacktestCursorRef.current = {
+            open: newData[currentIndexRef.current - 1].time, end: preservedBacktest.cursorEnd,
+          };
           if (backtestSampleRef.current) {
             backtestSampleRef.current = {
               ...backtestSampleRef.current,
@@ -2647,27 +2633,18 @@ export function MarketMasterPage() {
             };
           }
           if (isReplayModeRef.current) {
-            const resolveCurrentIndex = (time: number | null, fallback: number) => {
-              if (time == null) return fallback;
-              const index = findCandleIndexByTime(newData, time);
-              if (index >= 0) return index + 1;
-              const previousTime = findCandleAtOrBefore(newData, time);
-              const previousIndex = previousTime == null
-                ? -1
-                : newData.findIndex((candle) => candle.time === previousTime);
-              return previousIndex >= 0 ? previousIndex + 1 : fallback;
-            };
-            const startCurrent = resolveCurrentIndex(
-              preservedBacktest.replayStartTime,
-              Math.max(1, currentIndexRef.current)
-            );
-            const endCurrent = resolveCurrentIndex(
-              preservedBacktest.replayEndTime,
-              Math.max(startCurrent, currentIndexRef.current)
-            );
+            const { replayStartEnd, replayEnd } = preservedBacktest;
+            const startCurrent = replayStartEnd == null ? currentIndexRef.current
+              : Math.max(1, backtestCountBefore(newData, replayStartEnd));
+            const endCurrent = replayEnd == null ? currentIndexRef.current
+              : Math.max(currentIndexRef.current, backtestCountBefore(newData, replayEnd));
             replayStartCurrentIndexRef.current = startCurrent;
-            replayEndCurrentIndexRef.current = Math.max(startCurrent, endCurrent);
-            replayCursorUnixRef.current = preservedBacktest.cursorTime;
+            replayEndCurrentIndexRef.current = endCurrent;
+            switchedReplayEndRef.current = replayEnd;
+            const awaiting = replayEnd != null && newData[newData.length - 1].time < replayEnd && loadedPage.hasMoreFuture;
+            replayNeedsMoreFutureRef.current = awaiting;
+            setReplayAwaitingFuture(awaiting);
+            replayCursorUnixRef.current = newData[endCurrent - 1].time;
             setReplayBounds({
               startCurrent,
               endCurrent: replayEndCurrentIndexRef.current,
@@ -2684,11 +2661,10 @@ export function MarketMasterPage() {
         // (or its request fails), restore the source timeframe and let the
         // normal loader repopulate the chart instead of leaving an empty
         // target view behind.
-        const rollbackTimeframe = preservedViewport?.sourceTimeframe;
+        const rollbackTimeframe = preservedBacktest?.sourceTimeframe ?? preservedViewport?.sourceTimeframe;
         if (rollbackTimeframe && rollbackTimeframe !== timeframe) {
-          clearChartData();
-          pendingTimeframeViewportRef.current = null;
-          pendingBacktestTimeframeChangeRef.current = null;
+          if (!preservedBacktest) clearChartData();
+          pendingTimeframeViewportRef.current = preservedViewport;
           toast.error(
             `${error?.message || "目标周期暂无可用 K 线数据"}，已保留当前周期 ${rollbackTimeframe}`
           );
@@ -2696,6 +2672,7 @@ export function MarketMasterPage() {
           return;
         }
 
+        pendingBacktestTimeframeChangeRef.current = null;
         clearChartData();
         setDataError(error?.message || "获取 K 线数据失败");
       } finally {
@@ -2778,6 +2755,7 @@ export function MarketMasterPage() {
       replayAllEventsRef.current = sortReplayEvents(detail.events || []);
       replayEventsRef.current = [...replayAllEventsRef.current];
       replayCursorUnixRef.current = cursorUnix;
+      switchedReplayEndRef.current = null;
       replayStartCurrentIndexRef.current = startCurrent;
       replayEndCurrentIndexRef.current = endCurrent;
       replayNeedsMoreFutureRef.current = awaitingFuture;
@@ -5332,6 +5310,7 @@ export function MarketMasterPage() {
       sourceSymbol: symbol,
       sourceTimeframe: timeframeRef.current,
       sourceBarSeconds: timeframeSeconds(timeframeRef.current),
+      followVisibleTail: inBacktest,
     });
   }, [symbol]);
 
@@ -5505,19 +5484,34 @@ export function MarketMasterPage() {
       }
       if (!isSupportedTimeframe(value, dataModeRef.current)) return;
       pendingTimeframeViewportRef.current = captureTimeframeViewport();
-      pendingBacktestTimeframeChangeRef.current = isBacktestModeRef.current
-        ? {
+      if (isBacktestModeRef.current && dataModeRef.current === "history") {
+        if (!pendingBacktestTimeframeChangeRef.current) {
+          const bars = fullDataRef.current;
+          const active = bars[currentIndexRef.current - 1];
+          if (!active || isDataLoadingRef.current) return;
+          const sourceTimeframe = timeframeRef.current;
+          const seconds = timeframeSeconds(sourceTimeframe);
+          const endAt = (count: number) => bars[count - 1] == null ? null
+            : backtestBarEnd(bars[count - 1].time, seconds, bars[count]?.time);
+          const aligned = alignedBacktestCursorRef.current;
+          const completedEnd = backtestBarEnd(active.time, seconds, bars[currentIndexRef.current]?.time);
+          const cursorEnd = aligned?.open === active.time ? Math.max(completedEnd, aligned.end) : completedEnd;
+          const replaying = isReplayModeRef.current;
+          const futureCursor = replayCursorUnixRef.current;
+          pendingBacktestTimeframeChangeRef.current = {
             sourceSymbol: symbol,
-            cursorTime: getActiveCandle(fullDataRef.current, currentIndexRef.current)?.time ?? null,
-            sourceCurrentIndex: currentIndexRef.current,
-            replayStartTime: isReplayModeRef.current
-              ? fullDataRef.current[replayStartCurrentIndexRef.current - 1]?.time ?? null
+            sourceTimeframe, cursorOpen: active.time, cursorEnd,
+            replayStartEnd: replaying ? endAt(replayStartCurrentIndexRef.current) : null,
+            replayEnd: replaying
+              ? (replayNeedsMoreFutureRef.current && futureCursor != null
+                  ? switchedReplayEndRef.current ?? backtestBarEnd(futureCursor, seconds)
+                  : endAt(replayEndCurrentIndexRef.current))
               : null,
-            replayEndTime: isReplayModeRef.current
-              ? fullDataRef.current[replayEndCurrentIndexRef.current - 1]?.time ?? null
-              : null,
-          }
-        : null;
+          };
+        }
+      } else {
+        pendingBacktestTimeframeChangeRef.current = null;
+      }
       setTimeframe(value);
     },
     [captureTimeframeViewport]

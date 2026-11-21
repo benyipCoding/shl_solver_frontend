@@ -33,6 +33,7 @@ export function captureTimeframeViewportAnchor({
   sourceSymbol,
   sourceTimeframe,
   sourceBarSeconds,
+  followVisibleTail = false,
 }: {
   data: readonly TimedCandle[];
   /** Bars the user can see: revealed bars in backtest, all bars otherwise. */
@@ -42,6 +43,7 @@ export function captureTimeframeViewportAnchor({
   sourceSymbol: string;
   sourceTimeframe: string;
   sourceBarSeconds: number;
+  followVisibleTail?: boolean;
 }): TimeframeViewportAnchor | null {
   const lastIndex = Math.min(count, data.length) - 1;
   if (lastIndex < 0 || !logical || !Number.isFinite(logical.from) || !Number.isFinite(logical.to)) {
@@ -53,9 +55,11 @@ export function captureTimeframeViewportAnchor({
   return {
     sourceSymbol,
     sourceTimeframe,
-    // A D1 label is the start of its day. Use the middle of the bar so H4
-    // lands on that day's midday bar instead of the previous evening.
-    anchorTime: data[centerIndex].time + Math.max(0, Math.floor(sourceBarSeconds / 2)),
+    // Keep the backtest cursor on screen if it was visible; a panned-away
+    // viewport still follows its centre as in regular historical browsing.
+    anchorTime: followVisibleTail && from <= lastIndex && to >= lastIndex
+      ? data[lastIndex].time + sourceBarSeconds - 1
+      : data[centerIndex].time + Math.max(0, Math.floor(sourceBarSeconds / 2)),
     barSpan: Math.max(1, to - from),
   };
 }
